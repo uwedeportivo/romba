@@ -1,0 +1,29 @@
+clrmamepro (
+	name "Acorn Archimedes - Applications"
+	description "Acorn Archimedes - Applications (TOSEC-v2008-10-11)"
+	category "Acorn Archimedes - Applications"
+	version 2008-10-11
+	author "C0llector - Cassiel"
+)
+
+game (
+	name "Acorn Archimedes RISC OS Application Suite v1.00 (19xx)(Acorn)(Disk 1 of 2)[a][Req RISC OS]"
+	description "Acorn Archimedes RISC OS Application Suite v1.00 (19xx)(Acorn)(Disk 1 of 2)[a][Req RISC OS]"
+	rom ( name "Acorn Archimedes RISC OS Application Suite v1.00 (19xx)(Acorn)(Disk 1 of 2)[a][Req RISC OS].adf" size 819200 crc e43166b9 md5 43ee6acc0c173048f47826307c0a262e )
+)
+
+game (
+	name "Afterburner (1989)(Sega)(Side A)[cr NEC]"
+	description "Afterburner (1989)(Sega)(Side A)[cr NEC]"
+	rom ( name "Afterburner (1989)(Sega)(Side A)[cr NEC].g64" size 333744 crc 175a3f26 md5 36ecf1371d3391c06c16f751431c932b sha1 80353cb168dc5d7cc1dce57971f4ea2640a50ac4 )
+)
+
+game (
+	name "Afterburner (1989)(Sega)(Side B)[cr NEC]"
+	description "Afterburner (1989)(Sega)(Side B)[cr NEC]"
+	rom ( name "Afterburner (1989)(Sega)(Side B)[cr NEC].g64" size 333744 crc 83cff630 md5 66841e3b6fa7bab10f3fa00c252a5d32 sha1 cbbf0ab6cc4ac73a745cbdf7123f797d19d3c53c )
+	rom ( name "AGCK - Arcade Game Construction Kit (1988)(Broderbund)(Side A).g64" size 333744 crc d5b7a89c md5 3b3fae962949767cfe2b1dd4dc0f9b09 sha1 c2921c4e823e5f8690c49845be009971574c6c81 )
+	rom ( name "AGCK - Arcade Game Construction Kit (1988)(Broderbund)(Side B).g64" size 333744 crc fbcc5e1e md5 57b3e15b7cd9ac3c6a0ee6af99aaf32d sha1 b8bc32130aa1b3b9604ce246eb8b656fa8904462 )
+)
+
+
