@@ -48,11 +48,11 @@ const (
 type countVisitor struct {
 	numBytes int64
 	numFiles int
-	acceptFn AcceptFun
+	master   Master
 }
 
 func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
-	if !f.IsDir() && cv.acceptFn(path) {
+	if !f.IsDir() && cv.master.Accept(path) {
 		cv.numFiles += 1
 		cv.numBytes += f.Size()
 	}
@@ -60,12 +60,12 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 }
 
 type scanVisitor struct {
-	inwork   chan *workUnit
-	acceptFn AcceptFun
+	inwork chan *workUnit
+	master Master
 }
 
 func (sv *scanVisitor) visit(path string, f os.FileInfo, err error) error {
-	if !f.IsDir() && sv.acceptFn(path) {
+	if !f.IsDir() && sv.master.Accept(path) {
 		sv.inwork <- &workUnit{
 			path: path,
 			size: f.Size(),
@@ -74,8 +74,15 @@ func (sv *scanVisitor) visit(path string, f os.FileInfo, err error) error {
 	return nil
 }
 
-type WorkFun func(path string) error
-type AcceptFun func(path string) bool
+type Worker interface {
+	Process(path string, size int64, logger *log.Logger) error
+}
+
+type Master interface {
+	Accept(path string) bool
+	NewWorker(workerIndex int) Worker
+	NumWorkers() int
+}
 
 type workUnit struct {
 	path string
@@ -87,7 +94,7 @@ type slave struct {
 	wg           *sync.WaitGroup
 	inwork       chan *workUnit
 	byteProgress *pb.ProgressBar
-	workFn       WorkFun
+	worker       Worker
 }
 
 func (w *slave) run() {
@@ -95,7 +102,7 @@ func (w *slave) run() {
 	for wu := range w.inwork {
 		path := wu.path
 
-		err := w.workFn(path)
+		err := w.worker.Process(path, wu.size, w.logger)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to process %s: %v\n", path, err)
 			if w.logger != nil {
@@ -118,9 +125,9 @@ func (w *slave) run() {
 	}
 }
 
-func Work(paths []string, acceptFn AcceptFun, workFn WorkFun, numSlaves int, logger *log.Logger) error {
+func Work(paths []string, master Master, logger *log.Logger) error {
 	cv := new(countVisitor)
-	cv.acceptFn = acceptFn
+	cv.master = master
 
 	for _, name := range paths {
 		fmt.Fprintf(os.Stdout, "initial scan of %s to determine amount of work\n", name)
@@ -156,19 +163,19 @@ func Work(paths []string, acceptFn AcceptFun, workFn WorkFun, numSlaves int, log
 	inwork := make(chan *workUnit)
 
 	sv := &scanVisitor{
-		inwork:   inwork,
-		acceptFn: acceptFn,
+		inwork: inwork,
+		master: master,
 	}
 
 	wg := new(sync.WaitGroup)
 	wg.Add(cv.numFiles)
 
-	for i := 0; i < numSlaves; i++ {
+	for i := 0; i < master.NumWorkers(); i++ {
 		worker := &slave{
 			byteProgress: byteProgress,
 			inwork:       inwork,
 			logger:       logger,
-			workFn:       workFn,
+			worker:       master.NewWorker(i),
 			wg:           wg,
 		}
 

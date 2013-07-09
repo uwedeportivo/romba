@@ -34,7 +34,6 @@ import (
 	"bufio"
 	"crypto/md5"
 	"crypto/sha1"
-	"encoding/hex"
 	"github.com/uwedeportivo/torrentzip/cgzip"
 	"hash/crc32"
 	"io"
@@ -47,31 +46,31 @@ const (
 	gzipSuffix = ".gz"
 )
 
-type Hashes struct {
-	Crc  []byte
-	Md5  []byte
-	Sha1 []byte
+type hashes struct {
+	crc  []byte
+	md5  []byte
+	sha1 []byte
 }
 
-func NewHashes() *Hashes {
-	rs := new(Hashes)
-	rs.Crc = make([]byte, 0, crc32.Size)
-	rs.Md5 = make([]byte, 0, md5.Size)
-	rs.Sha1 = make([]byte, 0, sha1.Size)
+func newHashes() *hashes {
+	rs := new(hashes)
+	rs.crc = make([]byte, 0, crc32.Size)
+	rs.md5 = make([]byte, 0, md5.Size)
+	rs.sha1 = make([]byte, 0, sha1.Size)
 	return rs
 }
 
-func (hh *Hashes) ForFile(inpath string) error {
+func (hh *hashes) forFile(inpath string) error {
 	file, err := os.Open(inpath)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	return hh.ForReader(file)
+	return hh.forReader(file)
 }
 
-func (hh *Hashes) ForReader(in io.Reader) error {
+func (hh *hashes) forReader(in io.Reader) error {
 	br := bufio.NewReader(in)
 
 	hSha1 := sha1.New()
@@ -85,24 +84,24 @@ func (hh *Hashes) ForReader(in io.Reader) error {
 		return err
 	}
 
-	hh.Crc = hCrc.Sum(hh.Crc[0:0])
-	hh.Md5 = hMd5.Sum(hh.Md5[0:0])
-	hh.Sha1 = hSha1.Sum(hh.Sha1[0:0])
+	hh.crc = hCrc.Sum(hh.crc[0:0])
+	hh.md5 = hMd5.Sum(hh.md5[0:0])
+	hh.sha1 = hSha1.Sum(hh.sha1[0:0])
 
 	return nil
 }
 
-func HashesForFile(inpath string) (*Hashes, error) {
+func hashesForFile(inpath string) (*hashes, error) {
 	file, err := os.Open(inpath)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	return HashesForReader(file)
+	return hashesForReader(file)
 }
 
-func HashesForReader(in io.Reader) (*Hashes, error) {
+func hashesForReader(in io.Reader) (*hashes, error) {
 	hSha1 := sha1.New()
 	hMd5 := md5.New()
 	hCrc := crc32.NewIEEE()
@@ -114,25 +113,25 @@ func HashesForReader(in io.Reader) (*Hashes, error) {
 		return nil, err
 	}
 
-	res := new(Hashes)
-	res.Crc = hCrc.Sum(nil)
-	res.Md5 = hMd5.Sum(nil)
-	res.Sha1 = hSha1.Sum(nil)
+	res := new(hashes)
+	res.crc = hCrc.Sum(nil)
+	res.md5 = hMd5.Sum(nil)
+	res.sha1 = hSha1.Sum(nil)
 
 	return res, nil
 }
 
-func Sha1ForFile(inpath string) ([]byte, error) {
+func sha1ForFile(inpath string) ([]byte, error) {
 	file, err := os.Open(inpath)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	return Sha1ForReader(file)
+	return sha1ForReader(file)
 }
 
-func Sha1ForReader(in io.Reader) ([]byte, error) {
+func sha1ForReader(in io.Reader) ([]byte, error) {
 	h := sha1.New()
 
 	_, err := io.Copy(h, in)
@@ -143,7 +142,7 @@ func Sha1ForReader(in io.Reader) ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-func PathFromSha1HexEncoding(root, hexStr, suffix string) string {
+func pathFromSha1HexEncoding(root, hexStr, suffix string) string {
 	prefix := hexStr[0:8]
 	pieces := make([]string, 6)
 
@@ -156,7 +155,7 @@ func PathFromSha1HexEncoding(root, hexStr, suffix string) string {
 	return filepath.Join(pieces...)
 }
 
-func PathExists(path string) (bool, error) {
+func pathExists(path string) (bool, error) {
 	_, err := os.Lstat(path)
 	if err == nil {
 		return true, nil
@@ -167,11 +166,8 @@ func PathExists(path string) (bool, error) {
 	return false, err
 }
 
-func Archive(rootPath string, r io.Reader, sha1Bytes []byte) error {
+func archive(outpath string, r io.Reader) error {
 	br := bufio.NewReader(r)
-
-	sha1Hex := hex.EncodeToString(sha1Bytes)
-	outpath := PathFromSha1HexEncoding(rootPath, sha1Hex, gzipSuffix)
 
 	err := os.MkdirAll(filepath.Dir(outpath), 0777)
 	if err != nil {

@@ -64,11 +64,11 @@ func (p *parser) consumeStringValue() (string, error) {
 	}
 }
 
-func stringValue2Int(input string) (int, error) {
+func stringValue2Int(input string) (int64, error) {
 	if input == "-" {
 		return 0, nil
 	}
-	return strconv.Atoi(input)
+	return strconv.ParseInt(input, 10, 64)
 }
 
 func stringValue2Bytes(input string, expectedLength int) ([]byte, error) {
@@ -85,7 +85,7 @@ func stringValue2Bytes(input string, expectedLength int) ([]byte, error) {
 	return hex.DecodeString(input)
 }
 
-func (p *parser) consumeIntegerValue() (int, error) {
+func (p *parser) consumeIntegerValue() (int64, error) {
 	i := p.ll.nextItem()
 	if i.typ == itemValue {
 		return stringValue2Int(i.val)

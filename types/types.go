@@ -40,6 +40,7 @@ type Dat struct {
 	Description string    `xml:"header>description"`
 	Games       GameSlice `xml:"game"`
 	Generation  int64
+	Artificial  bool
 	Path        string
 	Software    GameSlice `xml:"software"`
 }
@@ -57,10 +58,11 @@ type GameSlice []*Game
 
 type Rom struct {
 	Name string `xml:"name,attr"`
-	Size int    `xml:"size,attr"`
+	Size int64  `xml:"size,attr"`
 	Crc  []byte `xml:"crc,attr"`
 	Md5  []byte `xml:"md5,attr"`
 	Sha1 []byte `xml:"sha1,attr"`
+	Path string
 }
 
 type RomSlice []*Rom

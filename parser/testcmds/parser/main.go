@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/worker"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -22,14 +23,26 @@ func usage() {
 	flag.PrintDefaults()
 }
 
-func parse(path string) error {
+type parseWorker struct{}
+
+func (pw *parseWorker) Process(path string, size int64, logger *log.Logger) error {
 	_, _, err := parser.Parse(path)
 	return err
 }
 
-func accept(path string) bool {
+type parseMaster struct{}
+
+func (pm *parseMaster) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".dat" || ext == ".xml"
+}
+
+func (pm *parseMaster) NewWorker(workerIndex int) worker.Worker {
+	return new(parseWorker)
+}
+
+func (pm *parseMaster) NumWorkers() int {
+	return 8
 }
 
 func main() {
@@ -50,7 +63,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	err := worker.Work(flag.Args(), accept, parse, 8, nil)
+	err := worker.Work(flag.Args(), new(parseMaster), nil)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, " error: %v\n", err)
