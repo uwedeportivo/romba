@@ -35,6 +35,7 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/hex"
+	"fmt"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
 	"github.com/uwedeportivo/torrentzip/czip"
@@ -49,11 +50,11 @@ import (
 )
 
 type Depot struct {
-	Roots      []string
-	Sizes      []int64
-	MaxSizes   []int64
-	ResumePath string
-	NumWorkers int
+	roots      []string
+	sizes      []int64
+	maxSizes   []int64
+	resumePath string
+	numWorkers int
 	toDat      chan *types.Rom
 	soFar      chan *completed
 	lock       *sync.Mutex
@@ -71,14 +72,61 @@ type slave struct {
 	index int
 }
 
-func (depot *Depot) accept(path string) bool {
-	if depot.ResumePath != "" {
-		return path > depot.ResumePath
+func NewDepot(roots []string, maxSize []int64, toDat chan *types.Rom, numWorkers int) (*Depot, error) {
+	depot := new(Depot)
+	depot.roots = make([]string, len(roots))
+	depot.sizes = make([]int64, len(roots))
+	depot.maxSizes = make([]int64, len(roots))
+
+	copy(depot.roots, roots)
+	copy(depot.maxSizes, maxSize)
+
+	for k, root := range depot.roots {
+		size, err := establishSize(root)
+		if err != nil {
+			return nil, err
+		}
+		depot.sizes[k] = size
+	}
+	depot.soFar = make(chan *completed)
+	depot.lock = new(sync.Mutex)
+	depot.toDat = toDat
+	depot.numWorkers = numWorkers
+	return depot, nil
+}
+
+func (depot *Depot) Archive(paths []string, resumePath string, resumeLog *log.Logger, archiveLog *log.Logger) error {
+	depot.resumePath = resumePath
+
+	go depot.loopObserver(resumeLog)
+
+	err := worker.Work(paths, depot, archiveLog)
+
+	depot.soFar <- &completed{
+		workerIndex: -1,
+	}
+
+	if err != nil {
+		return err
+	}
+
+	for k, root := range depot.roots {
+		err := writeSizeFile(root, depot.sizes[k])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (depot *Depot) Accept(path string) bool {
+	if depot.resumePath != "" {
+		return path > depot.resumePath
 	}
 	return true
 }
 
-func (depot *Depot) newWorker(index int) worker.Worker {
+func (depot *Depot) NewWorker(index int) worker.Worker {
 	return &slave{
 		depot: depot,
 		hh:    newHashes(),
@@ -86,47 +134,58 @@ func (depot *Depot) newWorker(index int) worker.Worker {
 	}
 }
 
-func (depot *Depot) reserveRoot(size int64) string {
+func (depot *Depot) NumWorkers() int {
+	return depot.numWorkers
+}
+
+func (depot *Depot) reserveRoot(size int64) (int, error) {
 	depot.lock.Lock()
 	defer depot.lock.Unlock()
 
-	for i := depot.start; i < len(depot.Roots); i++ {
-		if depot.Sizes[i]+size < depot.MaxSizes[i] {
-			depot.Sizes[i] += size
-			return depot.Roots[i]
-		} else if depot.Sizes[i] >= depot.MaxSizes[i] {
+	for i := depot.start; i < len(depot.roots); i++ {
+		if depot.sizes[i]+size < depot.maxSizes[i] {
+			depot.sizes[i] += size
+			return i, nil
+		} else if depot.sizes[i] >= depot.maxSizes[i] {
 			depot.start = i
 		}
 	}
-	panic("Aborting archiving: Out of disk space")
+	return -1, fmt.Errorf("out of disk space")
+}
+
+func (depot *Depot) adjustSize(index int, delta int64) {
+	depot.lock.Lock()
+	defer depot.lock.Unlock()
+
+	depot.sizes[index] += delta
 }
 
 func (w *slave) Process(path string, size int64, logger *log.Logger) error {
 	var err error
 
 	if filepath.Ext(path) == zipSuffix {
-		err = w.archiveZip(path, size, false)
+		_, err = w.archiveZip(path, size, false)
 	} else {
-		err = w.archiveRom(path, size)
+		_, err = w.archiveRom(path, size)
 	}
 
 	if err != nil {
 		// TODO: mark file as corrupted
 		return err
-	} else {
-		rom := new(types.Rom)
-		rom.Crc = make([]byte, 0, crc32.Size)
-		rom.Md5 = make([]byte, 0, md5.Size)
-		rom.Sha1 = make([]byte, 0, sha1.Size)
-		copy(rom.Crc, w.hh.crc)
-		copy(rom.Md5, w.hh.md5)
-		copy(rom.Sha1, w.hh.sha1)
-		rom.Name = filepath.Base(path)
-		rom.Size = size
-		rom.Path = path
-
-		w.depot.toDat <- rom
 	}
+
+	rom := new(types.Rom)
+	rom.Crc = make([]byte, 0, crc32.Size)
+	rom.Md5 = make([]byte, 0, md5.Size)
+	rom.Sha1 = make([]byte, 0, sha1.Size)
+	copy(rom.Crc, w.hh.crc)
+	copy(rom.Md5, w.hh.md5)
+	copy(rom.Sha1, w.hh.sha1)
+	rom.Name = filepath.Base(path)
+	rom.Size = size
+	rom.Path = path
+
+	w.depot.toDat <- rom
 
 	w.depot.soFar <- &completed{
 		path:        path,
@@ -137,10 +196,10 @@ func (w *slave) Process(path string, size int64, logger *log.Logger) error {
 
 type readerOpener func() (io.ReadCloser, error)
 
-func (w *slave) archive(ro readerOpener, size int64) error {
+func (w *slave) archive(ro readerOpener, size int64) (int64, error) {
 	r, err := ro()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	br := bufio.NewReader(r)
@@ -148,64 +207,80 @@ func (w *slave) archive(ro readerOpener, size int64) error {
 	err = w.hh.forReader(br)
 	if err != nil {
 		r.Close()
-		return err
+		return 0, err
 	}
 	err = r.Close()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	sha1Hex := hex.EncodeToString(w.hh.sha1)
 
-	root := w.depot.reserveRoot(size)
+	root, err := w.depot.reserveRoot(size)
+	if err != nil {
+		return 0, err
+	}
 
-	outpath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
+	outpath := pathFromSha1HexEncoding(w.depot.roots[root], sha1Hex, gzipSuffix)
 
 	exists, err := pathExists(outpath)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	if exists {
-		return nil
+		return 0, nil
 	}
 
 	r, err = ro()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer r.Close()
 
-	return archive(outpath, r)
+	compressedSize, err := archive(outpath, r)
+	if err != nil {
+		return 0, err
+	}
+
+	w.depot.adjustSize(root, compressedSize-size)
+	return compressedSize, nil
 }
 
-func (w *slave) archiveZip(inpath string, size int64, addZipItself bool) error {
+func (w *slave) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
 	zr, err := czip.OpenReader(inpath)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer zr.Close()
 
+	var compressedSize int64
+
 	for _, zf := range zr.File {
-		err = w.archive(func() (io.ReadCloser, error) { return zf.Open() }, size)
+		cs, err := w.archive(func() (io.ReadCloser, error) { return zf.Open() }, size)
 		if err != nil {
-			return err
+			return 0, err
 		}
+		compressedSize += cs
 	}
 
 	if addZipItself {
-		return w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, size)
+		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, size)
+		if err != nil {
+			return 0, err
+		}
+		compressedSize += cs
 	}
-	return nil
+	return compressedSize, nil
 }
 
-func (w *slave) archiveRom(inpath string, size int64) error {
+func (w *slave) archiveRom(inpath string, size int64) (int64, error) {
 	return w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, size)
 }
 
-func (depot *Depot) runArchiveObserver() {
-	ticker := time.NewTicker(time.Minute * 5)
-	comps := make([]string, depot.NumWorkers)
+func (depot *Depot) loopObserver(logger *log.Logger) {
+	ticker := time.NewTicker(time.Minute * 1)
+	comps := make([]string, depot.numWorkers)
 
 	for {
 		select {
@@ -215,9 +290,20 @@ func (depot *Depot) runArchiveObserver() {
 			}
 			comps[comp.workerIndex] = comp.path
 		case <-ticker.C:
-			sort.Strings(comps)
-			// TODO(uwe):
-			// resumepath is comps[0]
+			if comps[0] != "" {
+				sort.Strings(comps)
+				logger.Println(comps[0])
+
+				depot.lock.Lock()
+
+				for k, root := range depot.roots {
+					err := writeSizeFile(root, depot.sizes[k])
+					if err != nil {
+						fmt.Printf("failed to write size file into %s: %v\n", root, err)
+					}
+				}
+				depot.lock.Unlock()
+			}
 		}
 	}
 

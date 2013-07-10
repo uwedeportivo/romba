@@ -31,13 +31,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package main
 
 import (
+	"code.google.com/p/gcfg"
 	"flag"
 	"fmt"
-	"github.com/uwedeportivo/romba/parser"
-	"github.com/uwedeportivo/romba/worker"
+	"github.com/uwedeportivo/romba/archive"
+	"github.com/uwedeportivo/romba/types"
 	"log"
 	"os"
-	"path/filepath"
 )
 
 const (
@@ -46,31 +46,16 @@ const (
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "%s version %s, Copyright (c) 2013 Uwe Hoffmann. All rights reserved.\n", os.Args[0], versionStr)
-	fmt.Fprintf(os.Stderr, "\t                 %s <path to tosec dir>\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "\t                 %s <dirs to archive>\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "\nFlag defaults:\n")
 	flag.PrintDefaults()
 }
 
-type parseWorker struct{}
-
-func (pw *parseWorker) Process(path string, size int64, logger *log.Logger) error {
-	_, _, err := parser.Parse(path)
-	return err
-}
-
-type parseMaster struct{}
-
-func (pm *parseMaster) Accept(path string) bool {
-	ext := filepath.Ext(path)
-	return ext == ".dat" || ext == ".xml"
-}
-
-func (pm *parseMaster) NewWorker(workerIndex int) worker.Worker {
-	return new(parseWorker)
-}
-
-func (pm *parseMaster) NumWorkers() int {
-	return 8
+type Config struct {
+	Depot struct {
+		Root    []string
+		MaxSize []int64
+	}
 }
 
 func main() {
@@ -78,6 +63,7 @@ func main() {
 
 	help := flag.Bool("help", false, "show this message")
 	version := flag.Bool("version", false, "show version")
+	resume := flag.String("resume", "", "resume path")
 
 	flag.Parse()
 
@@ -91,10 +77,60 @@ func main() {
 		os.Exit(0)
 	}
 
-	err := worker.Work(flag.Args(), new(parseMaster), nil)
-
+	config := new(Config)
+	err := gcfg.ReadFileInto(config, "depot.ini")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, " error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "reading depot.ini failed: %v\n", err)
 		os.Exit(1)
 	}
+
+	for i := 0; i < len(config.Depot.MaxSize); i++ {
+		config.Depot.MaxSize[i] *= int64(archive.GB)
+	}
+
+	toDat := make(chan *types.Rom)
+
+	go func() {
+		processLoggerFile, err := os.Create("archive-process.log")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "creating archive-process.log failed: %v\n", err)
+			os.Exit(1)
+		}
+		defer processLoggerFile.Close()
+
+		processLog := log.New(processLoggerFile, "", 0)
+
+		for rom := range toDat {
+			processLog.Println(rom.Path)
+		}
+	}()
+
+	depot, err := archive.NewDepot(config.Depot.Root, config.Depot.MaxSize, toDat, 8)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "creating depot failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	resumeLoggerFile, err := os.Create("archive-resume.log")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "creating archive-resume.log failed: %v\n", err)
+		os.Exit(1)
+	}
+	defer resumeLoggerFile.Close()
+
+	archiveLoggerFile, err := os.Create("archive-work.log")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "creating archive-work.log failed: %v\n", err)
+		os.Exit(1)
+	}
+	defer archiveLoggerFile.Close()
+
+	err = depot.Archive(flag.Args(), *resume, log.New(resumeLoggerFile, "", 0), log.New(archiveLoggerFile, "", 0))
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "archiving failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	close(toDat)
 }

@@ -166,21 +166,36 @@ func pathExists(path string) (bool, error) {
 	return false, err
 }
 
-func archive(outpath string, r io.Reader) error {
+type countWriter struct {
+	w     io.Writer
+	count int64
+}
+
+func (w *countWriter) Write(p []byte) (int, error) {
+	n, err := w.w.Write(p)
+	w.count += int64(n)
+	return n, err
+}
+
+func archive(outpath string, r io.Reader) (int64, error) {
 	br := bufio.NewReader(r)
 
 	err := os.MkdirAll(filepath.Dir(outpath), 0777)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	outfile, err := os.Create(outpath)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer outfile.Close()
 
-	bufout := bufio.NewWriter(outfile)
+	cw := &countWriter{
+		w: outfile,
+	}
+
+	bufout := bufio.NewWriter(cw)
 	defer bufout.Flush()
 
 	zipWriter := cgzip.NewWriter(bufout)
@@ -188,8 +203,8 @@ func archive(outpath string, r io.Reader) error {
 
 	_, err = io.Copy(zipWriter, br)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	return nil
+	return cw.count, nil
 }
