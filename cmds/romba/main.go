@@ -44,7 +44,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "github.com/uwedeportivo/romba/db/level"
+	_ "github.com/uwedeportivo/romba/db/clevel"
 	_ "net/http/pprof"
 )
 
