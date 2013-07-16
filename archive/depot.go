@@ -197,6 +197,10 @@ func (w *slave) Process(path string, size int64, logger *log.Logger) error {
 	return nil
 }
 
+func (w *slave) Close() error {
+	return nil
+}
+
 type readerOpener func() (io.ReadCloser, error)
 
 func (w *slave) archive(ro readerOpener, size int64) (int64, error) {

@@ -58,6 +58,10 @@ func (pw *parseWorker) Process(path string, size int64, logger *log.Logger) erro
 	return err
 }
 
+func (pw *parseWorker) Close() error {
+	return nil
+}
+
 type parseMaster struct{}
 
 func (pm *parseMaster) Accept(path string) bool {

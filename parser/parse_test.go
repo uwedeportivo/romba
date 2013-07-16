@@ -188,6 +188,10 @@ const xmlText = `
 			<rom name="41_9.12b" size="65536" crc="0f9d8527" offset="0"/>
 		</region>
 	</game>
+	<game name="Games - Prototype (US)\A.E. (US) [-] [N.A.]">
+		<description>A.E. (US) [-] [N.A.]</description>
+		<rom name="Media\A.E. (1982)(Atari)(proto).bin" size="16384" crc="35484751" md5="a47fcb4eedab9418ea098bb431a407aa" sha1=""/>
+	</game>
 </datafile>
 `
 
@@ -260,6 +264,18 @@ func TestParseXml(t *testing.T) {
 						Name: "41_9.12b",
 						Size: 65536,
 						Crc:  []byte{0xf, 0x9d, 0x85, 0x27},
+					},
+				},
+			},
+			&types.Game{
+				Name:        "Games - Prototype (US)\\A.E. (US) [-] [N.A.]",
+				Description: "A.E. (US) [-] [N.A.]",
+				Roms: []*types.Rom{
+					&types.Rom{
+						Name: "Media\\A.E. (1982)(Atari)(proto).bin",
+						Size: 16384,
+						Crc:  []byte{0x35, 0x48, 0x47, 0x51},
+						Md5:  []byte{0xa4, 0x7f, 0xcb, 0x4e, 0xed, 0xab, 0x94, 0x18, 0xea, 0x9, 0x8b, 0xb4, 0x31, 0xa4, 0x7, 0xaa},
 					},
 				},
 			},

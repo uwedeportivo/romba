@@ -71,7 +71,7 @@ func TestDB(t *testing.T) {
 
 	t.Logf("creating test db in %s\n", dbDir)
 
-	krdb, err := New(dbDir)
+	krdb, err := NewKyotoDB(dbDir)
 	if err != nil {
 		t.Fatalf("failed to open db: %v", err)
 	}

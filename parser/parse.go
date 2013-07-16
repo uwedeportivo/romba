@@ -354,25 +354,40 @@ func Parse(path string) (*types.Dat, []byte, error) {
 
 func fixHashes(rom *types.Rom) {
 	if rom.Crc != nil {
-		v, err := hex.DecodeString(string(rom.Crc))
-		if err != nil {
+		strV := string(rom.Crc)
+		if strV != "" {
+			v, err := hex.DecodeString(string(rom.Crc))
+			if err != nil {
+				rom.Crc = nil
+			}
+			rom.Crc = v
+		} else {
 			rom.Crc = nil
 		}
-		rom.Crc = v
 	}
 	if rom.Md5 != nil {
-		v, err := hex.DecodeString(string(rom.Md5))
-		if err != nil {
+		strV := string(rom.Md5)
+		if strV != "" {
+			v, err := hex.DecodeString(string(rom.Md5))
+			if err != nil {
+				rom.Md5 = nil
+			}
+			rom.Md5 = v
+		} else {
 			rom.Md5 = nil
 		}
-		rom.Md5 = v
 	}
 	if rom.Sha1 != nil {
-		v, err := hex.DecodeString(string(rom.Sha1))
-		if err != nil {
+		strV := string(rom.Sha1)
+		if strV != "" {
+			v, err := hex.DecodeString(string(rom.Sha1))
+			if err != nil {
+				rom.Sha1 = nil
+			}
+			rom.Sha1 = v
+		} else {
 			rom.Sha1 = nil
 		}
-		rom.Sha1 = v
 	}
 }
 

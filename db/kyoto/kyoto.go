@@ -31,18 +31,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package kyoto
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha1"
 	"encoding/gob"
 	"fmt"
 	"github.com/uwedeportivo/cabinet"
+	"github.com/uwedeportivo/romba/db"
+	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/types"
 	"io"
-	"io/ioutil"
-	"os"
+	"log"
 	"path/filepath"
-	"strconv"
 )
 
 const (
@@ -52,11 +51,9 @@ const (
 	sha1DBName    = "sha1.kch"
 	crcsha1DBName = "crcsha1.kch"
 	md5sha1DBName = "md5sha1.kch"
-
-	generationFilename = ".romba-generation"
 )
 
-type KyotoRomDB struct {
+type kyotoRomDB struct {
 	generation int64
 	datsDB     *cabinet.KCDB
 	crcDB      *cabinet.KCDB
@@ -67,11 +64,15 @@ type KyotoRomDB struct {
 	path       string
 }
 
-func New(path string) (*KyotoRomDB, error) {
-	krdb := new(KyotoRomDB)
+func init() {
+	db.DBFactory = NewKyotoDB
+}
+
+func NewKyotoDB(path string) (db.RomDB, error) {
+	krdb := new(kyotoRomDB)
 	krdb.path = path
 
-	gen, err := readGenerationFile(path)
+	gen, err := db.ReadGenerationFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +111,7 @@ func New(path string) (*KyotoRomDB, error) {
 	return krdb, nil
 }
 
-func (krdb *KyotoRomDB) IndexRom(rom *types.Rom) error {
+func (krdb *kyotoRomDB) IndexRom(rom *types.Rom) error {
 	dats, err := krdb.DatsForRom(rom)
 	if err != nil {
 		return err
@@ -123,7 +124,7 @@ func (krdb *KyotoRomDB) IndexRom(rom *types.Rom) error {
 	dat := new(types.Dat)
 	dat.Artificial = true
 	dat.Generation = krdb.generation
-	dat.Name = fmt.Sprintf("Artifical Dat for %s", rom.Name)
+	dat.Name = fmt.Sprintf("Artificial Dat for %s", rom.Name)
 	dat.Path = rom.Path
 	game := new(types.Game)
 	game.Roms = []*types.Rom{rom}
@@ -146,7 +147,11 @@ func (krdb *KyotoRomDB) IndexRom(rom *types.Rom) error {
 	return krdb.IndexDat(dat, hh.Sum(nil))
 }
 
-func (krdb *KyotoRomDB) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
+func (krdb *kyotoRomDB) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
+	if sha1Bytes == nil {
+		return fmt.Errorf("sha1 is nil for %s", dat.Path)
+	}
+
 	dat.Generation = krdb.generation
 
 	var buf bytes.Buffer
@@ -196,16 +201,16 @@ func (krdb *KyotoRomDB) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 	return nil
 }
 
-func (krdb *KyotoRomDB) OrphanDats() error {
+func (krdb *kyotoRomDB) OrphanDats() error {
 	krdb.generation++
-	err := writeGenerationFile(krdb.path, krdb.generation)
+	err := db.WriteGenerationFile(krdb.path, krdb.generation)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (krdb *KyotoRomDB) GetDat(sha1Bytes []byte) (*types.Dat, error) {
+func (krdb *kyotoRomDB) GetDat(sha1Bytes []byte) (*types.Dat, error) {
 	dBytes, err := krdb.datsDB.Get(sha1Bytes)
 	if err != nil && krdb.datsDB.Ecode() != cabinet.KCENOREC {
 		return nil, err
@@ -223,7 +228,7 @@ func (krdb *KyotoRomDB) GetDat(sha1Bytes []byte) (*types.Dat, error) {
 	return &dat, nil
 }
 
-func (krdb *KyotoRomDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
+func (krdb *kyotoRomDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	var dBytes []byte
 	var err error
 
@@ -262,7 +267,35 @@ func (krdb *KyotoRomDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	return dats, nil
 }
 
-func (krdb *KyotoRomDB) Close() error {
+func (krdb *kyotoRomDB) sync() error {
+	err := krdb.datsDB.Sync(false)
+	if err != nil {
+		return err
+	}
+	err = krdb.crcDB.Sync(false)
+	if err != nil {
+		return err
+	}
+	err = krdb.md5DB.Sync(false)
+	if err != nil {
+		return err
+	}
+	err = krdb.sha1DB.Sync(false)
+	if err != nil {
+		return err
+	}
+	err = krdb.crcsha1DB.Sync(false)
+	if err != nil {
+		return err
+	}
+	err = krdb.md5sha1DB.Sync(false)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (krdb *kyotoRomDB) Close() error {
 	err := krdb.datsDB.Close()
 	if err != nil {
 		return err
@@ -288,40 +321,4 @@ func (krdb *KyotoRomDB) Close() error {
 		return err
 	}
 	return nil
-}
-
-func writeGenerationFile(root string, size int64) error {
-	file, err := os.Create(filepath.Join(root, generationFilename))
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	bw := bufio.NewWriter(file)
-	defer bw.Flush()
-
-	bw.WriteString(strconv.FormatInt(size, 10))
-	return nil
-}
-
-func readGenerationFile(root string) (int64, error) {
-	file, err := os.Open(filepath.Join(root, generationFilename))
-	if err != nil {
-		if os.IsNotExist(err) {
-			err = writeGenerationFile(root, 0)
-			if err != nil {
-				return 0, err
-			}
-			return 0, nil
-		}
-		return 0, err
-	}
-	defer file.Close()
-
-	bs, err := ioutil.ReadAll(file)
-	if err != nil {
-		return 0, err
-	}
-
-	return strconv.ParseInt(string(bs), 10, 64)
 }

@@ -76,6 +76,7 @@ func (sv *scanVisitor) visit(path string, f os.FileInfo, err error) error {
 
 type Worker interface {
 	Process(path string, size int64, logger *log.Logger) error
+	Close() error
 }
 
 type Master interface {
@@ -92,6 +93,7 @@ type workUnit struct {
 type slave struct {
 	logger       *log.Logger
 	wg           *sync.WaitGroup
+	closeWg      *sync.WaitGroup
 	inwork       chan *workUnit
 	byteProgress *pb.ProgressBar
 	worker       Worker
@@ -123,6 +125,15 @@ func (w *slave) run() {
 		}
 		w.wg.Done()
 	}
+	err := w.worker.Close()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to close worker: %v\n", err)
+		if w.logger != nil {
+			w.logger.Printf("failed to close worker: %v\n", err)
+		}
+	}
+
+	w.closeWg.Done()
 }
 
 func Work(paths []string, master Master, logger *log.Logger) error {
@@ -169,6 +180,8 @@ func Work(paths []string, master Master, logger *log.Logger) error {
 
 	wg := new(sync.WaitGroup)
 	wg.Add(cv.numFiles)
+	closeWg := new(sync.WaitGroup)
+	closeWg.Add(master.NumWorkers())
 
 	for i := 0; i < master.NumWorkers(); i++ {
 		worker := &slave{
@@ -177,6 +190,7 @@ func Work(paths []string, master Master, logger *log.Logger) error {
 			logger:       logger,
 			worker:       master.NewWorker(i),
 			wg:           wg,
+			closeWg:      closeWg,
 		}
 
 		go worker.run()
@@ -190,6 +204,7 @@ func Work(paths []string, master Master, logger *log.Logger) error {
 				logger.Printf("failed to scan dir %s: %v\n", name, err)
 			}
 			close(inwork)
+			closeWg.Wait()
 			return err
 		}
 	}
@@ -201,6 +216,12 @@ func Work(paths []string, master Master, logger *log.Logger) error {
 		byteProgress.Set(int(byteProgress.Total))
 		byteProgress.Finish()
 	}
+
+	fmt.Fprintf(os.Stdout, "Flushing workers and closing work. Hang in there...\n")
+	if logger != nil {
+		logger.Printf("Flushing workers and closing work. Hang in there...\n")
+	}
+	closeWg.Wait()
 
 	fmt.Fprintf(os.Stdout, "Done.\n")
 	if logger != nil {
