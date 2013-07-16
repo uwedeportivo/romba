@@ -35,7 +35,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/uwedeportivo/romba/archive"
-	"github.com/uwedeportivo/romba/types"
+	"github.com/uwedeportivo/romba/db"
 	"log"
 	"os"
 )
@@ -88,24 +88,7 @@ func main() {
 		config.Depot.MaxSize[i] *= int64(archive.GB)
 	}
 
-	toDat := make(chan *types.Rom)
-
-	go func() {
-		processLoggerFile, err := os.Create("archive-process.log")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "creating archive-process.log failed: %v\n", err)
-			os.Exit(1)
-		}
-		defer processLoggerFile.Close()
-
-		processLog := log.New(processLoggerFile, "", 0)
-
-		for rom := range toDat {
-			processLog.Println(rom.Path)
-		}
-	}()
-
-	depot, err := archive.NewDepot(config.Depot.Root, config.Depot.MaxSize, toDat, 8)
+	depot, err := archive.NewDepot(config.Depot.Root, config.Depot.MaxSize, new(db.NoOpDB), 8)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "creating depot failed: %v\n", err)
 		os.Exit(1)
@@ -131,6 +114,4 @@ func main() {
 		fmt.Fprintf(os.Stderr, "archiving failed: %v\n", err)
 		os.Exit(1)
 	}
-
-	close(toDat)
 }

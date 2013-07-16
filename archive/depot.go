@@ -36,6 +36,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
 	"github.com/uwedeportivo/torrentzip/czip"
@@ -55,7 +56,7 @@ type Depot struct {
 	maxSizes   []int64
 	resumePath string
 	numWorkers int
-	toDat      chan *types.Rom
+	romDB      db.RomDB
 	soFar      chan *completed
 	lock       *sync.Mutex
 	start      int
@@ -72,7 +73,7 @@ type slave struct {
 	index int
 }
 
-func NewDepot(roots []string, maxSize []int64, toDat chan *types.Rom, numWorkers int) (*Depot, error) {
+func NewDepot(roots []string, maxSize []int64, romDB db.RomDB, numWorkers int) (*Depot, error) {
 	depot := new(Depot)
 	depot.roots = make([]string, len(roots))
 	depot.sizes = make([]int64, len(roots))
@@ -90,7 +91,7 @@ func NewDepot(roots []string, maxSize []int64, toDat chan *types.Rom, numWorkers
 	}
 	depot.soFar = make(chan *completed)
 	depot.lock = new(sync.Mutex)
-	depot.toDat = toDat
+	depot.romDB = romDB
 	depot.numWorkers = numWorkers
 	return depot, nil
 }
@@ -170,7 +171,6 @@ func (w *slave) Process(path string, size int64, logger *log.Logger) error {
 	}
 
 	if err != nil {
-		// TODO: mark file as corrupted
 		return err
 	}
 
@@ -185,7 +185,10 @@ func (w *slave) Process(path string, size int64, logger *log.Logger) error {
 	rom.Size = size
 	rom.Path = path
 
-	w.depot.toDat <- rom
+	err = w.depot.romDB.IndexRom(rom)
+	if err != nil {
+		return err
+	}
 
 	w.depot.soFar <- &completed{
 		path:        path,
