@@ -82,9 +82,9 @@ func openDb(path string) (*levigo.DB, error) {
 	opts := levigo.NewOptions()
 	opts.SetCreateIfMissing(true)
 	opts.SetFilterPolicy(levigo.NewBloomFilter(16))
-	opts.SetCache(levigo.NewLRUCache(1049000))
-	opts.SetMaxOpenFiles(50)
-	opts.SetWriteBufferSize(6291456)
+	opts.SetCache(levigo.NewLRUCache(10490000))
+	opts.SetMaxOpenFiles(500)
+	opts.SetWriteBufferSize(62914560)
 	opts.SetEnv(levigo.NewDefaultEnv())
 	return levigo.Open(path, opts)
 }

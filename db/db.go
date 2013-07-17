@@ -44,7 +44,7 @@ import (
 
 const (
 	generationFilename = "romba-generation"
-	MaxBatchSize       = 10485760
+	MaxBatchSize       = 52428800
 )
 
 type RomBatch interface {
