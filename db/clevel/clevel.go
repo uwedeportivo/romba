@@ -81,6 +81,11 @@ var wOptions *levigo.WriteOptions = levigo.NewWriteOptions()
 func openDb(path string) (*levigo.DB, error) {
 	opts := levigo.NewOptions()
 	opts.SetCreateIfMissing(true)
+	opts.SetFilterPolicy(levigo.NewBloomFilter(16))
+	opts.SetCache(levigo.NewLRUCache(1049000))
+	opts.SetMaxOpenFiles(50)
+	opts.SetWriteBufferSize(6291456)
+	opts.SetEnv(levigo.NewDefaultEnv())
 	return levigo.Open(path, opts)
 }
 
@@ -311,6 +316,8 @@ func (lrb *levelRomBatch) Flush() error {
 }
 
 func (lrb *levelRomBatch) Close() error {
+	lrb.Flush()
+
 	lrb.datsBatch.Close()
 	lrb.crcBatch.Close()
 	lrb.md5Batch.Close()
