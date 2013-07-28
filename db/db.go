@@ -44,7 +44,7 @@ import (
 
 const (
 	generationFilename = "romba-generation"
-	MaxBatchSize       = 52428800
+	MaxBatchSize       = 10485760
 )
 
 type RomBatch interface {
@@ -201,7 +201,7 @@ func (pm *refreshMaster) NewWorker(workerIndex int) worker.Worker {
 }
 
 func (pm *refreshMaster) NumWorkers() int {
-	return 8
+	return 4
 }
 
 func Refresh(romdb RomDB, datsPath string, logger *log.Logger) error {
@@ -214,5 +214,5 @@ func Refresh(romdb RomDB, datsPath string, logger *log.Logger) error {
 		romdb: romdb,
 	}
 
-	return worker.Work([]string{datsPath}, pm, logger)
+	return worker.Work("refresh dats", []string{datsPath}, pm, logger)
 }

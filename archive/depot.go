@@ -101,7 +101,7 @@ func (depot *Depot) Archive(paths []string, resumePath string, resumeLog *log.Lo
 
 	go depot.loopObserver(resumeLog)
 
-	err := worker.Work(paths, depot, archiveLog)
+	err := worker.Work("archive roms", paths, depot, archiveLog)
 
 	depot.soFar <- &completed{
 		workerIndex: -1,

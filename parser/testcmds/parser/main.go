@@ -95,7 +95,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	err := worker.Work(flag.Args(), new(parseMaster), nil)
+	err := worker.Work("parse dats", flag.Args(), new(parseMaster), nil)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, " error: %v\n", err)

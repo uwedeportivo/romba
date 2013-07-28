@@ -36,7 +36,9 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/cache"
 	"github.com/syndtr/goleveldb/leveldb/errors"
+	"github.com/syndtr/goleveldb/leveldb/filter"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/storage"
 	"github.com/uwedeportivo/romba/db"
@@ -88,9 +90,15 @@ func openDb(path string) (*leveldb.DB, error) {
 		return nil, err
 	}
 
-	db, err := leveldb.Open(stor, &opt.Options{Flag: opt.OFCreateIfMissing})
+	db, err := leveldb.Open(stor, &opt.Options{
+		Flag:         opt.OFCreateIfMissing,
+		WriteBuffer:  62914560,
+		MaxOpenFiles: 500,
+		BlockCache:   cache.NewLRUCache(10490000),
+		Filter:       filter.NewBloomFilter(16),
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open db at %s: %v\n", path, err)
 	}
 	return db, nil
 }
@@ -224,17 +232,17 @@ func (lrdb *levelRomDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 
 	if rom.Sha1 != nil {
 		dBytes, err = lrdb.sha1DB.Get(rom.Sha1, rOptions)
-		if err != nil {
+		if err != nil && err != errors.ErrNotFound {
 			return nil, err
 		}
 	} else if rom.Md5 != nil {
 		dBytes, err = lrdb.md5DB.Get(rom.Md5, rOptions)
-		if err != nil {
+		if err != nil && err != errors.ErrNotFound {
 			return nil, err
 		}
 	} else if rom.Crc != nil {
 		dBytes, err = lrdb.crcDB.Get(rom.Crc, rOptions)
-		if err != nil {
+		if err != nil && err != errors.ErrNotFound {
 			return nil, err
 		}
 	}

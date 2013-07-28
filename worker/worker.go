@@ -33,6 +33,7 @@ package worker
 import (
 	"fmt"
 	"github.com/cheggaaa/pb"
+	"github.com/dustin/go-humanize"
 	"log"
 	"math"
 	"os"
@@ -136,7 +137,10 @@ func (w *slave) run() {
 	w.closeWg.Done()
 }
 
-func Work(paths []string, master Master, logger *log.Logger) error {
+func Work(workname string, paths []string, master Master, logger *log.Logger) error {
+	fmt.Printf("starting %s\n", workname)
+	startTime := time.Now()
+
 	cv := new(countVisitor)
 	cv.master = master
 
@@ -227,5 +231,34 @@ func Work(paths []string, master Master, logger *log.Logger) error {
 	if logger != nil {
 		logger.Printf("Done.\n")
 	}
+
+	elapsed := time.Since(startTime)
+
+	fmt.Printf("finished %s\n", workname)
+	fmt.Printf("total number of files: %d\n", cv.numFiles)
+	fmt.Printf("total number of bytes: %s\n", humanize.Bytes(uint64(cv.numBytes)))
+	fmt.Printf("elapsed time: %s\n", formatDuration(elapsed))
+
+	ts := uint64(float64(cv.numBytes) / float64(elapsed.Seconds()))
+
+	fmt.Printf("throughput: %s/s \n", humanize.Bytes(ts))
+
 	return nil
+}
+
+func formatDuration(d time.Duration) string {
+	secs := uint64(d.Seconds())
+	mins := secs / 60
+	secs = secs % 60
+	hours := mins / 60
+	mins = mins % 60
+
+	if hours > 0 {
+		return fmt.Sprintf("%dh%dm%ds", hours, mins, secs)
+	}
+
+	if mins > 0 {
+		return fmt.Sprintf("%dm%ds", mins, secs)
+	}
+	return fmt.Sprintf("%ds", secs)
 }
