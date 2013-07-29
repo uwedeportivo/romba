@@ -28,17 +28,20 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package kyoto
+package db_test
 
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/types"
 	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
+
+	_ "github.com/uwedeportivo/romba/db/kyoto"
 )
 
 const datText = `
@@ -71,7 +74,7 @@ func TestDB(t *testing.T) {
 
 	t.Logf("creating test db in %s\n", dbDir)
 
-	krdb, err := NewKyotoDB(dbDir)
+	krdb, err := db.New(dbDir)
 	if err != nil {
 		t.Fatalf("failed to open db: %v", err)
 	}

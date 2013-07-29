@@ -46,21 +46,21 @@ const (
 	gzipSuffix = ".gz"
 )
 
-type hashes struct {
-	crc  []byte
-	md5  []byte
-	sha1 []byte
+type Hashes struct {
+	Crc  []byte
+	Md5  []byte
+	Sha1 []byte
 }
 
-func newHashes() *hashes {
-	rs := new(hashes)
-	rs.crc = make([]byte, 0, crc32.Size)
-	rs.md5 = make([]byte, 0, md5.Size)
-	rs.sha1 = make([]byte, 0, sha1.Size)
+func newHashes() *Hashes {
+	rs := new(Hashes)
+	rs.Crc = make([]byte, 0, crc32.Size)
+	rs.Md5 = make([]byte, 0, md5.Size)
+	rs.Sha1 = make([]byte, 0, sha1.Size)
 	return rs
 }
 
-func (hh *hashes) forFile(inpath string) error {
+func (hh *Hashes) forFile(inpath string) error {
 	file, err := os.Open(inpath)
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func (hh *hashes) forFile(inpath string) error {
 	return hh.forReader(file)
 }
 
-func (hh *hashes) forReader(in io.Reader) error {
+func (hh *Hashes) forReader(in io.Reader) error {
 	br := bufio.NewReader(in)
 
 	hSha1 := sha1.New()
@@ -84,14 +84,14 @@ func (hh *hashes) forReader(in io.Reader) error {
 		return err
 	}
 
-	hh.crc = hCrc.Sum(hh.crc[0:0])
-	hh.md5 = hMd5.Sum(hh.md5[0:0])
-	hh.sha1 = hSha1.Sum(hh.sha1[0:0])
+	hh.Crc = hCrc.Sum(hh.Crc[0:0])
+	hh.Md5 = hMd5.Sum(hh.Md5[0:0])
+	hh.Sha1 = hSha1.Sum(hh.Sha1[0:0])
 
 	return nil
 }
 
-func hashesForFile(inpath string) (*hashes, error) {
+func HashesForFile(inpath string) (*Hashes, error) {
 	file, err := os.Open(inpath)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func hashesForFile(inpath string) (*hashes, error) {
 	return hashesForReader(file)
 }
 
-func hashesForReader(in io.Reader) (*hashes, error) {
+func hashesForReader(in io.Reader) (*Hashes, error) {
 	hSha1 := sha1.New()
 	hMd5 := md5.New()
 	hCrc := crc32.NewIEEE()
@@ -113,10 +113,10 @@ func hashesForReader(in io.Reader) (*hashes, error) {
 		return nil, err
 	}
 
-	res := new(hashes)
-	res.crc = hCrc.Sum(nil)
-	res.md5 = hMd5.Sum(nil)
-	res.sha1 = hSha1.Sum(nil)
+	res := new(Hashes)
+	res.Crc = hCrc.Sum(nil)
+	res.Md5 = hMd5.Sum(nil)
+	res.Sha1 = hSha1.Sum(nil)
 
 	return res, nil
 }
@@ -155,7 +155,7 @@ func pathFromSha1HexEncoding(root, hexStr, suffix string) string {
 	return filepath.Join(pieces...)
 }
 
-func pathExists(path string) (bool, error) {
+func PathExists(path string) (bool, error) {
 	_, err := os.Lstat(path)
 	if err == nil {
 		return true, nil

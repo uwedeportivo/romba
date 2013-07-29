@@ -32,6 +32,7 @@ package db
 
 import (
 	"bufio"
+	"fmt"
 	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
@@ -69,61 +70,6 @@ var DBFactory func(path string) (RomDB, error)
 
 func New(path string) (RomDB, error) {
 	return DBFactory(path)
-}
-
-type NoOpDB struct{}
-type NoOpBatch struct{}
-
-func (noop *NoOpDB) IndexRom(rom *types.Rom) error {
-	return nil
-}
-
-func (noop *NoOpDB) IndexDat(dat *types.Dat, sha1 []byte) error {
-	return nil
-}
-
-func (noop *NoOpDB) OrphanDats() error {
-	return nil
-}
-
-func (noop *NoOpDB) Refresh(datsPath string, logger *log.Logger) error {
-	return nil
-}
-
-func (noop *NoOpDB) Close() error {
-	return nil
-}
-
-func (noop *NoOpDB) GetDat(sha1 []byte) (*types.Dat, error) {
-	return nil, nil
-}
-
-func (noop *NoOpDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
-	return nil, nil
-}
-
-func (noop *NoOpDB) StartBatch() RomBatch {
-	return new(NoOpBatch)
-}
-
-func (noop *NoOpBatch) Flush() error {
-	return nil
-}
-
-func (noop *NoOpBatch) Close() error {
-	return nil
-}
-
-func (noop *NoOpBatch) IndexRom(rom *types.Rom) error {
-	return nil
-}
-
-func (noop *NoOpBatch) IndexDat(dat *types.Dat, sha1 []byte) error {
-	return nil
-}
-
-func (noop *NoOpBatch) Size() int64 {
-	return 0
 }
 
 func WriteGenerationFile(root string, size int64) error {
@@ -171,7 +117,7 @@ func (pw *refreshWorker) Process(path string, size int64, logger *log.Logger) er
 		logger.Printf("flushing batch of size %d\n", pw.romBatch.Size())
 		err := pw.romBatch.Flush()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to flush: %v", err)
 		}
 	}
 	dat, sha1Bytes, err := parser.Parse(path)
@@ -201,7 +147,8 @@ func (pm *refreshMaster) NewWorker(workerIndex int) worker.Worker {
 }
 
 func (pm *refreshMaster) NumWorkers() int {
-	return 4
+	// TODO(uwe): configurable
+	return 8
 }
 
 func Refresh(romdb RomDB, datsPath string, logger *log.Logger) error {

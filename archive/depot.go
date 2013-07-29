@@ -69,7 +69,7 @@ type completed struct {
 
 type slave struct {
 	depot *Depot
-	hh    *hashes
+	hh    *Hashes
 	index int
 }
 
@@ -178,9 +178,9 @@ func (w *slave) Process(path string, size int64, logger *log.Logger) error {
 	rom.Crc = make([]byte, 0, crc32.Size)
 	rom.Md5 = make([]byte, 0, md5.Size)
 	rom.Sha1 = make([]byte, 0, sha1.Size)
-	copy(rom.Crc, w.hh.crc)
-	copy(rom.Md5, w.hh.md5)
-	copy(rom.Sha1, w.hh.sha1)
+	copy(rom.Crc, w.hh.Crc)
+	copy(rom.Md5, w.hh.Md5)
+	copy(rom.Sha1, w.hh.Sha1)
 	rom.Name = filepath.Base(path)
 	rom.Size = size
 	rom.Path = path
@@ -221,7 +221,7 @@ func (w *slave) archive(ro readerOpener, size int64) (int64, error) {
 		return 0, err
 	}
 
-	sha1Hex := hex.EncodeToString(w.hh.sha1)
+	sha1Hex := hex.EncodeToString(w.hh.Sha1)
 
 	root, err := w.depot.reserveRoot(size)
 	if err != nil {
@@ -230,7 +230,7 @@ func (w *slave) archive(ro readerOpener, size int64) (int64, error) {
 
 	outpath := pathFromSha1HexEncoding(w.depot.roots[root], sha1Hex, gzipSuffix)
 
-	exists, err := pathExists(outpath)
+	exists, err := PathExists(outpath)
 	if err != nil {
 		return 0, err
 	}

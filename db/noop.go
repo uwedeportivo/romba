@@ -28,74 +28,59 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package clevel
+package db
 
 import (
-	"fmt"
-	"github.com/jmhodges/levigo"
-	"github.com/uwedeportivo/romba/db"
+	"github.com/uwedeportivo/romba/types"
 )
 
-var rOptions *levigo.ReadOptions = levigo.NewReadOptions()
-var wOptions *levigo.WriteOptions = levigo.NewWriteOptions()
+type NoOpDB struct{}
+type NoOpBatch struct{}
 
-func init() {
-	db.StoreOpener = openDb
-}
-
-func openDb(path string) (db.KVStore, error) {
-	opts := levigo.NewOptions()
-	opts.SetCreateIfMissing(true)
-	opts.SetFilterPolicy(levigo.NewBloomFilter(16))
-	opts.SetCache(levigo.NewLRUCache(10490000))
-	opts.SetMaxOpenFiles(500)
-	opts.SetWriteBufferSize(62914560)
-	opts.SetEnv(levigo.NewDefaultEnv())
-	dbn, err := levigo.Open(path, opts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open db at %s: %v\n", path, err)
-	}
-	return &store{
-		dbn: dbn,
-	}, nil
-}
-
-type store struct {
-	dbn *levigo.DB
-}
-
-func (s *store) Set(key, value []byte) error {
-	return s.dbn.Put(wOptions, key, value)
-}
-
-func (s *store) Get(key []byte) ([]byte, error) {
-	return s.dbn.Get(rOptions, key)
-}
-
-func (s *store) StartBatch() db.KVBatch {
-	return &batch{
-		bn: levigo.NewWriteBatch(),
-	}
-}
-
-func (s *store) WriteBatch(b db.KVBatch) error {
-	cb := b.(*batch)
-	return s.dbn.Write(wOptions, cb.bn)
-}
-
-func (s *store) Close() error {
-	s.dbn.Close()
+func (noop *NoOpDB) IndexRom(rom *types.Rom) error {
 	return nil
 }
 
-type batch struct {
-	bn *levigo.WriteBatch
+func (noop *NoOpDB) IndexDat(dat *types.Dat, sha1 []byte) error {
+	return nil
 }
 
-func (b *batch) Set(key, value []byte) {
-	b.bn.Put(key, value)
+func (noop *NoOpDB) OrphanDats() error {
+	return nil
 }
 
-func (b *batch) Clear() {
-	b.bn.Clear()
+func (noop *NoOpDB) Close() error {
+	return nil
+}
+
+func (noop *NoOpDB) GetDat(sha1 []byte) (*types.Dat, error) {
+	return nil, nil
+}
+
+func (noop *NoOpDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
+	return nil, nil
+}
+
+func (noop *NoOpDB) StartBatch() RomBatch {
+	return new(NoOpBatch)
+}
+
+func (noop *NoOpBatch) Flush() error {
+	return nil
+}
+
+func (noop *NoOpBatch) Close() error {
+	return nil
+}
+
+func (noop *NoOpBatch) IndexRom(rom *types.Rom) error {
+	return nil
+}
+
+func (noop *NoOpBatch) IndexDat(dat *types.Dat, sha1 []byte) error {
+	return nil
+}
+
+func (noop *NoOpBatch) Size() int64 {
+	return 0
 }

@@ -76,7 +76,7 @@ func init() {
 
 	cmd = new(commander.Commander)
 	cmd.Name = os.Args[0]
-	cmd.Commands = make([]*commander.Command, 9)
+	cmd.Commands = make([]*commander.Command, 10)
 	cmd.Flag = flag.NewFlagSet("romba", flag.ExitOnError)
 
 	cmd.Commands[0] = &commander.Command{
@@ -107,6 +107,7 @@ have a current entry in the DAT index.`,
 	}
 
 	cmd.Commands[1].Flag.Bool("only-needed", false, "only archive ROM files actually referenced by DAT files from the DAT index")
+	cmd.Commands[1].Flag.String("resume", "", "resume a previously interrupted archive operation from the specified path")
 
 	cmd.Commands[2] = &commander.Command{
 		Run:       runCmd,
@@ -207,6 +208,18 @@ structure according to the original DAT master directory tree structure.`,
 	}
 
 	cmd.Commands[8].Flag.String("out", "", "output dir")
+
+	cmd.Commands[9] = &commander.Command{
+		Run:       lookup,
+		UsageLine: "lookup <list of hashes or files>",
+		Short:     "For each specified hash or file it looks up any available information.",
+		Long: `
+For each specified hash it looks up any available information (dat or rom).
+For each specified file it computes the three hashes crc, md5 and sha1 and
+then looks up any available information.`,
+		Flag: *flag.NewFlagSet("romba-build", flag.ExitOnError),
+	}
+
 }
 
 func runCmd(cmd *commander.Command, args []string) {
@@ -267,12 +280,96 @@ func archiveRoms(cmd *commander.Command, args []string) {
 	bufresumelog := bufio.NewWriter(resumeLogFile)
 	defer bufresumelog.Flush()
 
-	err = depot.Archive(args, "", log.New(bufresumelog, "", 0), log.New(buflog, "", 0))
+	resume := cmd.Flag.Lookup("resume").Value.Get().(string)
+
+	err = depot.Archive(args, "", log.New(bufresumelog, resume, 0), log.New(buflog, "", 0))
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "archiving failed: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+/*
+func lookupByHash(hash []byte) (bool, error) {
+	var shas [][]byte
+	switch len(hash) {
+	case md5.Size:
+
+	case crc32.Size:
+	case sha1.Size:
+	default:
+
+	}
+
+	for _, hh := range shas {
+
+	}
+	if len(hash) == md5.Size {
+
+	}
+	if len(hash) == sha1.Size {
+		dat, err := romDB.GetDat(hash)
+
+	}
+}
+*/
+
+func lookup(cmd *commander.Command, args []string) {
+	/*
+		if len(args) == 0 {
+			return
+		}
+
+		for _, arg := range args {
+			exists, err := archive.PathExists(arg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to stat %s: %v\n", arg, err)
+				os.Exit(1)
+			}
+			if exists {
+				hh, err := archive.HashesForFile(arg)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to compute hashes for %s: %v\n", arg, err)
+					os.Exit(1)
+				}
+
+				found, err := lookupByHash(hh.Sha1)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to lookup by sha1 hash for %s: %v\n", arg, err)
+					os.Exit(1)
+				}
+				if found {
+					continue
+				}
+				found, err = lookupByHash(hh.Md5)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to lookup by md5 hash for %s: %v\n", arg, err)
+					os.Exit(1)
+				}
+				if found {
+					continue
+				}
+
+				found, err = lookupByHash(hh.Sha1)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to lookup by crc hash for %s: %v\n", arg, err)
+					os.Exit(1)
+				}
+			} else {
+				hash, err := hex.DecodeString(arg)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to decode hex string %s: %v\n", arg, err)
+					os.Exit(1)
+				}
+				_, err = lookupByHash(hash)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to lookup by hash for %s: %v\n", arg, err)
+					os.Exit(1)
+				}
+			}
+		}
+	*/
 }
 
 func main() {

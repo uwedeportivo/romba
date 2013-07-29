@@ -31,392 +31,72 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package kyoto
 
 import (
-	"bytes"
-	"crypto/sha1"
-	"encoding/gob"
 	"fmt"
 	"github.com/uwedeportivo/cabinet"
 	"github.com/uwedeportivo/romba/db"
-	"github.com/uwedeportivo/romba/types"
-	"io"
-	"path/filepath"
 )
-
-const (
-	datsDBName    = "dats.kch"
-	crcDBName     = "crc.kch"
-	md5DBName     = "md5.kch"
-	sha1DBName    = "sha1.kch"
-	crcsha1DBName = "crcsha1.kch"
-	md5sha1DBName = "md5sha1.kch"
-)
-
-type kyotoRomDB struct {
-	generation int64
-	datsDB     *cabinet.KCDB
-	crcDB      *cabinet.KCDB
-	md5DB      *cabinet.KCDB
-	sha1DB     *cabinet.KCDB
-	crcsha1DB  *cabinet.KCDB
-	md5sha1DB  *cabinet.KCDB
-	path       string
-	isBatch    bool
-	underlying *kyotoRomDB
-	size       int64
-}
 
 func init() {
-	db.DBFactory = NewKyotoDB
+	db.StoreOpener = openDb
 }
 
-func NewKyotoDB(path string) (db.RomDB, error) {
-	krdb := new(kyotoRomDB)
-	krdb.path = path
-
-	gen, err := db.ReadGenerationFile(path)
+func openDb(path string) (db.KVStore, error) {
+	dbn := cabinet.New()
+	err := dbn.Open(path+".kch", cabinet.KCOWRITER|cabinet.KCOCREATE)
 	if err != nil {
 		return nil, err
 	}
-	krdb.generation = gen
-
-	krdb.datsDB = cabinet.New()
-	err = krdb.datsDB.Open(filepath.Join(path, datsDBName), cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		return nil, err
-	}
-	krdb.crcDB = cabinet.New()
-	err = krdb.crcDB.Open(filepath.Join(path, crcDBName), cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		return nil, err
-	}
-	krdb.md5DB = cabinet.New()
-	err = krdb.md5DB.Open(filepath.Join(path, md5DBName), cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		return nil, err
-	}
-	krdb.sha1DB = cabinet.New()
-	err = krdb.sha1DB.Open(filepath.Join(path, sha1DBName), cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		return nil, err
-	}
-	krdb.crcsha1DB = cabinet.New()
-	err = krdb.crcsha1DB.Open(filepath.Join(path, crcsha1DBName), cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		return nil, err
-	}
-	krdb.md5sha1DB = cabinet.New()
-	err = krdb.md5sha1DB.Open(filepath.Join(path, md5sha1DBName), cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		return nil, err
-	}
-	return krdb, nil
+	return &store{
+		dbn: dbn,
+	}, nil
 }
 
-func (underlying *kyotoRomDB) StartBatch() db.RomBatch {
-	krdb := new(kyotoRomDB)
-	krdb.isBatch = true
-	krdb.underlying = underlying
+type store struct {
+	dbn *cabinet.KCDB
+}
 
-	krdb.datsDB = cabinet.New()
-	err := krdb.datsDB.Open("-", cabinet.KCOWRITER|cabinet.KCOCREATE)
+func (s *store) Set(key, value []byte) error {
+	return s.dbn.Set(key, value)
+}
+
+func (s *store) Get(key []byte) ([]byte, error) {
+	v, err := s.dbn.Get(key)
+	if err != nil && s.dbn.Ecode() != cabinet.KCENOREC {
+		return nil, fmt.Errorf("kyoto error on get: %v, error code: %d", err, s.dbn.Ecode())
+	}
+	return v, nil
+}
+
+func (s *store) StartBatch() db.KVBatch {
+	bn := cabinet.New()
+	err := bn.Open("-", cabinet.KCOWRITER|cabinet.KCOCREATE)
 	if err != nil {
-		fmt.Printf("failed to open kyoto batch for datsDB: %v\n", err)
+		fmt.Printf("failed to open kyoto batch: %v\n", err)
 		panic(err)
 	}
-	krdb.crcDB = cabinet.New()
-	err = krdb.crcDB.Open("-", cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		fmt.Printf("failed to open kyoto batch for crcDB: %v\n", err)
-		panic(err)
+
+	return &batch{
+		bn: bn,
 	}
-	krdb.md5DB = cabinet.New()
-	err = krdb.md5DB.Open("-", cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		fmt.Printf("failed to open kyoto batch for md5DB: %v\n", err)
-		panic(err)
-	}
-	krdb.sha1DB = cabinet.New()
-	err = krdb.sha1DB.Open("-", cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		fmt.Printf("failed to open kyoto batch for sha1DB: %v\n", err)
-		panic(err)
-	}
-	krdb.crcsha1DB = cabinet.New()
-	err = krdb.crcsha1DB.Open("-", cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		fmt.Printf("failed to open kyoto batch for crcsha1DB: %v\n", err)
-		panic(err)
-	}
-	krdb.md5sha1DB = cabinet.New()
-	err = krdb.md5sha1DB.Open("-", cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		fmt.Printf("failed to open kyoto batch for md5sha1DB: %v\n", err)
-		panic(err)
-	}
-	return krdb
 }
 
-func (krdb *kyotoRomDB) IndexRom(rom *types.Rom) error {
-	dats, err := krdb.DatsForRom(rom)
-	if err != nil {
-		return err
-	}
-
-	if len(dats) > 0 {
-		return nil
-	}
-
-	dat := new(types.Dat)
-	dat.Artificial = true
-	dat.Generation = krdb.generation
-	dat.Name = fmt.Sprintf("Artificial Dat for %s", rom.Name)
-	dat.Path = rom.Path
-	game := new(types.Game)
-	game.Roms = []*types.Rom{rom}
-	dat.Games = []*types.Game{game}
-
-	var buf bytes.Buffer
-
-	gobEncoder := gob.NewEncoder(&buf)
-	err = gobEncoder.Encode(dat)
-	if err != nil {
-		return err
-	}
-
-	hh := sha1.New()
-	_, err = io.Copy(hh, &buf)
-	if err != nil {
-		return err
-	}
-
-	return krdb.IndexDat(dat, hh.Sum(nil))
+func (s *store) WriteBatch(b db.KVBatch) error {
+	cb := b.(*batch)
+	return s.dbn.Merge([]*cabinet.KCDB{cb.bn}, cabinet.KCMSET)
 }
 
-func (krdb *kyotoRomDB) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
-	if sha1Bytes == nil {
-		return fmt.Errorf("sha1 is nil for %s", dat.Path)
-	}
-
-	dat.Generation = krdb.generation
-
-	var buf bytes.Buffer
-
-	gobEncoder := gob.NewEncoder(&buf)
-	err := gobEncoder.Encode(dat)
-	if err != nil {
-		return err
-	}
-
-	dBytes, err := krdb.datsDB.Get(sha1Bytes)
-	if err != nil && krdb.datsDB.Ecode() != cabinet.KCENOREC {
-		return err
-	}
-
-	err = krdb.datsDB.Set(sha1Bytes, buf.Bytes())
-	if err != nil {
-		return err
-	}
-
-	krdb.size += int64(sha1.Size + buf.Len())
-
-	if dBytes == nil {
-		for _, g := range dat.Games {
-			for _, r := range g.Roms {
-				if r.Sha1 != nil {
-					err = krdb.sha1DB.Append(r.Sha1, sha1Bytes)
-					if err != nil {
-						return err
-					}
-
-					krdb.size += int64(sha1.Size)
-				}
-
-				if r.Md5 != nil {
-					err = krdb.md5DB.Append(r.Md5, sha1Bytes)
-					if err != nil {
-						return err
-					}
-
-					krdb.size += int64(sha1.Size)
-				}
-
-				if r.Crc != nil {
-					err = krdb.crcDB.Append(r.Crc, sha1Bytes)
-					if err != nil {
-						return err
-					}
-
-					krdb.size += int64(sha1.Size)
-				}
-			}
-		}
-	}
-	return nil
+func (s *store) Close() error {
+	return s.dbn.Close()
 }
 
-func (krdb *kyotoRomDB) OrphanDats() error {
-	krdb.generation++
-	err := db.WriteGenerationFile(krdb.path, krdb.generation)
-	if err != nil {
-		return err
-	}
-	return nil
+type batch struct {
+	bn *cabinet.KCDB
 }
 
-func (krdb *kyotoRomDB) GetDat(sha1Bytes []byte) (*types.Dat, error) {
-	dBytes, err := krdb.datsDB.Get(sha1Bytes)
-	if err != nil && krdb.datsDB.Ecode() != cabinet.KCENOREC {
-		return nil, err
-	}
-
-	buf := bytes.NewBuffer(dBytes)
-	datDecoder := gob.NewDecoder(buf)
-
-	var dat types.Dat
-
-	err = datDecoder.Decode(&dat)
-	if err != nil {
-		return nil, err
-	}
-	return &dat, nil
+func (b *batch) Set(key, value []byte) {
+	b.bn.Set(key, value)
 }
 
-func (krdb *kyotoRomDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
-	var dBytes []byte
-	var err error
-
-	if rom.Sha1 != nil {
-		dBytes, err = krdb.sha1DB.Get(rom.Sha1)
-		if err != nil {
-			return nil, err
-		}
-	} else if rom.Md5 != nil {
-		dBytes, err = krdb.md5DB.Get(rom.Md5)
-		if err != nil {
-			return nil, err
-		}
-	} else if rom.Crc != nil {
-		dBytes, err = krdb.crcDB.Get(rom.Crc)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if dBytes == nil {
-		return nil, nil
-	}
-
-	var dats []*types.Dat
-
-	for i := 0; i < len(dBytes); i += sha1.Size {
-		sha1Bytes := dBytes[i : i+sha1.Size]
-		dat, err := krdb.GetDat(sha1Bytes)
-		if err != nil {
-			return nil, err
-		}
-		dats = append(dats, dat)
-	}
-
-	return dats, nil
-}
-
-func (krdb *kyotoRomDB) Size() int64 {
-	return krdb.size
-}
-
-func (krdb *kyotoRomDB) Flush() error {
-	if !krdb.isBatch {
-		return nil
-	}
-
-	err := krdb.underlying.datsDB.Merge([]*cabinet.KCDB{krdb.datsDB}, cabinet.KCMSET)
-	if err != nil {
-		return err
-	}
-	err = krdb.datsDB.Clear()
-	if err != nil {
-		return err
-	}
-
-	err = krdb.underlying.crcDB.Merge([]*cabinet.KCDB{krdb.crcDB}, cabinet.KCMSET)
-	if err != nil {
-		return err
-	}
-	err = krdb.crcDB.Clear()
-	if err != nil {
-		return err
-	}
-
-	err = krdb.underlying.md5DB.Merge([]*cabinet.KCDB{krdb.md5DB}, cabinet.KCMSET)
-	if err != nil {
-		return err
-	}
-	err = krdb.md5sha1DB.Clear()
-	if err != nil {
-		return err
-	}
-
-	err = krdb.underlying.sha1DB.Merge([]*cabinet.KCDB{krdb.sha1DB}, cabinet.KCMSET)
-	if err != nil {
-		return err
-	}
-	err = krdb.sha1DB.Clear()
-	if err != nil {
-		return err
-	}
-
-	err = krdb.underlying.crcsha1DB.Merge([]*cabinet.KCDB{krdb.crcsha1DB}, cabinet.KCMSET)
-	if err != nil {
-		return err
-	}
-	err = krdb.crcsha1DB.Clear()
-	if err != nil {
-		return err
-	}
-
-	err = krdb.underlying.md5sha1DB.Merge([]*cabinet.KCDB{krdb.md5sha1DB}, cabinet.KCMSET)
-	if err != nil {
-		return err
-	}
-	err = krdb.md5sha1DB.Clear()
-	if err != nil {
-		return err
-	}
-
-	krdb.size = 0
-	return nil
-}
-
-func (krdb *kyotoRomDB) Close() error {
-	if krdb.isBatch {
-		err := krdb.Flush()
-		if err != nil {
-			return err
-		}
-	}
-	err := krdb.datsDB.Close()
-	if err != nil {
-		return err
-	}
-	err = krdb.crcDB.Close()
-	if err != nil {
-		return err
-	}
-	err = krdb.md5DB.Close()
-	if err != nil {
-		return err
-	}
-	err = krdb.sha1DB.Close()
-	if err != nil {
-		return err
-	}
-	err = krdb.crcsha1DB.Close()
-	if err != nil {
-		return err
-	}
-	err = krdb.md5sha1DB.Close()
-	if err != nil {
-		return err
-	}
-	return nil
+func (b *batch) Clear() {
+	b.bn.Clear()
 }
