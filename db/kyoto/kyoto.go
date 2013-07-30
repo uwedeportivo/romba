@@ -61,8 +61,12 @@ func (s *store) Set(key, value []byte) error {
 
 func (s *store) Get(key []byte) ([]byte, error) {
 	v, err := s.dbn.Get(key)
-	if err != nil && s.dbn.Ecode() != cabinet.KCENOREC {
-		return nil, fmt.Errorf("kyoto error on get: %v, error code: %d", err, s.dbn.Ecode())
+	if err != nil {
+		errno := err.(cabinet.Errno)
+
+		if errno != cabinet.KCENOREC {
+			return nil, fmt.Errorf("kyoto error on get: %v, error code: %d", err, s.dbn.Ecode())
+		}
 	}
 	return v, nil
 }
