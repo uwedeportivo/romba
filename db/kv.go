@@ -146,7 +146,7 @@ func dbSha1Append(db KVStore, batch KVBatch, key, sha1Bytes []byte) error {
 
 	vBytes, err := db.Get(key)
 	if err != nil {
-		return fmt.Errorf("failed to lookup in dbSha1Append: %v", err)
+		return err
 	}
 
 	found := false
@@ -201,6 +201,9 @@ func (kvdb *kvStore) GetDat(sha1Bytes []byte) (*types.Dat, error) {
 		return nil, err
 	}
 
+	if dBytes == nil {
+		return nil, nil
+	}
 	buf := bytes.NewBuffer(dBytes)
 	datDecoder := gob.NewDecoder(buf)
 
@@ -216,8 +219,6 @@ func (kvdb *kvStore) GetDat(sha1Bytes []byte) (*types.Dat, error) {
 func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	var dBytes []byte
 	var err error
-
-	// TODO(uwe): crcsha1, md5sha1
 
 	if rom.Sha1 != nil {
 		dBytes, err = kvdb.sha1DB.Get(rom.Sha1)
@@ -244,11 +245,14 @@ func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 
 	for i := 0; i < len(dBytes); i += sha1.Size {
 		sha1Bytes := dBytes[i : i+sha1.Size]
+
 		dat, err := kvdb.GetDat(sha1Bytes)
 		if err != nil {
 			return nil, err
 		}
-		dats = append(dats, dat)
+		if dat != nil {
+			dats = append(dats, dat)
+		}
 	}
 
 	return dats, nil
@@ -378,8 +382,6 @@ func (kvb *kvBatch) IndexRom(rom *types.Rom) error {
 		return err
 	}
 
-	// TODO(uwe) crcsha1, md5sha1
-
 	return kvb.IndexDat(dat, hh.Sum(nil))
 }
 
@@ -403,8 +405,6 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 		return fmt.Errorf("failed to lookup sha1 indexing dats: %v", err)
 	}
 
-	// TODO(uwe) crcsha1, md5sha1
-
 	kvb.datsBatch.Set(sha1Bytes, buf.Bytes())
 
 	kvb.size += int64(sha1.Size + buf.Len())
@@ -426,6 +426,14 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 						return err
 					}
 					kvb.size += int64(sha1.Size)
+
+					if r.Sha1 != nil {
+						err = dbSha1Append(kvb.db.md5sha1DB, kvb.md5sha1Batch, r.Md5, r.Sha1)
+						if err != nil {
+							return err
+						}
+						kvb.size += int64(sha1.Size)
+					}
 				}
 
 				if r.Crc != nil {
@@ -434,6 +442,14 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 						return err
 					}
 					kvb.size += int64(sha1.Size)
+
+					if r.Sha1 != nil {
+						err = dbSha1Append(kvb.db.crcsha1DB, kvb.crcsha1Batch, r.Crc, r.Sha1)
+						if err != nil {
+							return err
+						}
+						kvb.size += int64(sha1.Size)
+					}
 				}
 			}
 		}

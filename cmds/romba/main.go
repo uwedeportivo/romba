@@ -33,18 +33,23 @@ package main
 import (
 	"bufio"
 	"code.google.com/p/gcfg"
+	"crypto/md5"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"github.com/gonuts/commander"
 	"github.com/gonuts/flag"
 	"github.com/uwedeportivo/romba/archive"
 	"github.com/uwedeportivo/romba/db"
+	"github.com/uwedeportivo/romba/types"
+	"hash/crc32"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
-	_ "github.com/uwedeportivo/romba/db/kyoto"
+	_ "github.com/uwedeportivo/romba/db/clevel"
 	_ "net/http/pprof"
 )
 
@@ -290,86 +295,99 @@ func archiveRoms(cmd *commander.Command, args []string) {
 	}
 }
 
-/*
 func lookupByHash(hash []byte) (bool, error) {
-	var shas [][]byte
-	switch len(hash) {
-	case md5.Size:
-
-	case crc32.Size:
-	case sha1.Size:
-	default:
-
-	}
-
-	for _, hh := range shas {
-
-	}
-	if len(hash) == md5.Size {
-
-	}
+	found := false
 	if len(hash) == sha1.Size {
 		dat, err := romDB.GetDat(hash)
+		if err != nil {
+			return false, err
+		}
 
+		if dat != nil {
+			fmt.Printf("dat = %s\n", types.PrintDat(dat))
+			found = true
+		}
 	}
+
+	r := new(types.Rom)
+	switch len(hash) {
+	case md5.Size:
+		r.Md5 = hash
+	case crc32.Size:
+		r.Crc = hash
+	case sha1.Size:
+		r.Sha1 = hash
+	default:
+		return false, fmt.Errorf("found unknown hash size: %d", len(hash))
+	}
+
+	dats, err := romDB.DatsForRom(r)
+	if err != nil {
+		return false, err
+	}
+
+	for _, dat := range dats {
+		fmt.Printf("dat = %s\n", types.PrintDat(dat))
+	}
+
+	found = found || len(dats) > 0
+	return found, nil
 }
-*/
 
 func lookup(cmd *commander.Command, args []string) {
-	/*
-		if len(args) == 0 {
-			return
-		}
+	if len(args) == 0 {
+		return
+	}
 
-		for _, arg := range args {
-			exists, err := archive.PathExists(arg)
+	for _, arg := range args {
+		exists, err := archive.PathExists(arg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to stat %s: %v\n", arg, err)
+			os.Exit(1)
+		}
+		if exists {
+			hh, err := archive.HashesForFile(arg)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to stat %s: %v\n", arg, err)
+				fmt.Fprintf(os.Stderr, "failed to compute hashes for %s: %v\n", arg, err)
 				os.Exit(1)
 			}
-			if exists {
-				hh, err := archive.HashesForFile(arg)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to compute hashes for %s: %v\n", arg, err)
-					os.Exit(1)
-				}
 
-				found, err := lookupByHash(hh.Sha1)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to lookup by sha1 hash for %s: %v\n", arg, err)
-					os.Exit(1)
-				}
-				if found {
-					continue
-				}
-				found, err = lookupByHash(hh.Md5)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to lookup by md5 hash for %s: %v\n", arg, err)
-					os.Exit(1)
-				}
-				if found {
-					continue
-				}
+			found, err := lookupByHash(hh.Sha1)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to lookup by sha1 hash for %s: %v\n", arg, err)
+				os.Exit(1)
+			}
+			if found {
+				continue
+			}
+			found, err = lookupByHash(hh.Md5)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to lookup by md5 hash for %s: %v\n", arg, err)
+				os.Exit(1)
+			}
+			if found {
+				continue
+			}
 
-				found, err = lookupByHash(hh.Sha1)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to lookup by crc hash for %s: %v\n", arg, err)
-					os.Exit(1)
-				}
-			} else {
-				hash, err := hex.DecodeString(arg)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to decode hex string %s: %v\n", arg, err)
-					os.Exit(1)
-				}
-				_, err = lookupByHash(hash)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to lookup by hash for %s: %v\n", arg, err)
-					os.Exit(1)
-				}
+			found, err = lookupByHash(hh.Crc)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to lookup by crc hash for %s: %v\n", arg, err)
+				os.Exit(1)
+			}
+		} else {
+			hash, err := hex.DecodeString(arg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to decode hex string %s: %v\n", arg, err)
+				os.Exit(1)
+			}
+			_, err = lookupByHash(hash)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to lookup by hash for %s: %v\n", arg, err)
+				os.Exit(1)
 			}
 		}
-	*/
+	}
+
 }
 
 func main() {
