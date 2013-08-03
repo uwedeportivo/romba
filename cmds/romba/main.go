@@ -49,7 +49,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "github.com/uwedeportivo/romba/db/kyoto"
+	_ "github.com/uwedeportivo/romba/db/kivia"
 	_ "net/http/pprof"
 )
 

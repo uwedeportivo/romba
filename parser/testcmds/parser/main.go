@@ -41,7 +41,8 @@ import (
 )
 
 const (
-	versionStr = "1.0"
+	versionStr  = "1.0"
+	numBuckects = 51
 )
 
 func usage() {
@@ -51,14 +52,26 @@ func usage() {
 	flag.PrintDefaults()
 }
 
-type parseWorker struct{}
+type parseWorker struct {
+	buckets []int
+}
+
+func calcBucket(sha1Bytes []byte) int {
+	var v int = 256*int(sha1Bytes[1]) + int(sha1Bytes[0])
+	return v % numBuckects
+}
 
 func (pw *parseWorker) Process(path string, size int64, logger *log.Logger) error {
-	_, _, err := parser.Parse(path)
+	_, sha1Bytes, err := parser.Parse(path)
+
+	pw.buckets[calcBucket(sha1Bytes)] += 1
 	return err
 }
 
 func (pw *parseWorker) Close() error {
+	for k, b := range pw.buckets {
+		fmt.Printf("bucket[%d]=%d\n", k, b)
+	}
 	return nil
 }
 
@@ -70,11 +83,13 @@ func (pm *parseMaster) Accept(path string) bool {
 }
 
 func (pm *parseMaster) NewWorker(workerIndex int) worker.Worker {
-	return new(parseWorker)
+	return &parseWorker{
+		buckets: make([]int, numBuckects),
+	}
 }
 
 func (pm *parseMaster) NumWorkers() int {
-	return 8
+	return 1
 }
 
 func main() {
