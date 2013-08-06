@@ -2,6 +2,8 @@
 var termFn = function(command, term){
 	if (command == 'life is good') {
 		term.echo("sure is");
+	} else if (command == 'clear') {
+		term.clear();	
 	} else {
 		req = {
 			method : "RombaService.Execute",
