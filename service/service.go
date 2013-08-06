@@ -123,6 +123,7 @@ func (rs *RombaService) broadCastProgress(t time.Time, starting bool, stopping b
 
 	pmsg.Starting = starting
 	pmsg.Stopping = stopping
+	pmsg.TerminalMessage = terminalMessage
 
 	if p != nil {
 		pmsg.TotalFiles = p.TotalFiles
@@ -189,7 +190,7 @@ func (rs *RombaService) startRefreshDats(cmd *commander.Command, args []string) 
 	rs.jobName = "refresh-dats"
 
 	go func() {
-		rs.broadCastProgress(time.Now(), true, false, "starting refresh-dats")
+		rs.broadCastProgress(time.Now(), true, false, "")
 		ticker := time.NewTicker(time.Second * 5)
 		go func() {
 			for t := range ticker.C {

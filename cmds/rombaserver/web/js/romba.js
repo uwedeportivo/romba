@@ -1,9 +1,5 @@
 
-var terminalObject;
-
 var termFn = function(command, term){
-	terminalObject = term;
-
 	if (command == 'life is good') {
 		term.echo("sure is");
 	} else {
@@ -24,12 +20,20 @@ var termFn = function(command, term){
 	}   
 }
 
+var niceBytes = function (bytes) {
+    if (bytes == 0) return '0';
+    var sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'],
+    i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+    return Math.round(bytes / Math.pow(1024, i), 2) + sizes[i];
+};
+
+
 jQuery(document).ready(function($) {
 
 	$('#progressbarFiles').progressbar();
 	$('#progressbarBytes').progressbar();
 
-	$('#terminal').terminal(termFn, {
+	var term = $('#terminal').terminal(termFn, {
 		login: false,
 		greetings: "Welcome to Romba. Type help for commands.",
 		onBlur: function() {
@@ -37,7 +41,7 @@ jQuery(document).ready(function($) {
 		}
 	});
 
-	var ws = new WebSocket("ws://localhost:4200/progress");
+	var ws = new WebSocket("ws://" + document.location.host + "/progress");
 
 	$('#progress').hide();
 
@@ -45,20 +49,20 @@ jQuery(document).ready(function($) {
 	 	var msg = jQuery.parseJSON(e.data);
 
 	 	if (msg["Running"]) {
-	 		if (msg["Starting"]) {
-	 			$('#progress').show();
-	 		}
+		 	$('#progress').show();
 	 		$('#progressbarBytes').progressbar({ max: msg.TotalBytes });
 			$('#progressbarFiles').progressbar({ max: msg.TotalFiles });
 		 	$('#progressbarFiles').progressbar("value", msg.FilesSoFar);
-		 	$('#progressbarBytes').progressbar("value", msg.BytesSoFar);
-		 	$('#progressText').text(e.data);
+		    $('#progressbarBytes').progressbar("value", msg.BytesSoFar);
+
+		 	$('#progressTextFiles').text("" + msg.FilesSoFar + " of " + msg.TotalFiles);
+		 	$('#progressTextBytes').text("" + niceBytes(msg.BytesSoFar) + " of " + niceBytes(msg.TotalBytes));
 	 	} else {
 	 		$('#progress').hide();
 	 	}
 
 	 	if (msg["TerminalMessage"] != "") {
-	 		terminalObject.echo(msg["Terminalmessage"]);
+	 		term.echo(msg["TerminalMessage"]);
 	 	}
 	 }
 });
