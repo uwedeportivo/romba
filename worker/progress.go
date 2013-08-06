@@ -28,83 +28,71 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package kivi
+package worker
 
 import (
 	"sync"
 )
 
-const (
-	numParts = 51
-	keySize  = 20
-)
-
-type keydirEntry struct {
-	fileId int64
-	tstamp int64
-	vpos   int64
-	vsize  int64
+type ProgressTracker interface {
+	SetTotalBytes(value int64)
+	SetTotalFiles(value int32)
+	AddBytesFromFile(value int64)
+	Finished()
+	Reset()
+	GetProgress() *Progress
 }
 
-type keydir struct {
-	parts [numParts]*mPart
+type Progress struct {
+	TotalBytes int64
+	TotalFiles int32
+	BytesSoFar int64
+	FilesSoFar int32
+	m          *sync.Mutex
 }
 
-type mPart struct {
-	mtx sync.RWMutex
-	m   map[[keySize]byte]*keydirEntry
+func NewProgressTracker() ProgressTracker {
+	pt := new(Progress)
+	pt.m = new(sync.Mutex)
+	return pt
 }
 
-func calcBucket(bs []byte) int {
-	if len(bs) < 2 {
-		return 0
-	}
-	var v int = 256*int(bs[1]) + int(bs[0])
-	return v % numParts
+func (pt *Progress) SetTotalBytes(value int64) {
+	pt.TotalBytes = value
 }
 
-func newKeydir() *keydir {
-	cm := new(keydir)
-
-	for k := 0; k < numParts; k++ {
-		p := new(mPart)
-		p.m = make(map[[keySize]byte]*keydirEntry)
-		cm.parts[k] = p
-	}
-	return cm
+func (pt *Progress) SetTotalFiles(value int32) {
+	pt.TotalFiles = value
 }
 
-func (cm *keydir) get(bs []byte) *keydirEntry {
-	k := calcBucket(bs)
-	p := cm.parts[k]
+func (pt *Progress) AddBytesFromFile(value int64) {
+	pt.m.Lock()
+	defer pt.m.Unlock()
 
-	n := len(bs)
-	if n > keySize {
-		n = keySize
-	}
-
-	var key [keySize]byte
-	copy(key[:], bs[0:n])
-
-	p.mtx.RLock()
-	v := p.m[key]
-	p.mtx.RUnlock()
-	return v
+	pt.BytesSoFar += value
+	pt.FilesSoFar++
 }
 
-func (cm *keydir) put(bs []byte, vs *keydirEntry) {
-	k := calcBucket(bs)
-	p := cm.parts[k]
+func (pt *Progress) Finished() {
+	pt.BytesSoFar = pt.TotalBytes
+	pt.FilesSoFar = pt.TotalFiles
+}
 
-	n := len(bs)
-	if n > keySize {
-		n = keySize
-	}
+func (pt *Progress) Reset() {
+	pt.TotalBytes = 0
+	pt.TotalFiles = 0
+	pt.BytesSoFar = 0
+	pt.FilesSoFar = 0
+}
 
-	var key [keySize]byte
-	copy(key[:], bs[0:n])
+func (pt *Progress) GetProgress() *Progress {
+	pt.m.Lock()
+	defer pt.m.Unlock()
 
-	p.mtx.Lock()
-	p.m[key] = vs
-	p.mtx.Unlock()
+	p := new(Progress)
+	p.TotalBytes = pt.TotalBytes
+	p.TotalFiles = pt.TotalFiles
+	p.BytesSoFar = pt.BytesSoFar
+	p.FilesSoFar = pt.FilesSoFar
+	return p
 }

@@ -33,74 +33,76 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/uwedeportivo/romba/parser"
-	"github.com/uwedeportivo/romba/worker"
 	"log"
+	"net/http"
 	"os"
-	"path/filepath"
+	"runtime"
+
+	"code.google.com/p/gcfg"
+	"code.google.com/p/go.net/websocket"
+	"github.com/gorilla/rpc/v2"
+	"github.com/gorilla/rpc/v2/json2"
+
+	"github.com/uwedeportivo/romba/db"
+	"github.com/uwedeportivo/romba/service"
+
+	_ "expvar"
+	_ "github.com/uwedeportivo/romba/db/kivia"
+	_ "net/http/pprof"
 )
 
-const (
-	versionStr = "1.0"
-)
+type Config struct {
+	General struct {
+		LogDir    string
+		TmpDir    string
+		Workers   int
+		Verbosity int
+	}
 
-func usage() {
-	fmt.Fprintf(os.Stderr, "%s version %s, Copyright (c) 2013 Uwe Hoffmann. All rights reserved.\n", os.Args[0], versionStr)
-	fmt.Fprintf(os.Stderr, "\t                 %s <path to tosec dir>\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "\nFlag defaults:\n")
-	flag.PrintDefaults()
-}
+	Depot struct {
+		Root    []string
+		MaxSize []int64
+	}
 
-type parseWorker struct {
-}
+	Index struct {
+		Db   string
+		Dats string
+	}
 
-func (pw *parseWorker) Process(path string, size int64, logger *log.Logger) error {
-	_, _, err := parser.Parse(path)
-
-	return err
-}
-
-func (pw *parseWorker) Close() error {
-	return nil
-}
-
-type parseMaster struct{}
-
-func (pm *parseMaster) Accept(path string) bool {
-	ext := filepath.Ext(path)
-	return ext == ".dat" || ext == ".xml"
-}
-
-func (pm *parseMaster) NewWorker(workerIndex int) worker.Worker {
-	return &parseWorker{}
-}
-
-func (pm *parseMaster) NumWorkers() int {
-	return 8
+	Server struct {
+		Port int
+	}
 }
 
 func main() {
-	flag.Usage = usage
+	config := new(Config)
 
-	help := flag.Bool("help", false, "show this message")
-	version := flag.Bool("version", false, "show version")
-
-	flag.Parse()
-
-	if *help {
-		flag.Usage()
-		os.Exit(0)
-	}
-
-	if *version {
-		fmt.Fprintf(os.Stderr, "%s version %s, Copyright (c) 2013 Uwe Hoffmann. All rights reserved.\n", os.Args[0], versionStr)
-		os.Exit(0)
-	}
-
-	err := worker.Work("parse dats", flag.Args(), new(parseMaster), nil)
-
+	err := gcfg.ReadFileInto(config, "romba.ini")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, " error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
 		os.Exit(1)
 	}
+
+	runtime.GOMAXPROCS(config.General.Workers)
+
+	flag.Set("log_dir", config.General.LogDir)
+
+	romDB, err := db.New(config.Index.Db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "opening db failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	rs := service.NewRombaService(romDB, config.Index.Dats, config.General.Workers)
+
+	s := rpc.NewServer()
+	s.RegisterCodec(json2.NewCustomCodec(&rpc.CompressionSelector{}), "application/json")
+	s.RegisterService(rs, "")
+	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("./web"))))
+	http.Handle("/jsonrpc/", s)
+	http.Handle("/progress", websocket.Handler(rs.SendProgress))
+
+	fmt.Printf("starting romba server at localhost:%d/romba.html\n", config.Server.Port)
+
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", config.Server.Port), nil))
 }

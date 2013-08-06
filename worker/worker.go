@@ -31,19 +31,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package worker
 
 import (
+	"bytes"
 	"fmt"
-	"github.com/cheggaaa/pb"
-	"github.com/dustin/go-humanize"
-	"log"
-	"math"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
-)
 
-const (
-	megabyte = 1 << 20
+	"github.com/dustin/go-humanize"
+	"github.com/golang/glog"
 )
 
 type countVisitor struct {
@@ -76,7 +72,7 @@ func (sv *scanVisitor) visit(path string, f os.FileInfo, err error) error {
 }
 
 type Worker interface {
-	Process(path string, size int64, logger *log.Logger) error
+	Process(path string, size int64) error
 	Close() error
 }
 
@@ -84,6 +80,7 @@ type Master interface {
 	Accept(path string) bool
 	NewWorker(workerIndex int) Worker
 	NumWorkers() int
+	ProgressTracker() ProgressTracker
 }
 
 type workUnit struct {
@@ -92,88 +89,55 @@ type workUnit struct {
 }
 
 type slave struct {
-	logger       *log.Logger
-	wg           *sync.WaitGroup
-	closeWg      *sync.WaitGroup
-	inwork       chan *workUnit
-	byteProgress *pb.ProgressBar
-	worker       Worker
+	wg      *sync.WaitGroup
+	closeWg *sync.WaitGroup
+	pt      ProgressTracker
+	worker  Worker
 }
 
-func (w *slave) run() {
-	var truemb float64
-	for wu := range w.inwork {
+func runSlave(w *slave, inwork <-chan *workUnit) {
+	for wu := range inwork {
 		path := wu.path
 
-		err := w.worker.Process(path, wu.size, w.logger)
+		err := w.worker.Process(path, wu.size)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to process %s: %v\n", path, err)
-			if w.logger != nil {
-				w.logger.Printf("failed to process %s: %v\n", path, err)
-			}
+			glog.Errorf("failed to process %s: %v", path, err)
 		}
 
-		truemb += float64(wu.size) / float64(megabyte)
-
-		if w.byteProgress != nil {
-			if truemb >= 1.0 {
-				floor := math.Floor(truemb)
-				delta := truemb - floor
-				v := int(floor)
-				w.byteProgress.Add(v)
-				truemb = delta
-			}
-		}
+		w.pt.AddBytesFromFile(wu.size)
 		w.wg.Done()
 	}
 	err := w.worker.Close()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to close worker: %v\n", err)
-		if w.logger != nil {
-			w.logger.Printf("failed to close worker: %v\n", err)
-		}
+		glog.Errorf("failed to close worker: %v", err)
 	}
 
 	w.closeWg.Done()
 }
 
-func Work(workname string, paths []string, master Master, logger *log.Logger) error {
-	fmt.Printf("starting %s\n", workname)
+func Work(workname string, paths []string, master Master) (string, error) {
+	pt := master.ProgressTracker()
+
+	glog.Infof("starting %s\n", workname)
 	startTime := time.Now()
 
 	cv := new(countVisitor)
 	cv.master = master
 
 	for _, name := range paths {
-		fmt.Fprintf(os.Stdout, "initial scan of %s to determine amount of work\n", name)
+		glog.Infof("initial scan of %s to determine amount of work\n", name)
 
 		err := filepath.Walk(name, cv.visit)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to count in dir %s: %v\n", name, err)
-			if logger != nil {
-				logger.Printf("failed to count in dir %s: %v\n", name, err)
-			}
-			return err
+			glog.Errorf("failed to count in dir %s: %v\n", name, err)
+			return "", err
 		}
 	}
 
-	mg := int(cv.numBytes / megabyte)
+	glog.Infof("found %d files and %s to do. starting work...\n", cv.numFiles, humanize.Bytes(uint64(cv.numBytes)))
 
-	fmt.Fprintf(os.Stdout, "found %d files and %d MB to do. starting work...\n", cv.numFiles, mg)
-	if logger != nil {
-		logger.Printf("found %d files and %d MB to do. starting work...\n", cv.numFiles, mg)
-	}
-
-	var byteProgress *pb.ProgressBar
-
-	if mg > 10 {
-		pb.BarStart = "MB ["
-
-		byteProgress = pb.New(mg)
-		byteProgress.RefreshRate = 5 * time.Second
-		byteProgress.ShowCounters = true
-		byteProgress.Start()
-	}
+	pt.SetTotalBytes(cv.numBytes)
+	pt.SetTotalFiles(int32(cv.numFiles))
 
 	inwork := make(chan *workUnit)
 
@@ -189,61 +153,53 @@ func Work(workname string, paths []string, master Master, logger *log.Logger) er
 
 	for i := 0; i < master.NumWorkers(); i++ {
 		worker := &slave{
-			byteProgress: byteProgress,
-			inwork:       inwork,
-			logger:       logger,
-			worker:       master.NewWorker(i),
-			wg:           wg,
-			closeWg:      closeWg,
+			pt:      pt,
+			worker:  master.NewWorker(i),
+			wg:      wg,
+			closeWg: closeWg,
 		}
 
-		go worker.run()
+		go runSlave(worker, inwork)
 	}
 
 	for _, name := range paths {
 		err := filepath.Walk(name, sv.visit)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to scan dir %s: %v\n", name, err)
-			if logger != nil {
-				logger.Printf("failed to scan dir %s: %v\n", name, err)
-			}
+			glog.Errorf("failed to scan dir %s: %v\n", name, err)
 			close(inwork)
 			closeWg.Wait()
-			return err
+			return "", err
 		}
 	}
 
 	wg.Wait()
 	close(inwork)
 
-	if byteProgress != nil {
-		byteProgress.Set(int(byteProgress.Total))
-		byteProgress.Finish()
-	}
+	pt.Finished()
 
-	fmt.Fprintf(os.Stdout, "Flushing workers and closing work. Hang in there...\n")
-	if logger != nil {
-		logger.Printf("Flushing workers and closing work. Hang in there...\n")
-	}
+	glog.Infof("Flushing workers and closing work. Hang in there...\n")
 	closeWg.Wait()
 
-	fmt.Fprintf(os.Stdout, "Done.\n")
-	if logger != nil {
-		logger.Printf("Done.\n")
-	}
+	glog.Infof("Done.\n")
 
 	elapsed := time.Since(startTime)
 
-	fmt.Printf("finished %s\n", workname)
-	fmt.Printf("total number of files: %d\n", cv.numFiles)
-	fmt.Printf("total number of bytes: %s\n", humanize.Bytes(uint64(cv.numBytes)))
-	fmt.Printf("elapsed time: %s\n", formatDuration(elapsed))
+	var endMsg bytes.Buffer
+
+	endMsg.WriteString(fmt.Sprintf("finished %s\n", workname))
+	endMsg.WriteString(fmt.Sprintf("total number of files: %d\n", cv.numFiles))
+	endMsg.WriteString(fmt.Sprintf("total number of bytes: %s\n", humanize.Bytes(uint64(cv.numBytes))))
+	endMsg.WriteString(fmt.Sprintf("elapsed time: %s\n", formatDuration(elapsed)))
 
 	ts := uint64(float64(cv.numBytes) / float64(elapsed.Seconds()))
 
-	fmt.Printf("throughput: %s/s \n", humanize.Bytes(ts))
+	endMsg.WriteString(fmt.Sprintf("throughput: %s/s \n", humanize.Bytes(ts)))
 
-	return nil
+	endS := endMsg.String()
+
+	glog.Info(endS)
+
+	return endS, nil
 }
 
 func formatDuration(d time.Duration) string {

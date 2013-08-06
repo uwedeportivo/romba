@@ -36,10 +36,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"github.com/uwedeportivo/romba/db"
-	"github.com/uwedeportivo/romba/types"
-	"github.com/uwedeportivo/romba/worker"
-	"github.com/uwedeportivo/torrentzip/czip"
 	"hash/crc32"
 	"io"
 	"log"
@@ -48,6 +44,12 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/uwedeportivo/torrentzip/czip"
+
+	"github.com/uwedeportivo/romba/db"
+	"github.com/uwedeportivo/romba/types"
+	"github.com/uwedeportivo/romba/worker"
 )
 
 type Depot struct {

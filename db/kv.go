@@ -346,7 +346,9 @@ func (kvb *kvBatch) Flush() error {
 }
 
 func (kvb *kvBatch) Close() error {
-	return kvb.Flush()
+	err := kvb.Flush()
+	kvb.db = nil
+	return err
 }
 
 func (kvb *kvBatch) IndexRom(rom *types.Rom) error {

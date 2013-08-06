@@ -33,14 +33,16 @@ package db
 import (
 	"bufio"
 	"fmt"
-	"github.com/uwedeportivo/romba/parser"
-	"github.com/uwedeportivo/romba/types"
-	"github.com/uwedeportivo/romba/worker"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/golang/glog"
+
+	"github.com/uwedeportivo/romba/parser"
+	"github.com/uwedeportivo/romba/types"
+	"github.com/uwedeportivo/romba/worker"
 )
 
 const (
@@ -112,9 +114,9 @@ type refreshWorker struct {
 	romBatch RomBatch
 }
 
-func (pw *refreshWorker) Process(path string, size int64, logger *log.Logger) error {
+func (pw *refreshWorker) Process(path string, size int64) error {
 	if pw.romBatch.Size() >= MaxBatchSize {
-		logger.Printf("flushing batch of size %d\n", pw.romBatch.Size())
+		glog.Infof("flushing batch of size %d", pw.romBatch.Size())
 		err := pw.romBatch.Flush()
 		if err != nil {
 			return fmt.Errorf("failed to flush: %v", err)
@@ -128,11 +130,15 @@ func (pw *refreshWorker) Process(path string, size int64, logger *log.Logger) er
 }
 
 func (pw *refreshWorker) Close() error {
-	return pw.romBatch.Close()
+	err := pw.romBatch.Close()
+	pw.romBatch = nil
+	return err
 }
 
 type refreshMaster struct {
-	romdb RomDB
+	romdb      RomDB
+	numWorkers int
+	pt         worker.ProgressTracker
 }
 
 func (pm *refreshMaster) Accept(path string) bool {
@@ -147,19 +153,24 @@ func (pm *refreshMaster) NewWorker(workerIndex int) worker.Worker {
 }
 
 func (pm *refreshMaster) NumWorkers() int {
-	// TODO(uwe): configurable
-	return 8
+	return pm.numWorkers
 }
 
-func Refresh(romdb RomDB, datsPath string, logger *log.Logger) error {
+func (pm *refreshMaster) ProgressTracker() worker.ProgressTracker {
+	return pm.pt
+}
+
+func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTracker) (string, error) {
 	err := romdb.OrphanDats()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	pm := &refreshMaster{
-		romdb: romdb,
+		romdb:      romdb,
+		numWorkers: numWorkers,
+		pt:         pt,
 	}
 
-	return worker.Work("refresh dats", []string{datsPath}, pm, logger)
+	return worker.Work("refresh dats", []string{datsPath}, pm)
 }

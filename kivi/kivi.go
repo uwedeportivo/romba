@@ -34,11 +34,14 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"hash/crc32"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 const (
@@ -51,20 +54,29 @@ type kvPair struct {
 }
 
 type DB struct {
-	kd      *keydir
-	wchan   chan *kvPair
-	closing chan bool
-	root    string
-	active  *os.File
+	kd         *keydir
+	wchan      chan *kvPair
+	closing    chan bool
+	root       string
+	active     *os.File
+	activeMark int64
 }
 
 func Open(root string) (*DB, error) {
+	glog.Infof("Opening database %s\n", root)
+	startTime := time.Now()
+
 	err := os.MkdirAll(root, 0766)
 	if err != nil {
 		return nil, err
 	}
 	kvdb := new(DB)
-	kvdb.kd = newKeydir()
+	kd, err := openKeydir(root, 0)
+	if err != nil {
+		glog.Infof("error opening keydir file: %v\n", err)
+		kd = newKeydir()
+	}
+	kvdb.kd = kd
 	kvdb.root = root
 	kvdb.wchan = make(chan *kvPair)
 	kvdb.closing = make(chan bool)
@@ -75,19 +87,96 @@ func Open(root string) (*DB, error) {
 	}
 	kvdb.active = f
 
-	go kvdb.runWrites()
+	go runWrites(kvdb)
+
+	elapsed := time.Since(startTime)
+	glog.Infof("finished opening %s (elapsed time %s) \n", root, formatDuration(elapsed))
 
 	return kvdb, nil
 }
 
+func formatDuration(d time.Duration) string {
+	secs := uint64(d.Seconds())
+	mins := secs / 60
+	secs = secs % 60
+	hours := mins / 60
+	mins = mins % 60
+
+	if hours > 0 {
+		return fmt.Sprintf("%dh%dm%ds", hours, mins, secs)
+	}
+
+	if mins > 0 {
+		return fmt.Sprintf("%dm%ds", mins, secs)
+	}
+	return fmt.Sprintf("%ds", secs)
+}
+
 func (kvdb *DB) Close() error {
+	glog.Infof("Closing database %s\n", kvdb.root)
+	startTime := time.Now()
+
 	close(kvdb.wchan)
 	<-kvdb.closing
-	return kvdb.active.Close()
+	err := kvdb.active.Close()
+	if err != nil {
+		return err
+	}
+
+	err = saveKeydir(kvdb.root, kvdb.kd, 0)
+	if err != nil {
+		return err
+	}
+
+	elapsed := time.Since(startTime)
+	glog.Infof("finished closing %s (elapsed time %s)\n", kvdb.root, formatDuration(elapsed))
+
+	kvdb.kd = nil
+	return nil
 }
 
 func (kvdb *DB) Get(key []byte) ([]byte, error) {
-	return nil, nil
+	kde := kvdb.kd.get(key)
+	if kde == nil {
+		return nil, nil
+	}
+	buflen := kde.vsize + keySize + 8 + 8 + 4
+
+	if kde.vpos+buflen > kvdb.activeMark {
+		// TODO(uwe): not flushed ?
+		return nil, nil
+	}
+
+	buf := make([]byte, buflen)
+
+	_, err := kvdb.active.ReadAt(buf, kde.vpos)
+	if err != nil {
+		return nil, err
+	}
+
+	br := bytes.NewBuffer(buf)
+
+	var crc int32
+	var tstamp, vlen int64
+
+	binary.Read(br, binary.BigEndian, &crc)
+	binary.Read(br, binary.BigEndian, &tstamp)
+	binary.Read(br, binary.BigEndian, &vlen)
+
+	keybuf := make([]byte, keySize)
+
+	_, err = io.ReadFull(br, keybuf)
+	if err != nil {
+		return nil, err
+	}
+
+	vbuf := make([]byte, int(vlen))
+
+	_, err = io.ReadFull(br, vbuf)
+	if err != nil {
+		return nil, err
+	}
+	return vbuf, nil
 }
 
 func (kvdb *DB) Put(key, value []byte) error {
@@ -115,15 +204,19 @@ func (w *countWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func (kvdb *DB) runWrites() {
-	fi, _ := kvdb.active.Stat()
-
+func runWrites(kvdb *DB) {
 	var buf bytes.Buffer
+
+	fi, _ := kvdb.active.Stat()
+	kvdb.activeMark = fi.Size()
+
 	bw := bufio.NewWriter(kvdb.active)
 	cw := &countWriter{
 		w:     bw,
 		count: fi.Size(),
 	}
+
+	keybuf := make([]byte, keySize)
 
 	for kvp := range kvdb.wchan {
 		buf.Reset()
@@ -131,10 +224,15 @@ func (kvdb *DB) runWrites() {
 		ts := time.Now()
 		pos := cw.count
 
+		n := len(kvp.key)
+		if n > keySize {
+			n = keySize
+		}
+		copy(keybuf, kvp.key[0:n])
+
 		binary.Write(&buf, binary.BigEndian, ts.UnixNano())
-		binary.Write(&buf, binary.BigEndian, int64(len(kvp.key)))
 		binary.Write(&buf, binary.BigEndian, int64(len(kvp.value)))
-		buf.Write(kvp.key)
+		buf.Write(keybuf)
 		buf.Write(kvp.value)
 
 		crc := crc32.ChecksumIEEE(buf.Bytes())

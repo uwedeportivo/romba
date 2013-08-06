@@ -34,11 +34,12 @@ import (
 	"bufio"
 	"crypto/md5"
 	"crypto/sha1"
-	"github.com/uwedeportivo/torrentzip/cgzip"
 	"hash/crc32"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/uwedeportivo/torrentzip/cgzip"
 )
 
 const (

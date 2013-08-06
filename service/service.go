@@ -28,66 +28,246 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package main
+package service
 
 import (
-	"bufio"
-	"code.google.com/p/gcfg"
-	"crypto/md5"
-	"crypto/sha1"
-	"encoding/hex"
+	"bytes"
+	"crypto/rand"
 	"fmt"
-	"github.com/gonuts/commander"
-	"github.com/gonuts/flag"
-	"github.com/uwedeportivo/romba/archive"
-	"github.com/uwedeportivo/romba/db"
-	"github.com/uwedeportivo/romba/types"
-	"hash/crc32"
-	"log"
+	"io"
 	"net/http"
-	"os"
-	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
-	_ "expvar"
-	_ "github.com/uwedeportivo/romba/db/kivia"
-	_ "net/http/pprof"
+	"code.google.com/p/go.net/websocket"
+	"github.com/dustin/go-humanize"
+	"github.com/golang/glog"
+	"github.com/gonuts/commander"
+	"github.com/gonuts/flag"
+
+	"github.com/uwedeportivo/romba/db"
+	"github.com/uwedeportivo/romba/worker"
 )
 
-type Config struct {
-	General struct {
-		LogDir    string
-		TmpDir    string
-		Workers   int
-		Verbosity int
+type ProgressNessage struct {
+	TotalFiles      int32
+	TotalBytes      int64
+	BytesSoFar      int64
+	FilesSoFar      int32
+	Running         bool
+	JobName         string
+	Starting        bool
+	Stopping        bool
+	TerminalMessage string
+}
+
+type RombaService struct {
+	romDB             db.RomDB
+	dats              string
+	numWorkers        int
+	pt                worker.ProgressTracker
+	busy              bool
+	jobMutex          *sync.Mutex
+	jobName           string
+	progressMutex     *sync.Mutex
+	progressListeners map[string]chan *ProgressNessage
+}
+
+type TerminalRequest struct {
+	CmdTxt string
+}
+
+type TerminalReply struct {
+	Message string
+}
+
+func NewRombaService(romDB db.RomDB, dats string, numWorkers int) *RombaService {
+	rs := new(RombaService)
+	rs.romDB = romDB
+	rs.dats = dats
+	rs.numWorkers = numWorkers
+	rs.pt = worker.NewProgressTracker()
+	rs.jobMutex = new(sync.Mutex)
+	rs.progressMutex = new(sync.Mutex)
+	rs.progressListeners = make(map[string]chan *ProgressNessage)
+	return rs
+}
+
+func (rs *RombaService) registerProgressListener(s string, c chan *ProgressNessage) {
+	rs.progressMutex.Lock()
+	defer rs.progressMutex.Unlock()
+
+	rs.progressListeners[s] = c
+}
+
+func (rs *RombaService) unregisterProgressListener(s string) {
+	rs.progressMutex.Lock()
+	defer rs.progressMutex.Unlock()
+
+	delete(rs.progressListeners, s)
+}
+
+func (rs *RombaService) broadCastProgress(t time.Time, starting bool, stopping bool, terminalMessage string) {
+	var p *worker.Progress
+	var jn string
+
+	rs.progressMutex.Lock()
+	if rs.busy {
+		p = rs.pt.GetProgress()
+		jn = rs.jobName
+	}
+	rs.progressMutex.Unlock()
+
+	pmsg := new(ProgressNessage)
+
+	pmsg.Starting = starting
+	pmsg.Stopping = stopping
+
+	if p != nil {
+		pmsg.TotalFiles = p.TotalFiles
+		pmsg.TotalBytes = p.TotalBytes
+		pmsg.BytesSoFar = p.BytesSoFar
+		pmsg.FilesSoFar = p.FilesSoFar
+		pmsg.JobName = jn
+		pmsg.Running = true
+	} else {
+		pmsg.Running = false
 	}
 
-	Depot struct {
-		Root    []string
-		MaxSize []int64
-	}
+	rs.progressMutex.Lock()
+	defer rs.progressMutex.Unlock()
 
-	Index struct {
-		Db   string
-		Dats string
+	for _, c := range rs.progressListeners {
+		c <- pmsg
 	}
 }
 
-var config *Config
-var cmd *commander.Commander
-var romDB db.RomDB
+func (rs *RombaService) Execute(r *http.Request, req *TerminalRequest, reply *TerminalReply) error {
+	outbuf := new(bytes.Buffer)
 
-func init() {
-	config = new(Config)
+	cmd := newCommander(outbuf, rs)
 
-	cmd = new(commander.Commander)
-	cmd.Name = os.Args[0]
-	cmd.Commands = make([]*commander.Command, 10)
-	cmd.Flag = flag.NewFlagSet("romba", flag.ExitOnError)
+	cmdTxtSplit := strings.Fields(req.CmdTxt)
+
+	err := cmd.Flag.Parse(cmdTxtSplit)
+	if err != nil {
+		reply.Message = fmt.Sprintf("error: parsing command failed: %v\n", err)
+		return nil
+	}
+
+	args := cmd.Flag.Args()
+	err = cmd.Run(args)
+	if err != nil {
+		reply.Message = fmt.Sprintf("error: executing command failed: %v\n", err)
+		return nil
+	}
+
+	reply.Message = outbuf.String()
+	return nil
+}
+
+func runCmd(cmd *commander.Command, args []string) error {
+	fmt.Fprintf(cmd.Stdout, "command %s with args %s\n", cmd.Name, strings.Join(args, " "))
+	return nil
+}
+
+func (rs *RombaService) startRefreshDats(cmd *commander.Command, args []string) error {
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	if rs.busy {
+		p := rs.pt.GetProgress()
+
+		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+			p.FilesSoFar, p.TotalFiles, humanize.Bytes(uint64(p.BytesSoFar)), humanize.Bytes(uint64(p.TotalBytes)))
+		return nil
+	}
+
+	rs.pt.Reset()
+	rs.busy = true
+	rs.jobName = "refresh-dats"
+
+	go func() {
+		rs.broadCastProgress(time.Now(), true, false, "starting refresh-dats")
+		ticker := time.NewTicker(time.Second * 5)
+		go func() {
+			for t := range ticker.C {
+				rs.broadCastProgress(t, false, false, "")
+			}
+		}()
+
+		endMsg, err := db.Refresh(rs.romDB, rs.dats, rs.numWorkers, rs.pt)
+		if err != nil {
+			glog.Errorf("error refreshing dats: %v", err)
+		}
+
+		ticker.Stop()
+
+		rs.jobMutex.Lock()
+		rs.busy = false
+		rs.jobName = ""
+		rs.jobMutex.Unlock()
+
+		rs.broadCastProgress(time.Now(), false, true, endMsg)
+	}()
+
+	fmt.Fprintf(cmd.Stdout, "started refresh dats")
+	return nil
+}
+
+func (rs *RombaService) progress(cmd *commander.Command, args []string) error {
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	if rs.busy {
+		p := rs.pt.GetProgress()
+
+		fmt.Fprintf(cmd.Stdout, "running %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+			p.FilesSoFar, p.TotalFiles, humanize.Bytes(uint64(p.BytesSoFar)), humanize.Bytes(uint64(p.TotalBytes)))
+		return nil
+	} else {
+		fmt.Fprintf(cmd.Stdout, "nothing currently running")
+	}
+	return nil
+}
+
+func (rs *RombaService) SendProgress(ws *websocket.Conn) {
+	b := make([]byte, 10)
+	n, err := io.ReadFull(rand.Reader, b)
+
+	if n != len(b) || err != nil {
+		glog.Errorf("cannot generate random progress listener name: %v", err)
+		return
+	}
+
+	listName := string(b)
+	listC := make(chan *ProgressNessage)
+
+	rs.registerProgressListener(listName, listC)
+
+	for pmsg := range listC {
+		err = websocket.JSON.Send(ws, *pmsg)
+		if err != nil {
+			glog.Infof("error sending progress: %v", err)
+			break
+		}
+	}
+
+	rs.unregisterProgressListener(listName)
+	close(listC)
+}
+
+func newCommander(writer io.Writer, rs *RombaService) *commander.Commander {
+	cmd := new(commander.Commander)
+	cmd.Name = "Romba"
+	cmd.Commands = make([]*commander.Command, 11)
+	cmd.Flag = flag.NewFlagSet("romba", flag.ContinueOnError)
+	cmd.Stdout = writer
+	cmd.Stderr = writer
 
 	cmd.Commands[0] = &commander.Command{
-		Run:       refreshDats,
+		Run:       rs.startRefreshDats,
 		UsageLine: "refresh-dats",
 		Short:     "Refreshes the DAT index from the files in the DAT master directory tree.",
 		Long: `
@@ -95,11 +275,13 @@ Refreshes the DAT index from the files in the DAT master directory tree.
 Detects any changes in the DAT master directory tree and updates the DAT index
 accordingly, marking deleted or overwritten dats as orphaned and updating
 contents of any changed dats.`,
-		Flag: *flag.NewFlagSet("romba-refresh-dats", flag.ExitOnError),
+		Flag:   *flag.NewFlagSet("romba-refresh-dats", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
 
 	cmd.Commands[1] = &commander.Command{
-		Run:       archiveRoms,
+		Run:       runCmd,
 		UsageLine: "archive [-only-needed] <space-separated list of directories of ROM files>",
 		Short:     "Adds ROM files from the specified directories to the ROM archive.",
 		Long: `
@@ -110,7 +292,9 @@ file, the external SHA1 is checked against the DAT index.
 If -only-needed is set, only those files are put in the ROM archive that
 have a current entry in the DAT index.`,
 
-		Flag: *flag.NewFlagSet("romba-archive", flag.ExitOnError),
+		Flag:   *flag.NewFlagSet("romba-archive", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
 
 	cmd.Commands[1].Flag.Bool("only-needed", false, "only archive ROM files actually referenced by DAT files from the DAT index")
@@ -125,7 +309,9 @@ Deletes DAT index entries for orphaned DATs and deletes ROM files that are no
 longer associated with any current DATs. Deletes ROM files that are only
 associated with the specified DATs. It also deletes the specified DATs from
 the DAT index.`,
-		Flag: *flag.NewFlagSet("romba-purge-delete", flag.ExitOnError),
+		Flag:   *flag.NewFlagSet("romba-purge-delete", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
 
 	cmd.Commands[3] = &commander.Command{
@@ -139,7 +325,9 @@ Moves to the specified backup folder those ROM files that are only associated
 with the specified DATs. The files will be placed in the backup location using
 a folder structure according to the original DAT master directory tree
 structure. It also deletes the specified DATs from the DAT index.`,
-		Flag: *flag.NewFlagSet("romba-purge-backup", flag.ExitOnError),
+		Flag:   *flag.NewFlagSet("romba-purge-backup", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
 
 	cmd.Commands[3].Flag.String("backup", "", "backup directory where backup files are moved to")
@@ -151,7 +339,9 @@ structure. It also deletes the specified DATs from the DAT index.`,
 		Long: `
 Walks the specified input directory and builds a DAT file that mirrors its
 structure. Saves this DAT file in specified output filename.`,
-		Flag: *flag.NewFlagSet("romba-dir2dat", flag.ExitOnError),
+		Flag:   *flag.NewFlagSet("romba-dir2dat", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
 
 	cmd.Commands[4].Flag.String("out", "", "output filename")
@@ -169,7 +359,9 @@ structure. Saves this DAT file in specified output filename.`,
 		Long: `
 Creates a DAT file with those entries that are in -new DAT file and not
 in -old DAT file. Ignores those entries in -old that are not in -new.`,
-		Flag: *flag.NewFlagSet("romba-diffdat", flag.ExitOnError),
+		Flag:   *flag.NewFlagSet("romba-diffdat", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
 
 	cmd.Commands[5].Flag.String("out", "", "output filename")
@@ -184,7 +376,9 @@ in -old DAT file. Ignores those entries in -old that are not in -new.`,
 For each specified DAT file it creates a fix DAT with the missing entries for
 that DAT. If nothing is missing it doesn't create a fix DAT for that
 particular DAT.`,
-		Flag: *flag.NewFlagSet("romba-fixdat", flag.ExitOnError),
+		Flag:   *flag.NewFlagSet("romba-fixdat", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
 
 	cmd.Commands[6].Flag.String("out", "", "output dir")
@@ -198,7 +392,9 @@ For each specified DAT file it creates a miss file and a have file in the
 specified output dir. The files will be placed in the specified location using
 a folder structure according to the original DAT master directory
 tree structure.`,
-		Flag: *flag.NewFlagSet("romba-miss", flag.ExitOnError),
+		Flag:   *flag.NewFlagSet("romba-miss", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
 
 	cmd.Commands[7].Flag.String("out", "", "output dir")
@@ -211,225 +407,35 @@ tree structure.`,
 For each specified DAT file it creates the torrentzip files in the specified
 output dir. The files will be placed in the specified location using a folder
 structure according to the original DAT master directory tree structure.`,
-		Flag: *flag.NewFlagSet("romba-build", flag.ExitOnError),
+		Flag:   *flag.NewFlagSet("romba-build", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
 
 	cmd.Commands[8].Flag.String("out", "", "output dir")
 
 	cmd.Commands[9] = &commander.Command{
-		Run:       lookup,
+		Run:       runCmd,
 		UsageLine: "lookup <list of hashes or files>",
 		Short:     "For each specified hash or file it looks up any available information.",
 		Long: `
 For each specified hash it looks up any available information (dat or rom).
 For each specified file it computes the three hashes crc, md5 and sha1 and
 then looks up any available information.`,
-		Flag: *flag.NewFlagSet("romba-build", flag.ExitOnError),
+		Flag:   *flag.NewFlagSet("romba-build", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
 
-}
-
-func runCmd(cmd *commander.Command, args []string) {
-	fmt.Printf("command %v with args %v\n", cmd, args)
-}
-
-func refreshDats(cmd *commander.Command, args []string) {
-	logPath := filepath.Join(config.General.LogDir, fmt.Sprintf("refresh-%s.log", time.Now().Format("2006-01-02-15_04_05")))
-
-	logfile, err := os.Create(logPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create log file %s: %v\n", logPath, err)
-		os.Exit(1)
+	cmd.Commands[10] = &commander.Command{
+		Run:       rs.progress,
+		UsageLine: "progress",
+		Short:     "Shows progress of the currently running command.",
+		Long: `
+Shows progress of the currently running command.`,
+		Flag:   *flag.NewFlagSet("romba-progress", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
 	}
-	defer logfile.Close()
-
-	buflog := bufio.NewWriter(logfile)
-	defer buflog.Flush()
-
-	err = db.Refresh(romDB, config.Index.Dats, log.New(buflog, "", 0))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "refreshing dat index failed: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func archiveRoms(cmd *commander.Command, args []string) {
-	if len(args) == 0 {
-		return
-	}
-
-	logPath := filepath.Join(config.General.LogDir, fmt.Sprintf("archive-%s.log", time.Now().Format("2006-01-02-15_04_05")))
-
-	logfile, err := os.Create(logPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create log file %s: %v\n", logPath, err)
-		os.Exit(1)
-	}
-	defer logfile.Close()
-
-	buflog := bufio.NewWriter(logfile)
-	defer buflog.Flush()
-
-	depot, err := archive.NewDepot(config.Depot.Root, config.Depot.MaxSize, romDB, 8)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "creating depot failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	resumeLogPath := filepath.Join(config.General.LogDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
-	resumeLogFile, err := os.Create(resumeLogPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create log file %s: %v\n", resumeLogPath, err)
-		os.Exit(1)
-	}
-	defer resumeLogFile.Close()
-
-	bufresumelog := bufio.NewWriter(resumeLogFile)
-	defer bufresumelog.Flush()
-
-	resume := cmd.Flag.Lookup("resume").Value.Get().(string)
-
-	err = depot.Archive(args, "", log.New(bufresumelog, resume, 0), log.New(buflog, "", 0))
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "archiving failed: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func lookupByHash(hash []byte) (bool, error) {
-	found := false
-	if len(hash) == sha1.Size {
-		dat, err := romDB.GetDat(hash)
-		if err != nil {
-			return false, err
-		}
-
-		if dat != nil {
-			fmt.Printf("dat = %s\n", types.PrintDat(dat))
-			found = true
-		}
-	}
-
-	r := new(types.Rom)
-	switch len(hash) {
-	case md5.Size:
-		r.Md5 = hash
-	case crc32.Size:
-		r.Crc = hash
-	case sha1.Size:
-		r.Sha1 = hash
-	default:
-		return false, fmt.Errorf("found unknown hash size: %d", len(hash))
-	}
-
-	dats, err := romDB.DatsForRom(r)
-	if err != nil {
-		return false, err
-	}
-
-	for _, dat := range dats {
-		fmt.Printf("dat = %s\n", types.PrintDat(dat))
-	}
-
-	found = found || len(dats) > 0
-	return found, nil
-}
-
-func lookup(cmd *commander.Command, args []string) {
-	if len(args) == 0 {
-		return
-	}
-
-	for _, arg := range args {
-		exists, err := archive.PathExists(arg)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to stat %s: %v\n", arg, err)
-			os.Exit(1)
-		}
-		if exists {
-			hh, err := archive.HashesForFile(arg)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to compute hashes for %s: %v\n", arg, err)
-				os.Exit(1)
-			}
-
-			found, err := lookupByHash(hh.Sha1)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to lookup by sha1 hash for %s: %v\n", arg, err)
-				os.Exit(1)
-			}
-			if found {
-				continue
-			}
-			found, err = lookupByHash(hh.Md5)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to lookup by md5 hash for %s: %v\n", arg, err)
-				os.Exit(1)
-			}
-			if found {
-				continue
-			}
-
-			found, err = lookupByHash(hh.Crc)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to lookup by crc hash for %s: %v\n", arg, err)
-				os.Exit(1)
-			}
-		} else {
-			hash, err := hex.DecodeString(arg)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to decode hex string %s: %v\n", arg, err)
-				os.Exit(1)
-			}
-			_, err = lookupByHash(hash)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to lookup by hash for %s: %v\n", arg, err)
-				os.Exit(1)
-			}
-		}
-	}
-
-}
-
-func main() {
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-		wg.Done()
-	}()
-
-	err := gcfg.ReadFileInto(config, "romba.ini")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	for i := 0; i < len(config.Depot.MaxSize); i++ {
-		config.Depot.MaxSize[i] *= int64(archive.GB)
-	}
-
-	romDB, err = db.New(config.Index.Db)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "opening db failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	err = cmd.Flag.Parse(os.Args[1:])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "parsing cmd line flags failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	args := cmd.Flag.Args()
-	err = cmd.Run(args)
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
-	//romDB.Close()
-
-	wg.Wait()
+	return cmd
 }
