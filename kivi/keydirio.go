@@ -51,11 +51,7 @@ func writeKeydir(w io.Writer, kd *keydir, serialId int64) ([]byte, error) {
 	hh := sha1.New()
 	mw := io.MultiWriter(w, hh)
 
-	var count int64
-
-	for i := 0; i < numParts; i++ {
-		count += int64(len(kd.parts[i].m))
-	}
+	count := kd.size()
 
 	err := binary.Write(mw, binary.BigEndian, serialId)
 	if err != nil {
@@ -67,30 +63,101 @@ func writeKeydir(w io.Writer, kd *keydir, serialId int64) ([]byte, error) {
 		return nil, err
 	}
 
-	for i := 0; i < numParts; i++ {
-		for key, kde := range kd.parts[i].m {
-			_, err = mw.Write(key[:])
-			if err != nil {
-				return nil, err
-			}
+	err = binary.Write(mw, binary.BigEndian, kd.orphaned)
+	if err != nil {
+		return nil, err
+	}
 
-			err = binary.Write(mw, binary.BigEndian, kde.fileId)
-			if err != nil {
-				return nil, err
+	err = binary.Write(mw, binary.BigEndian, int16(kd.keySize))
+	if err != nil {
+		return nil, err
+	}
+
+	for i := 0; i < numParts; i++ {
+		switch kd.keySize {
+		case keySizeCrc:
+			for key, kdes := range kd.parts[i].mCrc {
+				_, err = mw.Write(key[:])
+				if err != nil {
+					return nil, err
+				}
+
+				err = binary.Write(mw, binary.BigEndian, int32(len(kdes)))
+				if err != nil {
+					return nil, err
+				}
+
+				for _, kde := range kdes {
+					err = binary.Write(mw, binary.BigEndian, kde.fileId)
+					if err != nil {
+						return nil, err
+					}
+					err = binary.Write(mw, binary.BigEndian, kde.vpos)
+					if err != nil {
+						return nil, err
+					}
+					err = binary.Write(mw, binary.BigEndian, kde.vsize)
+					if err != nil {
+						return nil, err
+					}
+				}
 			}
-			err = binary.Write(mw, binary.BigEndian, kde.tstamp)
-			if err != nil {
-				return nil, err
+		case keySizeMd5:
+			for key, kdes := range kd.parts[i].mMd5 {
+				_, err = mw.Write(key[:])
+				if err != nil {
+					return nil, err
+				}
+
+				err = binary.Write(mw, binary.BigEndian, int32(len(kdes)))
+				if err != nil {
+					return nil, err
+				}
+
+				for _, kde := range kdes {
+					err = binary.Write(mw, binary.BigEndian, kde.fileId)
+					if err != nil {
+						return nil, err
+					}
+					err = binary.Write(mw, binary.BigEndian, kde.vpos)
+					if err != nil {
+						return nil, err
+					}
+					err = binary.Write(mw, binary.BigEndian, kde.vsize)
+					if err != nil {
+						return nil, err
+					}
+				}
 			}
-			err = binary.Write(mw, binary.BigEndian, kde.vpos)
-			if err != nil {
-				return nil, err
-			}
-			err = binary.Write(mw, binary.BigEndian, kde.vsize)
-			if err != nil {
-				return nil, err
+		case keySizeSha1:
+			for key, kdes := range kd.parts[i].mSha1 {
+				_, err = mw.Write(key[:])
+				if err != nil {
+					return nil, err
+				}
+
+				err = binary.Write(mw, binary.BigEndian, int32(len(kdes)))
+				if err != nil {
+					return nil, err
+				}
+
+				for _, kde := range kdes {
+					err = binary.Write(mw, binary.BigEndian, kde.fileId)
+					if err != nil {
+						return nil, err
+					}
+					err = binary.Write(mw, binary.BigEndian, kde.vpos)
+					if err != nil {
+						return nil, err
+					}
+					err = binary.Write(mw, binary.BigEndian, kde.vsize)
+					if err != nil {
+						return nil, err
+					}
+				}
 			}
 		}
+
 	}
 	return hh.Sum(nil), nil
 }
@@ -114,7 +181,8 @@ func readKeydir(r io.Reader) (*keydir, int64, []byte, error) {
 		h:  sha1.New(),
 	}
 
-	var count, serialId int64
+	var count, serialId, orphaned int64
+	var keySize int16
 
 	err := binary.Read(hr, binary.BigEndian, &serialId)
 	if err != nil {
@@ -126,42 +194,59 @@ func readKeydir(r io.Reader) (*keydir, int64, []byte, error) {
 		return nil, 0, nil, err
 	}
 
-	kd := newKeydir()
+	err = binary.Read(hr, binary.BigEndian, &orphaned)
+	if err != nil {
+		return nil, 0, nil, err
+	}
 
-	var key [keySize]byte
+	err = binary.Read(hr, binary.BigEndian, &keySize)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	kd := newKeydir(int(keySize))
+
+	key := make([]byte, keySize)
 
 	var i int64
 	for i = 0; i < count; i++ {
-		_, err = io.ReadFull(hr, key[:])
+		_, err = io.ReadFull(hr, key)
 		if err != nil {
 			return nil, 0, nil, err
 		}
 
-		kde := new(keydirEntry)
+		var kc int32
 
-		var v int64
-		err = binary.Read(hr, binary.BigEndian, &v)
+		err = binary.Read(hr, binary.BigEndian, &kc)
 		if err != nil {
 			return nil, 0, nil, err
 		}
-		kde.fileId = v
-		err = binary.Read(hr, binary.BigEndian, &v)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		kde.tstamp = v
-		err = binary.Read(hr, binary.BigEndian, &v)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		kde.vpos = v
-		err = binary.Read(hr, binary.BigEndian, &v)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		kde.vsize = v
 
-		kd.put(key[:], kde)
+		var j int32
+		for j = 0; j < kc; j++ {
+			kde := new(keydirEntry)
+
+			var fileId int16
+			err = binary.Read(hr, binary.BigEndian, &fileId)
+			if err != nil {
+				return nil, 0, nil, err
+			}
+			kde.fileId = fileId
+
+			var v int32
+			err = binary.Read(hr, binary.BigEndian, &v)
+			if err != nil {
+				return nil, 0, nil, err
+			}
+			kde.vpos = v
+			err = binary.Read(hr, binary.BigEndian, &v)
+			if err != nil {
+				return nil, 0, nil, err
+			}
+			kde.vsize = v
+
+			kd.append(key, kde)
+		}
 	}
 
 	return kd, serialId, hr.h.Sum(nil), nil
@@ -196,7 +281,18 @@ func saveKeydir(root string, kd *keydir, serialId int64) error {
 }
 
 func openKeydir(root string, goldenSerialId int64) (*keydir, error) {
-	f, err := os.Open(filepath.Join(root, keydirFilename))
+	kdfileName := filepath.Join(root, keydirFilename)
+
+	present, err := pathExists(kdfileName)
+	if err != nil {
+		return nil, err
+	}
+
+	if !present {
+		return nil, nil
+	}
+
+	f, err := os.Open(kdfileName)
 	if err != nil {
 		return nil, err
 	}
@@ -233,4 +329,15 @@ func openKeydir(root string, goldenSerialId int64) (*keydir, error) {
 	}
 
 	return kd, nil
+}
+
+func pathExists(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }

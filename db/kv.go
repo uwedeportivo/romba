@@ -49,20 +49,32 @@ const (
 	md5sha1DBName = "md5sha1_db"
 )
 
+const (
+	numParts    = 51
+	keySizeCrc  = 4
+	keySizeMd5  = 16
+	keySizeSha1 = 20
+)
+
 type KVStore interface {
+	Append(key, value []byte) error
 	Set(key, value []byte) error
+	Delete(key []byte) error
 	Get(key []byte) ([]byte, error)
+	Exists(key []byte) (bool, error)
 	StartBatch() KVBatch
 	WriteBatch(batch KVBatch) error
 	Close() error
 }
 
 type KVBatch interface {
-	Set(key, value []byte)
+	Set(key, value []byte) error
+	Append(key, value []byte) error
+	Delete(key []byte) error
 	Clear()
 }
 
-var StoreOpener func(pathPrefix string) (KVStore, error)
+var StoreOpener func(pathPrefix string, keySize int) (KVStore, error)
 
 type kvStore struct {
 	generation int64
@@ -86,8 +98,8 @@ type kvBatch struct {
 	size         int64
 }
 
-func openDb(pathPrefix string) (KVStore, error) {
-	return StoreOpener(pathPrefix)
+func openDb(pathPrefix string, keySize int) (KVStore, error) {
+	return StoreOpener(pathPrefix, keySize)
 }
 
 func NewKVStoreDB(path string) (RomDB, error) {
@@ -100,68 +112,43 @@ func NewKVStoreDB(path string) (RomDB, error) {
 	}
 	kvdb.generation = gen
 
-	db, err := openDb(filepath.Join(path, datsDBName))
+	db, err := openDb(filepath.Join(path, datsDBName), keySizeSha1)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.datsDB = db
 
-	db, err = openDb(filepath.Join(path, crcDBName))
+	db, err = openDb(filepath.Join(path, crcDBName), keySizeCrc)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.crcDB = db
 
-	db, err = openDb(filepath.Join(path, md5DBName))
+	db, err = openDb(filepath.Join(path, md5DBName), keySizeMd5)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.md5DB = db
 
-	db, err = openDb(filepath.Join(path, sha1DBName))
+	db, err = openDb(filepath.Join(path, sha1DBName), keySizeSha1)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.sha1DB = db
 
-	db, err = openDb(filepath.Join(path, crcsha1DBName))
+	db, err = openDb(filepath.Join(path, crcsha1DBName), keySizeCrc)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.crcsha1DB = db
 
-	db, err = openDb(filepath.Join(path, md5sha1DBName))
+	db, err = openDb(filepath.Join(path, md5sha1DBName), keySizeMd5)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.md5sha1DB = db
 
 	return kvdb, nil
-}
-
-func dbSha1Append(db KVStore, batch KVBatch, key, sha1Bytes []byte) error {
-	if key == nil {
-		return nil
-	}
-
-	vBytes, err := db.Get(key)
-	if err != nil {
-		return err
-	}
-
-	found := false
-	for i := 0; i < len(vBytes); i += sha1.Size {
-		if bytes.Equal(sha1Bytes, vBytes[i:i+sha1.Size]) {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		vBytes = append(vBytes, sha1Bytes...)
-		batch.Set(key, vBytes)
-	}
-	return nil
 }
 
 func init() {
@@ -402,7 +389,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 		return err
 	}
 
-	dBytes, err := kvb.db.datsDB.Get(sha1Bytes)
+	exists, err := kvb.db.datsDB.Exists(sha1Bytes)
 	if err != nil {
 		return fmt.Errorf("failed to lookup sha1 indexing dats: %v", err)
 	}
@@ -411,11 +398,11 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 
 	kvb.size += int64(sha1.Size + buf.Len())
 
-	if dBytes == nil {
+	if !exists {
 		for _, g := range dat.Games {
 			for _, r := range g.Roms {
 				if r.Sha1 != nil {
-					err = dbSha1Append(kvb.db.sha1DB, kvb.sha1Batch, r.Sha1, sha1Bytes)
+					err = kvb.sha1Batch.Append(r.Sha1, sha1Bytes)
 					if err != nil {
 						return err
 					}
@@ -423,14 +410,14 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 				}
 
 				if r.Md5 != nil {
-					err = dbSha1Append(kvb.db.md5DB, kvb.md5Batch, r.Md5, sha1Bytes)
+					err = kvb.md5Batch.Append(r.Md5, sha1Bytes)
 					if err != nil {
 						return err
 					}
 					kvb.size += int64(sha1.Size)
 
 					if r.Sha1 != nil {
-						err = dbSha1Append(kvb.db.md5sha1DB, kvb.md5sha1Batch, r.Md5, r.Sha1)
+						err = kvb.md5sha1Batch.Append(r.Md5, r.Sha1)
 						if err != nil {
 							return err
 						}
@@ -439,14 +426,14 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 				}
 
 				if r.Crc != nil {
-					err = dbSha1Append(kvb.db.crcDB, kvb.crcBatch, r.Crc, sha1Bytes)
+					err = kvb.crcBatch.Append(r.Crc, sha1Bytes)
 					if err != nil {
 						return err
 					}
 					kvb.size += int64(sha1.Size)
 
 					if r.Sha1 != nil {
-						err = dbSha1Append(kvb.db.crcsha1DB, kvb.crcsha1Batch, r.Crc, r.Sha1)
+						err = kvb.crcsha1Batch.Append(r.Crc, r.Sha1)
 						if err != nil {
 							return err
 						}

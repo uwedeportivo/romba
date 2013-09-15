@@ -28,86 +28,67 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package kivia
+package service
 
 import (
-	"fmt"
-	"github.com/uwedeportivo/romba/db"
-	"github.com/uwedeportivo/romba/kivi"
+	"strings"
+	"testing"
 )
 
-func init() {
-	db.StoreOpener = openDb
-}
-
-func openDb(path string, keySize int) (db.KVStore, error) {
-	dbn, err := kivi.Open(path, keySize)
-
+func doTest(testData []string, t *testing.T) {
+	testResult, err := splitIntoArgs(strings.Join(testData, " "))
 	if err != nil {
-		return nil, fmt.Errorf("failed to open db at %s: %v\n", path, err)
+		t.Fatalf("failed to split: %v", err)
 	}
-	return &store{
-		dbn: dbn,
-	}, nil
-}
 
-type store struct {
-	dbn *kivi.DB
-}
-
-func (s *store) Set(key, value []byte) error {
-	return s.dbn.Put(key, value)
-}
-
-func (s *store) Append(key, value []byte) error {
-	return s.dbn.Append(key, value)
-}
-
-func (s *store) Delete(key []byte) error {
-	return s.dbn.Delete(key)
-}
-
-func (s *store) Get(key []byte) ([]byte, error) {
-	v, err := s.dbn.Get(key)
-	if err != nil {
-		return nil, err
+	if len(testData) != len(testResult) {
+		t.Fatalf("expected (%d) and actual (%d) lengths differ", len(testData), len(testResult))
 	}
-	return v, nil
-}
 
-func (s *store) Exists(key []byte) (bool, error) {
-	return s.dbn.Exists(key)
-}
-
-func (s *store) StartBatch() db.KVBatch {
-	return &batch{
-		bn: s.dbn,
+	for k, v := range testData {
+		if strings.HasPrefix(v, "'") {
+			v = v[1 : len(v)-1]
+		}
+		if testResult[k] != v {
+			t.Fatalf("expected (%s) and actual (%s) values differ", v, testResult[k])
+		}
 	}
 }
 
-func (s *store) WriteBatch(b db.KVBatch) error {
-	return nil
+var testCases [][]string = [][]string{
+	[]string{
+		"abc",
+		"cdefg",
+		"hijk",
+	},
+	[]string{
+		"abc",
+		"'foo bar   tar'",
+		"hi\\ there",
+	},
+	[]string{
+		"lonely",
+	},
+	[]string{
+		"one",
+		"two",
+		"they\\'re",
+		"'three and four'",
+		"five\\ and\\ six",
+	},
 }
 
-func (s *store) Close() error {
-	return s.dbn.Close()
+func TestSplits(t *testing.T) {
+	for _, testData := range testCases {
+		doTest(testData, t)
+	}
 }
 
-type batch struct {
-	bn *kivi.DB
-}
+func TestOpenQuote(t *testing.T) {
+	testData := "one two 'foo bar   "
 
-func (b *batch) Set(key, value []byte) error {
-	return b.bn.Put(key, value)
-}
-
-func (b *batch) Append(key, value []byte) error {
-	return b.bn.Append(key, value)
-}
-
-func (b *batch) Delete(key []byte) error {
-	return b.bn.Delete(key)
-}
-
-func (b *batch) Clear() {
+	testResult, err := splitIntoArgs(testData)
+	if err == nil {
+		t.Fatalf("didn't detect open quote: %s", strings.Join(testResult, "~"))
+	}
 }

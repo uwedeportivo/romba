@@ -48,9 +48,18 @@ const (
 	dataFilenamePrefix = "data_"
 )
 
+type OpType byte
+
+const (
+	PutOp OpType = iota
+	AppendOp
+	DeleteOp
+)
+
 type kvPair struct {
 	key   []byte
 	value []byte
+	op    OpType
 }
 
 type DB struct {
@@ -62,7 +71,7 @@ type DB struct {
 	activeMark int64
 }
 
-func Open(root string) (*DB, error) {
+func Open(root string, keySize int) (*DB, error) {
 	glog.Infof("Opening database %s\n", root)
 	startTime := time.Now()
 
@@ -73,14 +82,20 @@ func Open(root string) (*DB, error) {
 	kvdb := new(DB)
 	kd, err := openKeydir(root, 0)
 	if err != nil {
-		glog.Infof("error opening keydir file: %v\n", err)
-		kd = newKeydir()
+		return nil, err
+	}
+
+	if kd == nil {
+		glog.Infof("no keydir file: %v\n")
+		// TODO(uwe): scan data files to reconstruct and save keydir
+		kd = newKeydir(keySize)
 	}
 	kvdb.kd = kd
 	kvdb.root = root
 	kvdb.wchan = make(chan *kvPair)
 	kvdb.closing = make(chan bool)
 
+	// TODO(uwe): picking and rotating active file
 	f, err := os.OpenFile(filepath.Join(root, dataFilenamePrefix+"0"), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
@@ -135,39 +150,38 @@ func (kvdb *DB) Close() error {
 	return nil
 }
 
-func (kvdb *DB) Get(key []byte) ([]byte, error) {
-	kde := kvdb.kd.get(key)
-	if kde == nil {
-		return nil, nil
-	}
-	buflen := kde.vsize + keySize + 8 + 8 + 4
+func (kvdb *DB) getAt(kde *keydirEntry, keybuf, key []byte) ([]byte, error) {
+	// TODO(uwe): check which data file it is
 
-	if kde.vpos+buflen > kvdb.activeMark {
+	buflen := int(kde.vsize) + kvdb.kd.keySize + 4 + 4
+
+	if int64(int(kde.vpos)+buflen) > kvdb.activeMark {
 		// TODO(uwe): not flushed ?
 		return nil, nil
 	}
 
 	buf := make([]byte, buflen)
 
-	_, err := kvdb.active.ReadAt(buf, kde.vpos)
+	_, err := kvdb.active.ReadAt(buf, int64(kde.vpos))
 	if err != nil {
 		return nil, err
 	}
 
 	br := bytes.NewBuffer(buf)
 
-	var crc int32
-	var tstamp, vlen int64
+	var vlen int32
+	var crc uint32
 
 	binary.Read(br, binary.BigEndian, &crc)
-	binary.Read(br, binary.BigEndian, &tstamp)
 	binary.Read(br, binary.BigEndian, &vlen)
-
-	keybuf := make([]byte, keySize)
 
 	_, err = io.ReadFull(br, keybuf)
 	if err != nil {
 		return nil, err
+	}
+
+	if !bytes.Equal(keybuf, key) {
+		return nil, fmt.Errorf("keydir corruption: key differs from requested key")
 	}
 
 	vbuf := make([]byte, int(vlen))
@@ -176,21 +190,83 @@ func (kvdb *DB) Get(key []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	crcBuf := make([]byte, int(vlen)+kvdb.kd.keySize+4)
+	copy(crcBuf, buf[4:])
+	copy(crcBuf[len(buf):], vbuf)
+
+	calcCrc := crc32.ChecksumIEEE(crcBuf)
+
+	if calcCrc != crc {
+		return nil, fmt.Errorf("calculated crc %d differs from saved crc %d", calcCrc, crc)
+	}
+
 	return vbuf, nil
 }
 
-func (kvdb *DB) Put(key, value []byte) error {
+func (kvdb *DB) Get(key []byte) ([]byte, error) {
+	kdes := kvdb.kd.get(key)
+	if kdes == nil {
+		return nil, nil
+	}
+
+	keybuf := make([]byte, kvdb.kd.keySize)
+
+	var rBuf []byte
+
+	for _, kde := range kdes {
+		v, err := kvdb.getAt(kde, keybuf, key)
+		if err != nil {
+			return nil, err
+		}
+
+		if v != nil {
+			rBuf = append(rBuf, v...)
+		}
+	}
+	return rBuf, nil
+}
+
+func (kvdb *DB) Exists(key []byte) (bool, error) {
+	kdes := kvdb.kd.get(key)
+	ex := kdes != nil
+
+	return ex, nil
+}
+
+func (kvdb *DB) modify(key, value []byte, op OpType) error {
 	kcp := make([]byte, len(key))
-	vcp := make([]byte, len(value))
+
+	var vcp []byte
+
+	if value != nil {
+		vcp = make([]byte, len(value))
+	}
 
 	copy(kcp, key)
-	copy(vcp, value)
+
+	if value != nil {
+		copy(vcp, value)
+	}
 
 	kvdb.wchan <- &kvPair{
 		key:   kcp,
 		value: vcp,
+		op:    op,
 	}
 	return nil
+}
+
+func (kvdb *DB) Put(key, value []byte) error {
+	return kvdb.modify(key, value, PutOp)
+}
+
+func (kvdb *DB) Append(key, value []byte) error {
+	return kvdb.modify(key, value, AppendOp)
+}
+
+func (kvdb *DB) Delete(key []byte) error {
+	return kvdb.modify(key, nil, DeleteOp)
 }
 
 type countWriter struct {
@@ -216,22 +292,17 @@ func runWrites(kvdb *DB) {
 		count: fi.Size(),
 	}
 
-	keybuf := make([]byte, keySize)
+	keybuf := make([]byte, kvdb.kd.keySize)
 
 	for kvp := range kvdb.wchan {
 		buf.Reset()
 
-		ts := time.Now()
 		pos := cw.count
 
-		n := len(kvp.key)
-		if n > keySize {
-			n = keySize
-		}
-		copy(keybuf, kvp.key[0:n])
+		copy(keybuf, kvp.key)
 
-		binary.Write(&buf, binary.BigEndian, ts.UnixNano())
-		binary.Write(&buf, binary.BigEndian, int64(len(kvp.value)))
+		buf.WriteByte(byte(kvp.op))
+		binary.Write(&buf, binary.BigEndian, int32(len(kvp.value)))
 		buf.Write(keybuf)
 		buf.Write(kvp.value)
 
@@ -242,12 +313,20 @@ func runWrites(kvdb *DB) {
 
 		kde := &keydirEntry{
 			fileId: 0,
-			tstamp: ts.UnixNano(),
-			vpos:   pos,
-			vsize:  int64(len(kvp.value)),
+			vpos:   int32(pos),
+			vsize:  int32(len(kvp.value)),
 		}
 
-		kvdb.kd.put(kvp.key, kde)
+		// TODO(uwe): saving keydir from time to time
+
+		switch kvp.op {
+		case PutOp:
+			kvdb.kd.put(kvp.key, kde)
+		case AppendOp:
+			kvdb.kd.append(kvp.key, kde)
+		case DeleteOp:
+			kvdb.kd.delete(kvp.key)
+		}
 	}
 
 	bw.Flush()

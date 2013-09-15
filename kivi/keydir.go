@@ -35,24 +35,30 @@ import (
 )
 
 const (
-	numParts = 51
-	keySize  = 20
+	numParts    = 51
+	keySizeCrc  = 4
+	keySizeMd5  = 16
+	keySizeSha1 = 20
 )
 
 type keydirEntry struct {
-	fileId int64
-	tstamp int64
-	vpos   int64
-	vsize  int64
+	fileId int16
+	vpos   int32
+	vsize  int32
 }
 
 type keydir struct {
-	parts [numParts]*mPart
+	keySize  int
+	orphaned int64
+	total    int64
+	parts    [numParts]*mPart
 }
 
 type mPart struct {
-	mtx sync.RWMutex
-	m   map[[keySize]byte]*keydirEntry
+	mtx   sync.RWMutex
+	mCrc  map[[keySizeCrc]byte][]*keydirEntry
+	mMd5  map[[keySizeMd5]byte][]*keydirEntry
+	mSha1 map[[keySizeSha1]byte][]*keydirEntry
 }
 
 func calcBucket(bs []byte) int {
@@ -63,31 +69,69 @@ func calcBucket(bs []byte) int {
 	return v % numParts
 }
 
-func newKeydir() *keydir {
+func newKeydir(keySize int) *keydir {
 	cm := new(keydir)
+	cm.keySize = keySize
 
 	for k := 0; k < numParts; k++ {
 		p := new(mPart)
-		p.m = make(map[[keySize]byte]*keydirEntry)
+		switch keySize {
+		case keySizeCrc:
+			p.mCrc = make(map[[keySizeCrc]byte][]*keydirEntry)
+		case keySizeMd5:
+			p.mMd5 = make(map[[keySizeMd5]byte][]*keydirEntry)
+		case keySizeSha1:
+			p.mSha1 = make(map[[keySizeSha1]byte][]*keydirEntry)
+		default:
+			panic("unknown keysize")
+		}
 		cm.parts[k] = p
 	}
 	return cm
 }
 
-func (cm *keydir) get(bs []byte) *keydirEntry {
+func (cm *keydir) size() int64 {
+	var s int64
+
+	for k := 0; k < numParts; k++ {
+		p := cm.parts[k]
+		switch cm.keySize {
+		case keySizeCrc:
+			s += int64(len(p.mCrc))
+		case keySizeMd5:
+			s += int64(len(p.mMd5))
+		case keySizeSha1:
+			s += int64(len(p.mSha1))
+		default:
+			panic("unknown keysize")
+		}
+	}
+	return s
+}
+
+func (cm *keydir) get(bs []byte) []*keydirEntry {
 	k := calcBucket(bs)
 	p := cm.parts[k]
 
-	n := len(bs)
-	if n > keySize {
-		n = keySize
-	}
-
-	var key [keySize]byte
-	copy(key[:], bs[0:n])
+	var v []*keydirEntry
 
 	p.mtx.RLock()
-	v := p.m[key]
+	switch cm.keySize {
+	case keySizeCrc:
+		var key [keySizeCrc]byte
+		copy(key[:], bs[:])
+		v = p.mCrc[key]
+	case keySizeMd5:
+		var key [keySizeMd5]byte
+		copy(key[:], bs[:])
+		v = p.mMd5[key]
+	case keySizeSha1:
+		var key [keySizeSha1]byte
+		copy(key[:], bs[:])
+		v = p.mSha1[key]
+	default:
+		panic("unknown keysize")
+	}
 	p.mtx.RUnlock()
 	return v
 }
@@ -96,15 +140,86 @@ func (cm *keydir) put(bs []byte, vs *keydirEntry) {
 	k := calcBucket(bs)
 	p := cm.parts[k]
 
-	n := len(bs)
-	if n > keySize {
-		n = keySize
-	}
-
-	var key [keySize]byte
-	copy(key[:], bs[0:n])
+	var found bool
 
 	p.mtx.Lock()
-	p.m[key] = vs
+
+	switch cm.keySize {
+	case keySizeCrc:
+		var key [keySizeCrc]byte
+		copy(key[:], bs[:])
+		_, found = p.mCrc[key]
+		p.mCrc[key] = []*keydirEntry{vs}
+	case keySizeMd5:
+		var key [keySizeMd5]byte
+		copy(key[:], bs[:])
+		_, found = p.mMd5[key]
+		p.mMd5[key] = []*keydirEntry{vs}
+	case keySizeSha1:
+		var key [keySizeSha1]byte
+		copy(key[:], bs[:])
+		_, found = p.mSha1[key]
+		p.mSha1[key] = []*keydirEntry{vs}
+	default:
+		panic("unknown keysize")
+	}
+
+	if found {
+		cm.orphaned++
+	}
+	cm.total++
+
+	p.mtx.Unlock()
+}
+
+func (cm *keydir) append(bs []byte, vs *keydirEntry) {
+	k := calcBucket(bs)
+	p := cm.parts[k]
+
+	p.mtx.Lock()
+	switch cm.keySize {
+	case keySizeCrc:
+		var key [keySizeCrc]byte
+		copy(key[:], bs[:])
+		p.mCrc[key] = append(p.mCrc[key], vs)
+	case keySizeMd5:
+		var key [keySizeMd5]byte
+		copy(key[:], bs[:])
+		p.mMd5[key] = append(p.mMd5[key], vs)
+	case keySizeSha1:
+		var key [keySizeSha1]byte
+		copy(key[:], bs[:])
+		p.mSha1[key] = append(p.mSha1[key], vs)
+	default:
+		panic("unknown keysize")
+	}
+
+	p.mtx.Unlock()
+}
+
+func (cm *keydir) delete(bs []byte) {
+	k := calcBucket(bs)
+	p := cm.parts[k]
+
+	p.mtx.Lock()
+	switch cm.keySize {
+	case keySizeCrc:
+		var key [keySizeCrc]byte
+		copy(key[:], bs[:])
+		delete(p.mCrc, key)
+	case keySizeMd5:
+		var key [keySizeMd5]byte
+		copy(key[:], bs[:])
+		delete(p.mMd5, key)
+	case keySizeSha1:
+		var key [keySizeSha1]byte
+		copy(key[:], bs[:])
+		delete(p.mSha1, key)
+	default:
+		panic("unknown keysize")
+	}
+
+	cm.orphaned++
+
 	p.mtx.Unlock()
 }
