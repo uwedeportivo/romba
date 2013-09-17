@@ -62,6 +62,7 @@ type KVStore interface {
 	Delete(key []byte) error
 	Get(key []byte) ([]byte, error)
 	Exists(key []byte) (bool, error)
+	Flush()
 	StartBatch() KVBatch
 	WriteBatch(batch KVBatch) error
 	Close() error
@@ -245,7 +246,18 @@ func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	return dats, nil
 }
 
+func (kvdb *kvStore) Flush() {
+	kvdb.datsDB.Flush()
+	kvdb.crcDB.Flush()
+	kvdb.md5DB.Flush()
+	kvdb.sha1DB.Flush()
+	kvdb.crcsha1DB.Flush()
+	kvdb.md5sha1DB.Flush()
+}
+
 func (kvdb *kvStore) Close() error {
+	kvdb.Flush()
+
 	err := kvdb.datsDB.Close()
 	if err != nil {
 		return err

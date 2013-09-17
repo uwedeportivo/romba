@@ -63,6 +63,7 @@ type RomDB interface {
 	IndexRom(rom *types.Rom) error
 	IndexDat(dat *types.Dat, sha1 []byte) error
 	OrphanDats() error
+	Flush()
 	Close() error
 	GetDat(sha1 []byte) (*types.Dat, error)
 	DatsForRom(rom *types.Rom) ([]*types.Dat, error)
@@ -158,6 +159,11 @@ func (pm *refreshMaster) NumWorkers() int {
 
 func (pm *refreshMaster) ProgressTracker() worker.ProgressTracker {
 	return pm.pt
+}
+
+func (pm *refreshMaster) FinishUp() error {
+	pm.romdb.Flush()
+	return nil
 }
 
 func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTracker) (string, error) {

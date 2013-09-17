@@ -28,90 +28,79 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package kivia
+package kivi
 
 import (
-	"fmt"
-	"github.com/uwedeportivo/romba/db"
-	"github.com/uwedeportivo/romba/kivi"
+	"io/ioutil"
+	"testing"
 )
 
-func init() {
-	db.StoreOpener = openDb
-}
+func TestSaveOpen(t *testing.T) {
+	kd := newKeydir(keySizeSha1)
 
-func openDb(path string, keySize int) (db.KVStore, error) {
-	dbn, err := kivi.Open(path, keySize)
+	for i := 0; i < 10000; i++ {
+		fileId := int16(i / 100)
 
+		kde := &keydirEntry{
+			fileId: fileId,
+			vpos:   int32(i),
+			vsize:  256,
+		}
+
+		key := randomBytes(t, keySizeSha1)
+
+		kd.put(key, kde)
+	}
+
+	root, err := ioutil.TempDir("", "kivi_test")
 	if err != nil {
-		return nil, fmt.Errorf("failed to open db at %s: %v\n", path, err)
+		t.Fatalf("cannot open tempdir: %v", err)
 	}
-	return &store{
-		dbn: dbn,
-	}, nil
-}
 
-type store struct {
-	dbn *kivi.DB
-}
+	serialId := int64(34234)
 
-func (s *store) Flush() {
-	s.dbn.Flush()
-}
-
-func (s *store) Set(key, value []byte) error {
-	return s.dbn.Put(key, value)
-}
-
-func (s *store) Append(key, value []byte) error {
-	return s.dbn.Append(key, value)
-}
-
-func (s *store) Delete(key []byte) error {
-	return s.dbn.Delete(key)
-}
-
-func (s *store) Get(key []byte) ([]byte, error) {
-	v, err := s.dbn.Get(key)
+	err = saveKeydir(root, kd, serialId)
 	if err != nil {
-		return nil, err
+		t.Fatalf("failed to save keydir: %v", err)
 	}
-	return v, nil
-}
 
-func (s *store) Exists(key []byte) (bool, error) {
-	return s.dbn.Exists(key)
-}
-
-func (s *store) StartBatch() db.KVBatch {
-	return &batch{
-		bn: s.dbn,
+	savedKd, err := openKeydir(root, serialId)
+	if err != nil {
+		t.Fatalf("failed to open keydir: %v", err)
 	}
-}
 
-func (s *store) WriteBatch(b db.KVBatch) error {
-	return nil
-}
+	if savedKd == nil {
+		t.Fatalf("nothing read back")
+	}
 
-func (s *store) Close() error {
-	return s.dbn.Close()
-}
+	if savedKd.keySize != kd.keySize {
+		t.Fatalf("key size differ: original %d, from file %d", kd.keySize, savedKd.keySize)
+	}
 
-type batch struct {
-	bn *kivi.DB
-}
+	if savedKd.orphaned != kd.orphaned {
+		t.Fatalf("orphaned differ: original %d, from file %d", kd.orphaned, savedKd.orphaned)
+	}
 
-func (b *batch) Set(key, value []byte) error {
-	return b.bn.Put(key, value)
-}
+	if savedKd.size() != kd.size() {
+		t.Fatalf("total differ: original %d, from file %d", kd.size(), savedKd.size())
+	}
 
-func (b *batch) Append(key, value []byte) error {
-	return b.bn.Append(key, value)
-}
+	for k := 0; k < numParts; k++ {
+		p := kd.parts[k]
 
-func (b *batch) Delete(key []byte) error {
-	return b.bn.Delete(key)
-}
+		for key, kdes := range p.mSha1 {
+			kde := kdes[0]
 
-func (b *batch) Clear() {
+			skdes := savedKd.get(key[:])
+			if len(skdes) != 1 {
+				t.Fatal("keydir entry missing")
+			}
+
+			skde := skdes[0]
+
+			if skde.fileId != kde.fileId || skde.vpos != kde.vpos || skde.vsize != kde.vsize {
+				t.Fatal("keydir entry differs")
+			}
+		}
+	}
 }

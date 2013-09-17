@@ -81,6 +81,7 @@ type Master interface {
 	NewWorker(workerIndex int) Worker
 	NumWorkers() int
 	ProgressTracker() ProgressTracker
+	FinishUp() error
 }
 
 type workUnit struct {

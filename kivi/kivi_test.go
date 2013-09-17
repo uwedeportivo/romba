@@ -28,90 +28,45 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package kivia
+package kivi
 
 import (
-	"fmt"
-	"github.com/uwedeportivo/romba/db"
-	"github.com/uwedeportivo/romba/kivi"
+	"bytes"
+	"io/ioutil"
+	"testing"
 )
 
-func init() {
-	db.StoreOpener = openDb
-}
-
-func openDb(path string, keySize int) (db.KVStore, error) {
-	dbn, err := kivi.Open(path, keySize)
-
+func TestBasic(t *testing.T) {
+	root, err := ioutil.TempDir("", "kivi_test")
 	if err != nil {
-		return nil, fmt.Errorf("failed to open db at %s: %v\n", path, err)
+		t.Fatalf("cannot open tempdir: %v", err)
 	}
-	return &store{
-		dbn: dbn,
-	}, nil
-}
 
-type store struct {
-	dbn *kivi.DB
-}
-
-func (s *store) Flush() {
-	s.dbn.Flush()
-}
-
-func (s *store) Set(key, value []byte) error {
-	return s.dbn.Put(key, value)
-}
-
-func (s *store) Append(key, value []byte) error {
-	return s.dbn.Append(key, value)
-}
-
-func (s *store) Delete(key []byte) error {
-	return s.dbn.Delete(key)
-}
-
-func (s *store) Get(key []byte) ([]byte, error) {
-	v, err := s.dbn.Get(key)
+	kdb, err := Open(root, keySizeSha1)
 	if err != nil {
-		return nil, err
+		t.Fatalf("failed to open DB: %v", err)
 	}
-	return v, nil
-}
 
-func (s *store) Exists(key []byte) (bool, error) {
-	return s.dbn.Exists(key)
-}
+	key := randomBytes(t, keySizeSha1)
+	value := randomBytes(t, 50)
 
-func (s *store) StartBatch() db.KVBatch {
-	return &batch{
-		bn: s.dbn,
+	err = kdb.Put(key, value)
+	if err != nil {
+		t.Fatal("failed to insert")
 	}
-}
 
-func (s *store) WriteBatch(b db.KVBatch) error {
-	return nil
-}
+	kdb.Flush()
 
-func (s *store) Close() error {
-	return s.dbn.Close()
-}
+	sval, err := kdb.Get(key)
+	if err != nil {
+		t.Fatalf("failed to get: %v", err)
+	}
 
-type batch struct {
-	bn *kivi.DB
-}
+	if sval == nil {
+		t.Fatal("no value found")
+	}
 
-func (b *batch) Set(key, value []byte) error {
-	return b.bn.Put(key, value)
-}
-
-func (b *batch) Append(key, value []byte) error {
-	return b.bn.Append(key, value)
-}
-
-func (b *batch) Delete(key []byte) error {
-	return b.bn.Delete(key)
-}
-
-func (b *batch) Clear() {
+	if !bytes.Equal(value, sval) {
+		t.Fatal("values differ")
+	}
 }

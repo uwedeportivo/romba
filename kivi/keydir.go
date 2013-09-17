@@ -50,7 +50,6 @@ type keydirEntry struct {
 type keydir struct {
 	keySize  int
 	orphaned int64
-	total    int64
 	parts    [numParts]*mPart
 }
 
@@ -167,7 +166,6 @@ func (cm *keydir) put(bs []byte, vs *keydirEntry) {
 	if found {
 		cm.orphaned++
 	}
-	cm.total++
 
 	p.mtx.Unlock()
 }
