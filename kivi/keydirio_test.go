@@ -57,20 +57,22 @@ func TestSaveOpen(t *testing.T) {
 		t.Fatalf("cannot open tempdir: %v", err)
 	}
 
-	serialId := int64(34234)
-
-	err = saveKeydir(root, kd, serialId)
+	err = saveKeydir(root, kd, 7)
 	if err != nil {
 		t.Fatalf("failed to save keydir: %v", err)
 	}
 
-	savedKd, err := openKeydir(root, serialId)
+	savedKd, fileId, err := openKeydir(root)
 	if err != nil {
 		t.Fatalf("failed to open keydir: %v", err)
 	}
 
 	if savedKd == nil {
 		t.Fatalf("nothing read back")
+	}
+
+	if fileId != 7 {
+		t.Fatalf("fileId not right")
 	}
 
 	if savedKd.keySize != kd.keySize {

@@ -38,8 +38,11 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 )
 
 const (
@@ -47,18 +50,13 @@ const (
 	keydirSha1Filename = "keydir-sha1"
 )
 
-func writeKeydir(w io.Writer, kd *keydir, serialId int64) ([]byte, error) {
+func writeKeydir(w io.Writer, kd *keydir) ([]byte, error) {
 	hh := sha1.New()
 	mw := io.MultiWriter(w, hh)
 
 	count := kd.size()
 
-	err := binary.Write(mw, binary.BigEndian, serialId)
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(mw, binary.BigEndian, count)
+	err := binary.Write(mw, binary.BigEndian, count)
 	if err != nil {
 		return nil, err
 	}
@@ -175,33 +173,28 @@ func (r hashingReader) Read(buf []byte) (int, error) {
 	return n, err
 }
 
-func readKeydir(r io.Reader) (*keydir, int64, []byte, error) {
+func readKeydir(r io.Reader) (*keydir, []byte, error) {
 	hr := hashingReader{
 		ir: r,
 		h:  sha1.New(),
 	}
 
-	var count, serialId, orphaned int64
+	var count, orphaned int64
 	var keySize int16
 
-	err := binary.Read(hr, binary.BigEndian, &serialId)
+	err := binary.Read(hr, binary.BigEndian, &count)
 	if err != nil {
-		return nil, 0, nil, err
-	}
-
-	err = binary.Read(hr, binary.BigEndian, &count)
-	if err != nil {
-		return nil, 0, nil, err
+		return nil, nil, err
 	}
 
 	err = binary.Read(hr, binary.BigEndian, &orphaned)
 	if err != nil {
-		return nil, 0, nil, err
+		return nil, nil, err
 	}
 
 	err = binary.Read(hr, binary.BigEndian, &keySize)
 	if err != nil {
-		return nil, 0, nil, err
+		return nil, nil, err
 	}
 
 	kd := newKeydir(int(keySize))
@@ -212,14 +205,14 @@ func readKeydir(r io.Reader) (*keydir, int64, []byte, error) {
 	for i = 0; i < count; i++ {
 		_, err = io.ReadFull(hr, key)
 		if err != nil {
-			return nil, 0, nil, err
+			return nil, nil, err
 		}
 
 		var kc int32
 
 		err = binary.Read(hr, binary.BigEndian, &kc)
 		if err != nil {
-			return nil, 0, nil, err
+			return nil, nil, err
 		}
 
 		var j int32
@@ -229,19 +222,19 @@ func readKeydir(r io.Reader) (*keydir, int64, []byte, error) {
 			var fileId int16
 			err = binary.Read(hr, binary.BigEndian, &fileId)
 			if err != nil {
-				return nil, 0, nil, err
+				return nil, nil, err
 			}
 			kde.fileId = fileId
 
 			var v int32
 			err = binary.Read(hr, binary.BigEndian, &v)
 			if err != nil {
-				return nil, 0, nil, err
+				return nil, nil, err
 			}
 			kde.vpos = v
 			err = binary.Read(hr, binary.BigEndian, &v)
 			if err != nil {
-				return nil, 0, nil, err
+				return nil, nil, err
 			}
 			kde.vsize = v
 
@@ -249,11 +242,12 @@ func readKeydir(r io.Reader) (*keydir, int64, []byte, error) {
 		}
 	}
 
-	return kd, serialId, hr.h.Sum(nil), nil
+	return kd, hr.h.Sum(nil), nil
 }
 
-func saveKeydir(root string, kd *keydir, serialId int64) error {
-	f, err := os.Create(filepath.Join(root, keydirFilename))
+func saveKeydir(root string, kd *keydir, fileId int16) error {
+	filename := fmt.Sprintf("%s_%d", keydirFilename, fileId)
+	f, err := os.Create(filepath.Join(root, filename))
 	if err != nil {
 		return err
 	}
@@ -262,12 +256,13 @@ func saveKeydir(root string, kd *keydir, serialId int64) error {
 	bw := bufio.NewWriter(f)
 	defer bw.Flush()
 
-	sha1Bytes, err := writeKeydir(bw, kd, serialId)
+	sha1Bytes, err := writeKeydir(bw, kd)
 	if err != nil {
 		return err
 	}
 
-	fsha, err := os.Create(filepath.Join(root, keydirSha1Filename))
+	filename = fmt.Sprintf("%s_%d", keydirSha1Filename, fileId)
+	fsha, err := os.Create(filepath.Join(root, filename))
 	if err != nil {
 		return err
 	}
@@ -280,8 +275,9 @@ func saveKeydir(root string, kd *keydir, serialId int64) error {
 	return err
 }
 
-func openKeydir(root string, goldenSerialId int64) (*keydir, error) {
-	kdfileName := filepath.Join(root, keydirFilename)
+func openKeydirWithFileId(root string, fileId int16) (*keydir, error) {
+	filename := fmt.Sprintf("%s_%d", keydirFilename, fileId)
+	kdfileName := filepath.Join(root, filename)
 
 	present, err := pathExists(kdfileName)
 	if err != nil {
@@ -300,16 +296,13 @@ func openKeydir(root string, goldenSerialId int64) (*keydir, error) {
 
 	br := bufio.NewReader(f)
 
-	kd, serialId, sha1Bytes, err := readKeydir(br)
+	kd, sha1Bytes, err := readKeydir(br)
 	if err != nil {
 		return nil, err
 	}
 
-	if goldenSerialId != serialId {
-		return nil, fmt.Errorf("serial Id in keydir file %d differs from requested serial id %d", serialId, goldenSerialId)
-	}
-
-	fsha, err := os.Open(filepath.Join(root, keydirSha1Filename))
+	filename = fmt.Sprintf("%s_%d", keydirSha1Filename, fileId)
+	fsha, err := os.Open(filepath.Join(root, filename))
 	if err != nil {
 		return nil, err
 	}
@@ -340,4 +333,37 @@ func pathExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+func openKeydir(root string) (*keydir, int16, error) {
+	files, err := ioutil.ReadDir(root)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var fileIds []int
+
+	for _, file := range files {
+		if strings.HasPrefix(file.Name(), keydirFilename) && !strings.HasPrefix(file.Name(), keydirSha1Filename) {
+			fmt.Printf("file=%s\n", file.Name())
+			var fileId int
+			_, err = fmt.Sscanf(file.Name(), keydirFilename+"_%d", &fileId)
+			if err != nil {
+				return nil, 0, err
+			}
+			fileIds = append(fileIds, fileId)
+		}
+	}
+	sort.Ints(fileIds)
+
+	for i := len(fileIds) - 1; i >= 0; i-- {
+		fileId := int16(fileIds[i])
+
+		kd, err := openKeydirWithFileId(root, fileId)
+		// TODO(uwe): log errors
+		if err == nil && kd != nil {
+			return kd, fileId, nil
+		}
+	}
+	return nil, 0, nil
 }

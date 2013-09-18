@@ -81,7 +81,7 @@ func Open(root string, keySize int) (*DB, error) {
 		return nil, err
 	}
 	kvdb := new(DB)
-	kd, err := openKeydir(root, 0)
+	kd, _, err := openKeydir(root)
 	if err != nil {
 		return nil, err
 	}
