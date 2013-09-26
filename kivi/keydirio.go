@@ -43,6 +43,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/golang/glog"
 )
 
 const (
@@ -345,7 +347,6 @@ func openKeydir(root string) (*keydir, int16, error) {
 
 	for _, file := range files {
 		if strings.HasPrefix(file.Name(), keydirFilename) && !strings.HasPrefix(file.Name(), keydirSha1Filename) {
-			fmt.Printf("file=%s\n", file.Name())
 			var fileId int
 			_, err = fmt.Sscanf(file.Name(), keydirFilename+"_%d", &fileId)
 			if err != nil {
@@ -360,9 +361,12 @@ func openKeydir(root string) (*keydir, int16, error) {
 		fileId := int16(fileIds[i])
 
 		kd, err := openKeydirWithFileId(root, fileId)
-		// TODO(uwe): log errors
+
 		if err == nil && kd != nil {
 			return kd, fileId, nil
+		}
+		if err != nil {
+			glog.Errorf("error opening keydir %d: %v", fileId, err)
 		}
 	}
 	return nil, 0, nil
