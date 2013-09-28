@@ -221,7 +221,7 @@ func readKeydir(r io.Reader) (*keydir, []byte, error) {
 		for j = 0; j < kc; j++ {
 			kde := new(keydirEntry)
 
-			var fileId int16
+			var fileId int32
 			err = binary.Read(hr, binary.BigEndian, &fileId)
 			if err != nil {
 				return nil, nil, err
@@ -247,7 +247,7 @@ func readKeydir(r io.Reader) (*keydir, []byte, error) {
 	return kd, hr.h.Sum(nil), nil
 }
 
-func saveKeydir(root string, kd *keydir, fileId int16) error {
+func saveKeydir(root string, kd *keydir, fileId int32) error {
 	filename := fmt.Sprintf("%s_%d", keydirFilename, fileId)
 	f, err := os.Create(filepath.Join(root, filename))
 	if err != nil {
@@ -277,7 +277,7 @@ func saveKeydir(root string, kd *keydir, fileId int16) error {
 	return err
 }
 
-func openKeydirWithFileId(root string, fileId int16) (*keydir, error) {
+func openKeydirWithFileId(root string, fileId int32) (*keydir, error) {
 	filename := fmt.Sprintf("%s_%d", keydirFilename, fileId)
 	kdfileName := filepath.Join(root, filename)
 
@@ -337,7 +337,7 @@ func pathExists(path string) (bool, error) {
 	return false, err
 }
 
-func openKeydir(root string) (*keydir, int16, error) {
+func openKeydir(root string) (*keydir, int32, error) {
 	files, err := ioutil.ReadDir(root)
 	if err != nil {
 		return nil, 0, err
@@ -358,7 +358,7 @@ func openKeydir(root string) (*keydir, int16, error) {
 	sort.Ints(fileIds)
 
 	for i := len(fileIds) - 1; i >= 0; i-- {
-		fileId := int16(fileIds[i])
+		fileId := int32(fileIds[i])
 
 		kd, err := openKeydirWithFileId(root, fileId)
 
@@ -369,5 +369,5 @@ func openKeydir(root string) (*keydir, int16, error) {
 			glog.Errorf("error opening keydir %d: %v", fileId, err)
 		}
 	}
-	return nil, 0, nil
+	return nil, -1, nil
 }

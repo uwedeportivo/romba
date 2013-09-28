@@ -107,7 +107,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommander(writer io.Writer, rs *RombaService) *commander.Commander {
 	cmd := new(commander.Commander)
 	cmd.Name = "Romba"
-	cmd.Commands = make([]*commander.Command, 11)
+	cmd.Commands = make([]*commander.Command, 12)
 	cmd.Flag = flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -262,13 +262,11 @@ structure according to the original DAT master directory tree structure.`,
 
 	cmd.Commands[9] = &commander.Command{
 		Run:       rs.lookup,
-		UsageLine: "lookup <list of hashes or files>",
-		Short:     "For each specified hash or file it looks up any available information.",
+		UsageLine: "lookup <list of hashes>",
+		Short:     "For each specified hash it looks up any available information.",
 		Long: `
-For each specified hash it looks up any available information (dat or rom).
-For each specified file it computes the three hashes crc, md5 and sha1 and
-then looks up any available information.`,
-		Flag:   *flag.NewFlagSet("romba-build", flag.ContinueOnError),
+For each specified hash it looks up any available information (dat or rom).`,
+		Flag:   *flag.NewFlagSet("romba-lookup", flag.ContinueOnError),
 		Stdout: writer,
 		Stderr: writer,
 	}
@@ -280,6 +278,17 @@ then looks up any available information.`,
 		Long: `
 Shows progress of the currently running command.`,
 		Flag:   *flag.NewFlagSet("romba-progress", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
+	}
+
+	cmd.Commands[11] = &commander.Command{
+		Run:       rs.shutdown,
+		UsageLine: "shutdown",
+		Short:     "Gracefully shuts down server.",
+		Long: `
+Gracefully shuts down server saving all the cached data.`,
+		Flag:   *flag.NewFlagSet("romba-shutdown", flag.ContinueOnError),
 		Stdout: writer,
 		Stderr: writer,
 	}

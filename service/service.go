@@ -32,11 +32,15 @@ package service
 
 import (
 	"bytes"
+	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -230,15 +234,36 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 			return err
 		}
 
-		dat, err := rs.romDB.GetDat(hash)
+		if len(hash) == sha1.Size {
+			dat, err := rs.romDB.GetDat(hash)
+			if err != nil {
+				return err
+			}
+
+			if dat != nil {
+				fmt.Fprintf(cmd.Stdout, "dat with sha1 %s = %s\n", arg, types.PrintShortDat(dat))
+			}
+		}
+
+		r := new(types.Rom)
+		switch len(hash) {
+		case md5.Size:
+			r.Md5 = hash
+		case crc32.Size:
+			r.Crc = hash
+		case sha1.Size:
+			r.Sha1 = hash
+		default:
+			return fmt.Errorf("found unknown hash size: %d", len(hash))
+		}
+
+		dats, err := rs.romDB.DatsForRom(r)
 		if err != nil {
 			return err
 		}
 
-		if dat != nil {
-			fmt.Fprintf(cmd.Stdout, "dat = %s\n", types.PrintDat(dat))
-		} else {
-			fmt.Fprintf(cmd.Stdout, "dat for sha1 %s not found \n", arg)
+		if len(dats) > 0 {
+			fmt.Fprintf(cmd.Stdout, "rom with hash %s = %s\n", arg, types.PrintRomInDats(dats))
 		}
 	}
 
@@ -258,6 +283,21 @@ func (rs *RombaService) progress(cmd *commander.Command, args []string) error {
 	} else {
 		fmt.Fprintf(cmd.Stdout, "nothing currently running")
 	}
+	return nil
+}
+
+func (rs *RombaService) shutdown(cmd *commander.Command, args []string) error {
+	fmt.Printf("shutting down now\n")
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	err := rs.romDB.Close()
+	if err != nil {
+		glog.Errorf("error closing rom database: %v", err)
+	}
+
+	fmt.Printf("done saving cached data, exiting...\n")
+	os.Exit(0)
 	return nil
 }
 

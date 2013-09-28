@@ -42,7 +42,7 @@ const (
 )
 
 type keydirEntry struct {
-	fileId int16
+	fileId int32
 	vpos   int32
 	vsize  int32
 }
@@ -220,4 +220,50 @@ func (cm *keydir) delete(bs []byte) {
 	cm.orphaned++
 
 	p.mtx.Unlock()
+}
+
+func filterKeydirEntries(kdes []*keydirEntry, activeFileId int32) []*keydirEntry {
+	var rkdes []*keydirEntry
+
+	for _, kde := range kdes {
+		if kde.fileId == activeFileId {
+			rkdes = append(rkdes, kde)
+		}
+	}
+	return rkdes
+}
+
+func (cm *keydir) forgetPast(activeFileId int32) {
+	for k := 0; k < numParts; k++ {
+		p := cm.parts[k]
+
+		p.mtx.Lock()
+
+		switch cm.keySize {
+		case keySizeCrc:
+			for key, kdes := range p.mCrc {
+				rkdes := filterKeydirEntries(kdes, activeFileId)
+				if rkdes != nil {
+					p.mCrc[key] = rkdes
+				}
+			}
+		case keySizeMd5:
+			for key, kdes := range p.mMd5 {
+				rkdes := filterKeydirEntries(kdes, activeFileId)
+				if rkdes != nil {
+					p.mMd5[key] = rkdes
+				}
+			}
+		case keySizeSha1:
+			for key, kdes := range p.mSha1 {
+				rkdes := filterKeydirEntries(kdes, activeFileId)
+				if rkdes != nil {
+					p.mSha1[key] = rkdes
+				}
+			}
+		default:
+			panic("unknown keysize")
+		}
+		p.mtx.Unlock()
+	}
 }

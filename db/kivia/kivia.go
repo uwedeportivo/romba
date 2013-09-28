@@ -59,6 +59,10 @@ func (s *store) Flush() {
 	s.dbn.Flush()
 }
 
+func (s *store) Size() int64 {
+	return s.dbn.Size()
+}
+
 func (s *store) Set(key, value []byte) error {
 	return s.dbn.Put(key, value)
 }
@@ -95,6 +99,14 @@ func (s *store) WriteBatch(b db.KVBatch) error {
 
 func (s *store) Close() error {
 	return s.dbn.Close()
+}
+
+func (s *store) BeginRefresh() error {
+	return s.dbn.BeginRefresh()
+}
+
+func (s *store) EndRefresh() error {
+	return s.dbn.EndRefresh()
 }
 
 type batch struct {

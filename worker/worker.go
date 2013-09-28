@@ -82,6 +82,7 @@ type Master interface {
 	NumWorkers() int
 	ProgressTracker() ProgressTracker
 	FinishUp() error
+	Start() error
 }
 
 type workUnit struct {
@@ -121,6 +122,12 @@ func Work(workname string, paths []string, master Master) (string, error) {
 
 	glog.Infof("starting %s\n", workname)
 	startTime := time.Now()
+
+	err := master.Start()
+	if err != nil {
+		glog.Errorf("failed to start master: %v\n", err)
+		return "", err
+	}
 
 	cv := new(countVisitor)
 	cv.master = master
@@ -180,6 +187,12 @@ func Work(workname string, paths []string, master Master) (string, error) {
 
 	glog.Infof("Flushing workers and closing work. Hang in there...\n")
 	closeWg.Wait()
+
+	err = master.FinishUp()
+	if err != nil {
+		glog.Errorf("failed to finish up master: %v\n", err)
+		return "", err
+	}
 
 	glog.Infof("Done.\n")
 

@@ -67,6 +67,8 @@ type RomDB interface {
 	Close() error
 	GetDat(sha1 []byte) (*types.Dat, error)
 	DatsForRom(rom *types.Rom) ([]*types.Dat, error)
+	BeginDatRefresh() error
+	EndDatRefresh() error
 }
 
 var DBFactory func(path string) (RomDB, error)
@@ -163,7 +165,12 @@ func (pm *refreshMaster) ProgressTracker() worker.ProgressTracker {
 
 func (pm *refreshMaster) FinishUp() error {
 	pm.romdb.Flush()
-	return nil
+
+	return pm.romdb.EndDatRefresh()
+}
+
+func (pm *refreshMaster) Start() error {
+	return pm.romdb.BeginDatRefresh()
 }
 
 func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTracker) (string, error) {

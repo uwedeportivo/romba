@@ -33,6 +33,8 @@ package kivi
 import (
 	"bytes"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -141,6 +143,54 @@ func TestMultipleDataFiles(t *testing.T) {
 	}
 
 	if !bytes.Equal(value2, sval2) {
+		t.Fatal("values differ")
+	}
+}
+
+func TestNoKeydirFile(t *testing.T) {
+	root, err := ioutil.TempDir("", "kivi_test")
+	if err != nil {
+		t.Fatalf("cannot open tempdir: %v", err)
+	}
+
+	kdb, err := Open(root, keySizeSha1)
+	if err != nil {
+		t.Fatalf("failed to open DB: %v", err)
+	}
+
+	key1 := randomBytes(t, keySizeSha1)
+	value1 := randomBytes(t, 50)
+
+	err = kdb.Put(key1, value1)
+	if err != nil {
+		t.Fatalf("failed to insert: %v", err)
+	}
+
+	err = kdb.Close()
+	if err != nil {
+		t.Fatalf("failed to close: %v", err)
+	}
+
+	err = os.Remove(filepath.Join(root, keydirFilename+"_0"))
+	if err != nil {
+		t.Fatalf("failed to delete keydir file: %v", err)
+	}
+
+	kdb, err = Open(root, keySizeSha1)
+	if err != nil {
+		t.Fatalf("failed to open DB: %v", err)
+	}
+
+	sval1, err := kdb.Get(key1)
+	if err != nil {
+		t.Fatalf("failed to get: %v", err)
+	}
+
+	if sval1 == nil {
+		t.Fatal("no value found")
+	}
+
+	if !bytes.Equal(value1, sval1) {
 		t.Fatal("values differ")
 	}
 }

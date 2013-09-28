@@ -60,6 +60,7 @@ const (
 	AppendOp
 	DeleteOp
 	FlushOp
+	RotateOp
 )
 
 type kvPair struct {
@@ -75,17 +76,17 @@ type DB struct {
 	closing       chan bool
 	root          string
 	active        *os.File
-	activeFileId  int16
+	activeFileId  int32
 	openDataFiles *lru.Cache
 	openCacheLock *sync.Mutex
 }
 
-func dataFilename(root string, fileId int16) string {
+func dataFilename(root string, fileId int32) string {
 	filename := fmt.Sprintf("%s%d", dataFilenamePrefix, fileId)
 	return filepath.Join(root, filename)
 }
 
-func populateKeydir(root string, kd *keydir, fileId int16) error {
+func populateKeydir(root string, kd *keydir, fileId int32) error {
 	fd, err := os.Open(dataFilename(root, fileId))
 	if err != nil {
 		return err
@@ -144,7 +145,8 @@ func populateKeydir(root string, kd *keydir, fileId int16) error {
 	return nil
 }
 
-func readDataFiles(root string, kd *keydir, maxFileId int16) (int16, error) {
+func readDataFiles(root string, kd *keydir, maxFileId int32) (int32, error) {
+	glog.Info("reading data files")
 	files, err := ioutil.ReadDir(root)
 	if err != nil {
 		return 0, err
@@ -173,18 +175,43 @@ func readDataFiles(root string, kd *keydir, maxFileId int16) (int16, error) {
 	index := sort.SearchInts(fileIds, int(maxFileId+1))
 
 	for i := index; i < l; i++ {
-		err = populateKeydir(root, kd, int16(fileIds[i]))
+		glog.Infof("populating keydir from data file %d\n", fileIds[i])
+		err = populateKeydir(root, kd, int32(fileIds[i]))
 		if err != nil {
 			return 0, err
 		}
 	}
 
-	return int16(fileIds[l-1]), nil
+	return int32(fileIds[l-1]), nil
+}
+
+func deleteOldDataFiles(root string, kd *keydir, activeFileId int32) error {
+	files, err := ioutil.ReadDir(root)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		if strings.HasPrefix(file.Name(), dataFilenamePrefix) {
+			var fileId int
+			_, err = fmt.Sscanf(file.Name(), dataFilenamePrefix+"%d", &fileId)
+			if err != nil {
+				return err
+			}
+			if int32(fileId) < activeFileId {
+				err = os.Remove(filepath.Join(root, file.Name()))
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func closeEvictedDataFile(key lru.Key, value interface{}) {
 	readCloser := value.(io.ReadCloser)
-	fileId := key.(int16)
+	fileId := key.(int32)
 	err := readCloser.Close()
 	if err != nil {
 		glog.Errorf("error closing data file %d: %v", fileId, err)
@@ -206,7 +233,7 @@ func Open(root string, keySize int) (*DB, error) {
 	}
 
 	if kd == nil {
-		glog.Infof("no keydir file: %v\n")
+		glog.Infof("no keydir file")
 		kd = newKeydir(keySize)
 	}
 
@@ -283,7 +310,7 @@ func (kvdb *DB) Close() error {
 	return nil
 }
 
-func (kvdb *DB) dataReader(fileId int16) (io.ReaderAt, error) {
+func (kvdb *DB) dataReader(fileId int32) (io.ReaderAt, error) {
 	if fileId == kvdb.activeFileId {
 		return kvdb.active, nil
 	}
@@ -388,6 +415,10 @@ func (kvdb *DB) Exists(key []byte) (bool, error) {
 	return ex, nil
 }
 
+func (kvdb *DB) Size() int64 {
+	return kvdb.kd.size()
+}
+
 func (kvdb *DB) modify(key, value []byte, op OpType) error {
 	kcp := make([]byte, len(key))
 
@@ -419,6 +450,23 @@ func (kvdb *DB) Flush() {
 	}
 
 	<-finish
+}
+
+func (kvdb *DB) BeginRefresh() error {
+	finish := make(chan bool)
+	kvdb.wchan <- &kvPair{
+		op:     RotateOp,
+		finish: finish,
+	}
+
+	<-finish
+	return nil
+}
+
+func (kvdb *DB) EndRefresh() error {
+	kvdb.kd.forgetPast(kvdb.activeFileId)
+
+	return deleteOldDataFiles(kvdb.root, kvdb.kd, kvdb.activeFileId)
 }
 
 func (kvdb *DB) Put(key, value []byte) error {
@@ -502,6 +550,27 @@ func runWrites(kvdb *DB) {
 			err := bw.Flush()
 			if err != nil {
 				glog.Errorf("failed to flush: %v", err)
+			}
+		} else if kvp.op == RotateOp {
+			err := kvdb.active.Close()
+			if err != nil {
+				glog.Errorf("failed to rotate close active: %v", err)
+				panic(err)
+			}
+
+			kvdb.activeFileId += 1
+
+			f, err := os.OpenFile(dataFilename(kvdb.root, kvdb.activeFileId), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
+			if err != nil {
+				glog.Errorf("failed to rotate open active: %v", err)
+				panic(err)
+			}
+			kvdb.active = f
+
+			bw = bufio.NewWriter(kvdb.active)
+			cw = &countWriter{
+				w:     bw,
+				count: 0,
 			}
 		}
 

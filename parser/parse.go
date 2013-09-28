@@ -281,6 +281,7 @@ func ParseDat(r io.Reader, path string) (*types.Dat, []byte, error) {
 		return nil, nil, fmt.Errorf("error in file %s on line %d: %v", path, p.ll.lineNumber(), err)
 	}
 	p.d.Normalize()
+	p.d.Path = path
 	return p.d, hr.h.Sum(nil), nil
 }
 
@@ -442,5 +443,6 @@ func ParseXml(r io.Reader, path string) (*types.Dat, []byte, error) {
 	}
 
 	d.Normalize()
+	d.Path = path
 	return d, hr.h.Sum(nil), nil
 }

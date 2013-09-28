@@ -39,7 +39,7 @@ func TestSaveOpen(t *testing.T) {
 	kd := newKeydir(keySizeSha1)
 
 	for i := 0; i < 10000; i++ {
-		fileId := int16(i / 100)
+		fileId := int32(i / 100)
 
 		kde := &keydirEntry{
 			fileId: fileId,

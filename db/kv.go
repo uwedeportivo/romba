@@ -63,9 +63,12 @@ type KVStore interface {
 	Get(key []byte) ([]byte, error)
 	Exists(key []byte) (bool, error)
 	Flush()
+	Size() int64
 	StartBatch() KVBatch
 	WriteBatch(batch KVBatch) error
 	Close() error
+	BeginRefresh() error
+	EndRefresh() error
 }
 
 type KVBatch interface {
@@ -288,6 +291,17 @@ func (kvdb *kvStore) Close() error {
 		return err
 	}
 	return nil
+}
+
+func (kvdb *kvStore) BeginDatRefresh() error {
+	if kvdb.datsDB.Size() > 0 {
+		return kvdb.datsDB.BeginRefresh()
+	}
+	return nil
+}
+
+func (kvdb *kvStore) EndDatRefresh() error {
+	return kvdb.datsDB.EndRefresh()
 }
 
 func (kvdb *kvStore) StartBatch() RomBatch {

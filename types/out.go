@@ -41,7 +41,6 @@ dat (
 	name "{{.Name}}"
 	description "{{.Description}}"
 	path "{{.Path}}"
-	generation {{.Generation}}
 )
 {{with .Games}}{{range .}}
 game (
@@ -51,16 +50,56 @@ game (
 ){{end}}{{end}}
 `
 
+const datShortTemplate = `
+dat (
+	name "{{.Name}}"
+	description "{{.Description}}"
+	path "{{.Path}}"
+)
+{{with .Games}}{{range .}}
+game (
+	name "{{.Name}}"
+	description "{{.Description}}"
+){{end}}{{end}}
+`
+const datsTemplate = `
+{{range .}}{{.Path}}{{end}}
+`
+
 var ff = template.FuncMap{
 	"hex": hex.EncodeToString,
 }
 
 var dt = template.Must(template.New("datout").Funcs(ff).Parse(datTemplate))
+var sdt = template.Must(template.New("datshortout").Funcs(ff).Parse(datShortTemplate))
+var dts = template.Must(template.New("datsout").Funcs(ff).Parse(datsTemplate))
 
 func PrintDat(d *Dat) []byte {
 	buf := new(bytes.Buffer)
 
 	err := dt.Execute(buf, d)
+	if err != nil {
+		panic(err)
+	}
+
+	return buf.Bytes()
+}
+
+func PrintShortDat(d *Dat) []byte {
+	buf := new(bytes.Buffer)
+
+	err := sdt.Execute(buf, d)
+	if err != nil {
+		panic(err)
+	}
+
+	return buf.Bytes()
+}
+
+func PrintRomInDats(dats []*Dat) []byte {
+	buf := new(bytes.Buffer)
+
+	err := dts.Execute(buf, dats)
 	if err != nil {
 		panic(err)
 	}
