@@ -249,6 +249,7 @@ func (l *lexer) nextItem() item {
 // lex creates a new scanner for the input string.
 func lex(name string, rd io.Reader) *lexer {
 	l := &lexer{
+		tk:    make([]rune, 0, 2048),
 		name:  name,
 		br:    bufio.NewReader(rd),
 		state: lexDefault,

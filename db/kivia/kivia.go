@@ -59,6 +59,10 @@ func (s *store) Flush() {
 	s.dbn.Flush()
 }
 
+func (s *store) PrintStats() string {
+	return s.dbn.PrintStats()
+}
+
 func (s *store) Size() int64 {
 	return s.dbn.Size()
 }

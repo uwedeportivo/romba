@@ -69,6 +69,7 @@ type KVStore interface {
 	Close() error
 	BeginRefresh() error
 	EndRefresh() error
+	PrintStats() string
 }
 
 type KVBatch interface {
@@ -298,6 +299,19 @@ func (kvdb *kvStore) BeginDatRefresh() error {
 		return kvdb.datsDB.BeginRefresh()
 	}
 	return nil
+}
+
+func (kvdb *kvStore) PrintStats() string {
+	buf := new(bytes.Buffer)
+
+	fmt.Fprintf(buf, "\ndatsDB stats: %s\n", kvdb.datsDB.PrintStats())
+	fmt.Fprintf(buf, "crcDB stats: %s\n", kvdb.crcDB.PrintStats())
+	fmt.Fprintf(buf, "md5DB stats: %s\n", kvdb.md5DB.PrintStats())
+	fmt.Fprintf(buf, "sha1DB stats: %s\n", kvdb.sha1DB.PrintStats())
+	fmt.Fprintf(buf, "crcsha1DB stats: %s\n", kvdb.crcsha1DB.PrintStats())
+	fmt.Fprintf(buf, "md5sha1DB stats: %s\n", kvdb.md5sha1DB.PrintStats())
+
+	return buf.String()
 }
 
 func (kvdb *kvStore) EndDatRefresh() error {

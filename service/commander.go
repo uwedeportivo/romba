@@ -107,7 +107,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommander(writer io.Writer, rs *RombaService) *commander.Commander {
 	cmd := new(commander.Commander)
 	cmd.Name = "Romba"
-	cmd.Commands = make([]*commander.Command, 12)
+	cmd.Commands = make([]*commander.Command, 14)
 	cmd.Flag = flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -289,6 +289,28 @@ Shows progress of the currently running command.`,
 		Long: `
 Gracefully shuts down server saving all the cached data.`,
 		Flag:   *flag.NewFlagSet("romba-shutdown", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
+	}
+
+	cmd.Commands[12] = &commander.Command{
+		Run:       rs.memstats,
+		UsageLine: "memstats",
+		Short:     "Prints memory stats.",
+		Long: `
+Print memory stats.`,
+		Flag:   *flag.NewFlagSet("romba-memstats", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
+	}
+
+	cmd.Commands[13] = &commander.Command{
+		Run:       rs.dbstats,
+		UsageLine: "dbstats",
+		Short:     "Prints db stats.",
+		Long: `
+Print db stats.`,
+		Flag:   *flag.NewFlagSet("romba-dbstats", flag.ContinueOnError),
 		Stdout: writer,
 		Stderr: writer,
 	}

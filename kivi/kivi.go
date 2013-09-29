@@ -45,6 +45,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
 	"github.com/golang/groupcache/lru"
 )
@@ -450,6 +451,16 @@ func (kvdb *DB) Flush() {
 	}
 
 	<-finish
+}
+
+func (kvdb *DB) PrintStats() string {
+	buf := new(bytes.Buffer)
+
+	totalmem := uint64(int64((kvdb.kd.keySize + 40 + 12)) * kvdb.Size())
+
+	fmt.Fprintf(buf, "keysize: %d, num entries: %d, total mem: %s", kvdb.kd.keySize, kvdb.Size(), humanize.Bytes(totalmem))
+
+	return buf.String()
 }
 
 func (kvdb *DB) BeginRefresh() error {

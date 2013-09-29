@@ -41,6 +41,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -200,11 +202,20 @@ func (rs *RombaService) startRefreshDats(cmd *commander.Command, args []string) 
 	rs.jobName = "refresh-dats"
 
 	go func() {
+		glog.Infof("service starting refresh-dats")
 		rs.broadCastProgress(time.Now(), true, false, "")
 		ticker := time.NewTicker(time.Second * 5)
+		stopTicker := make(chan bool)
 		go func() {
-			for t := range ticker.C {
-				rs.broadCastProgress(t, false, false, "")
+			glog.Infof("starting progress broadcaster")
+			for {
+				select {
+				case t := <-ticker.C:
+					rs.broadCastProgress(t, false, false, "")
+				case <-stopTicker:
+					glog.Info("stopped progress broadcaster")
+					return
+				}
 			}
 		}()
 
@@ -214,6 +225,7 @@ func (rs *RombaService) startRefreshDats(cmd *commander.Command, args []string) 
 		}
 
 		ticker.Stop()
+		stopTicker <- true
 
 		rs.jobMutex.Lock()
 		rs.busy = false
@@ -221,6 +233,7 @@ func (rs *RombaService) startRefreshDats(cmd *commander.Command, args []string) 
 		rs.jobMutex.Unlock()
 
 		rs.broadCastProgress(time.Now(), false, true, endMsg)
+		glog.Infof("service finished refresh-dats")
 	}()
 
 	fmt.Fprintf(cmd.Stdout, "started refresh dats")
@@ -298,6 +311,52 @@ func (rs *RombaService) shutdown(cmd *commander.Command, args []string) error {
 
 	fmt.Printf("done saving cached data, exiting...\n")
 	os.Exit(0)
+	return nil
+}
+
+func (rs *RombaService) memstats(cmd *commander.Command, args []string) error {
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	debug.FreeOSMemory()
+
+	s := new(runtime.MemStats)
+	runtime.ReadMemStats(s)
+
+	fmt.Fprintf(cmd.Stdout, "\n# runtime.MemStats\n")
+	fmt.Fprintf(cmd.Stdout, "# Alloc = %s\n", humanize.Bytes(s.Alloc))
+	fmt.Fprintf(cmd.Stdout, "# TotalAlloc = %s\n", humanize.Bytes(s.TotalAlloc))
+	fmt.Fprintf(cmd.Stdout, "# Sys = %s\n", humanize.Bytes(s.Sys))
+	fmt.Fprintf(cmd.Stdout, "# Lookups = %d\n", s.Lookups)
+	fmt.Fprintf(cmd.Stdout, "# Mallocs = %d\n", s.Mallocs)
+	fmt.Fprintf(cmd.Stdout, "# Frees = %d\n", s.Frees)
+
+	fmt.Fprintf(cmd.Stdout, "# HeapAlloc = %s\n", humanize.Bytes(s.HeapAlloc))
+	fmt.Fprintf(cmd.Stdout, "# HeapSys = %s\n", humanize.Bytes(s.HeapSys))
+	fmt.Fprintf(cmd.Stdout, "# HeapIdle = %s\n", humanize.Bytes(s.HeapIdle))
+	fmt.Fprintf(cmd.Stdout, "# HeapInuse = %s\n", humanize.Bytes(s.HeapInuse))
+	fmt.Fprintf(cmd.Stdout, "# HeapReleased = %s\n", humanize.Bytes(s.HeapReleased))
+	fmt.Fprintf(cmd.Stdout, "# HeapObjects = %d\n", s.HeapObjects)
+
+	fmt.Fprintf(cmd.Stdout, "# Stack = %d / %d\n", s.StackInuse, s.StackSys)
+	fmt.Fprintf(cmd.Stdout, "# MSpan = %d / %d\n", s.MSpanInuse, s.MSpanSys)
+	fmt.Fprintf(cmd.Stdout, "# MCache = %d / %d\n", s.MCacheInuse, s.MCacheSys)
+	fmt.Fprintf(cmd.Stdout, "# BuckHashSys = %d\n", s.BuckHashSys)
+
+	fmt.Fprintf(cmd.Stdout, "# NextGC = %d\n", s.NextGC)
+	fmt.Fprintf(cmd.Stdout, "# PauseNs = %d\n", s.PauseNs)
+	fmt.Fprintf(cmd.Stdout, "# NumGC = %d\n", s.NumGC)
+	fmt.Fprintf(cmd.Stdout, "# EnableGC = %v\n", s.EnableGC)
+	fmt.Fprintf(cmd.Stdout, "# DebugGC = %v\n", s.DebugGC)
+
+	return nil
+}
+
+func (rs *RombaService) dbstats(cmd *commander.Command, args []string) error {
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	fmt.Fprintf(cmd.Stdout, "dbstats = %s", rs.romDB.PrintStats())
 	return nil
 }
 

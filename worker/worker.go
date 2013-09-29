@@ -97,7 +97,8 @@ type slave struct {
 	worker  Worker
 }
 
-func runSlave(w *slave, inwork <-chan *workUnit) {
+func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string) {
+	glog.Infof("starting worker %d for %s", workerNum, workname)
 	for wu := range inwork {
 		path := wu.path
 
@@ -115,6 +116,7 @@ func runSlave(w *slave, inwork <-chan *workUnit) {
 	}
 
 	w.closeWg.Done()
+	glog.Infof("exiting worker %d for %s", workerNum, workname)
 }
 
 func Work(workname string, paths []string, master Master) (string, error) {
@@ -167,7 +169,7 @@ func Work(workname string, paths []string, master Master) (string, error) {
 			closeWg: closeWg,
 		}
 
-		go runSlave(worker, inwork)
+		go runSlave(worker, inwork, i, workname)
 	}
 
 	for _, name := range paths {

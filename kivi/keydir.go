@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	numParts    = 51
+	numParts    = 13 //51
 	keySizeCrc  = 4
 	keySizeMd5  = 16
 	keySizeSha1 = 20

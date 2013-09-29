@@ -69,6 +69,7 @@ type RomDB interface {
 	DatsForRom(rom *types.Rom) ([]*types.Dat, error)
 	BeginDatRefresh() error
 	EndDatRefresh() error
+	PrintStats() string
 }
 
 var DBFactory func(path string) (RomDB, error)

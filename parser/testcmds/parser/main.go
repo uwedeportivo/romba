@@ -33,20 +33,28 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/uwedeportivo/romba/parser"
-	"github.com/uwedeportivo/romba/worker"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
+
+	"github.com/uwedeportivo/romba/parser"
+	"github.com/uwedeportivo/romba/worker"
+
+	_ "expvar"
+	_ "net/http/pprof"
 )
 
 const (
 	versionStr = "1.0"
+	numWorkers = 4
 )
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "%s version %s, Copyright (c) 2013 Uwe Hoffmann. All rights reserved.\n", os.Args[0], versionStr)
-	fmt.Fprintf(os.Stderr, "\t                 %s <path to tosec dir>\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "\t                 %s <path to dat files>\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "\nFlag defaults:\n")
 	flag.PrintDefaults()
 }
@@ -54,7 +62,7 @@ func usage() {
 type parseWorker struct {
 }
 
-func (pw *parseWorker) Process(path string, size int64, logger *log.Logger) error {
+func (pw *parseWorker) Process(path string, size int64) error {
 	_, _, err := parser.Parse(path)
 
 	return err
@@ -76,7 +84,19 @@ func (pm *parseMaster) NewWorker(workerIndex int) worker.Worker {
 }
 
 func (pm *parseMaster) NumWorkers() int {
-	return 8
+	return numWorkers
+}
+
+func (pm *parseMaster) FinishUp() error {
+	return nil
+}
+
+func (pm *parseMaster) Start() error {
+	return nil
+}
+
+func (pm *parseMaster) ProgressTracker() worker.ProgressTracker {
+	return worker.NewProgressTracker()
 }
 
 func main() {
@@ -97,10 +117,47 @@ func main() {
 		os.Exit(0)
 	}
 
-	err := worker.Work("parse dats", flag.Args(), new(parseMaster), nil)
+	runtime.GOMAXPROCS(numWorkers)
+
+	ss, err := worker.Work("parse dats", flag.Args(), new(parseMaster))
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, " error: %v\n", err)
 		os.Exit(1)
 	}
+
+	fmt.Printf("finished, starting http server now %s\n", ss)
+
+	debug.FreeOSMemory()
+
+	s := new(runtime.MemStats)
+	runtime.ReadMemStats(s)
+
+	fmt.Printf("\n# runtime.MemStats\n")
+	fmt.Printf("# Alloc = %d\n", s.Alloc)
+	fmt.Printf("# TotalAlloc = %d\n", s.TotalAlloc)
+	fmt.Printf("# Sys = %d\n", s.Sys)
+	fmt.Printf("# Lookups = %d\n", s.Lookups)
+	fmt.Printf("# Mallocs = %d\n", s.Mallocs)
+	fmt.Printf("# Frees = %d\n", s.Frees)
+
+	fmt.Printf("# HeapAlloc = %d\n", s.HeapAlloc)
+	fmt.Printf("# HeapSys = %d\n", s.HeapSys)
+	fmt.Printf("# HeapIdle = %d\n", s.HeapIdle)
+	fmt.Printf("# HeapInuse = %d\n", s.HeapInuse)
+	fmt.Printf("# HeapReleased = %d\n", s.HeapReleased)
+	fmt.Printf("# HeapObjects = %d\n", s.HeapObjects)
+
+	fmt.Printf("# Stack = %d / %d\n", s.StackInuse, s.StackSys)
+	fmt.Printf("# MSpan = %d / %d\n", s.MSpanInuse, s.MSpanSys)
+	fmt.Printf("# MCache = %d / %d\n", s.MCacheInuse, s.MCacheSys)
+	fmt.Printf("# BuckHashSys = %d\n", s.BuckHashSys)
+
+	fmt.Printf("# NextGC = %d\n", s.NextGC)
+	fmt.Printf("# PauseNs = %d\n", s.PauseNs)
+	fmt.Printf("# NumGC = %d\n", s.NumGC)
+	fmt.Printf("# EnableGC = %v\n", s.EnableGC)
+	fmt.Printf("# DebugGC = %v\n", s.DebugGC)
+
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", 8876), nil))
 }
