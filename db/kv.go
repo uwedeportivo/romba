@@ -295,10 +295,7 @@ func (kvdb *kvStore) Close() error {
 }
 
 func (kvdb *kvStore) BeginDatRefresh() error {
-	if kvdb.datsDB.Size() > 0 {
-		return kvdb.datsDB.BeginRefresh()
-	}
-	return nil
+	return kvdb.datsDB.BeginRefresh()
 }
 
 func (kvdb *kvStore) PrintStats() string {
@@ -488,4 +485,29 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 
 func (kvb *kvBatch) Size() int64 {
 	return kvb.size
+}
+
+func dbSha1Append(db KVStore, batch KVBatch, key, sha1Bytes []byte) error {
+	if key == nil {
+		return nil
+	}
+
+	vBytes, err := db.Get(key)
+	if err != nil {
+		return fmt.Errorf("failed to lookup in dbSha1Append: %v", err)
+	}
+
+	found := false
+	for i := 0; i < len(vBytes); i += sha1.Size {
+		if bytes.Equal(sha1Bytes, vBytes[i:i+sha1.Size]) {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		vBytes = append(vBytes, sha1Bytes...)
+		batch.Set(key, vBytes)
+	}
+	return nil
 }

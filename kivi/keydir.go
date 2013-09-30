@@ -31,11 +31,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package kivi
 
 import (
+	"fmt"
 	"sync"
 )
 
 const (
-	numParts    = 13 //51
+	numParts    = 51
 	keySizeCrc  = 4
 	keySizeMd5  = 16
 	keySizeSha1 = 20
@@ -148,17 +149,23 @@ func (cm *keydir) put(bs []byte, vs *keydirEntry) {
 		var key [keySizeCrc]byte
 		copy(key[:], bs[:])
 		_, found = p.mCrc[key]
-		p.mCrc[key] = []*keydirEntry{vs}
+		va := make([]*keydirEntry, 1, 16)
+		va[0] = vs
+		p.mCrc[key] = va
 	case keySizeMd5:
 		var key [keySizeMd5]byte
 		copy(key[:], bs[:])
 		_, found = p.mMd5[key]
-		p.mMd5[key] = []*keydirEntry{vs}
+		va := make([]*keydirEntry, 1, 16)
+		va[0] = vs
+		p.mMd5[key] = va
 	case keySizeSha1:
 		var key [keySizeSha1]byte
 		copy(key[:], bs[:])
 		_, found = p.mSha1[key]
-		p.mSha1[key] = []*keydirEntry{vs}
+		va := make([]*keydirEntry, 1, 16)
+		va[0] = vs
+		p.mSha1[key] = va
 	default:
 		panic("unknown keysize")
 	}
@@ -223,7 +230,7 @@ func (cm *keydir) delete(bs []byte) {
 }
 
 func filterKeydirEntries(kdes []*keydirEntry, activeFileId int32) []*keydirEntry {
-	var rkdes []*keydirEntry
+	rkdes := make([]*keydirEntry, 0, len(kdes))
 
 	for _, kde := range kdes {
 		if kde.fileId == activeFileId {
@@ -266,4 +273,46 @@ func (cm *keydir) forgetPast(activeFileId int32) {
 		}
 		p.mtx.Unlock()
 	}
+}
+
+func (cm *keydir) appendDistribution() string {
+	var distr [256]int
+
+	for k := 0; k < numParts; k++ {
+		p := cm.parts[k]
+
+		p.mtx.Lock()
+
+		switch cm.keySize {
+		case keySizeCrc:
+			for _, kdes := range p.mCrc {
+				if len(kdes) > 255 {
+					distr[255] += 1
+				} else {
+					distr[len(kdes)] += 1
+				}
+			}
+		case keySizeMd5:
+			for _, kdes := range p.mMd5 {
+				if len(kdes) > 255 {
+					distr[255] += 1
+				} else {
+					distr[len(kdes)] += 1
+				}
+			}
+		case keySizeSha1:
+			for _, kdes := range p.mSha1 {
+				if len(kdes) > 255 {
+					distr[255] += 1
+				} else {
+					distr[len(kdes)] += 1
+				}
+			}
+		default:
+			panic("unknown keysize")
+		}
+		p.mtx.Unlock()
+	}
+
+	return fmt.Sprintf("%v", distr)
 }

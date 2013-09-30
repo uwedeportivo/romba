@@ -458,12 +458,17 @@ func (kvdb *DB) PrintStats() string {
 
 	totalmem := uint64(int64((kvdb.kd.keySize + 40 + 12)) * kvdb.Size())
 
-	fmt.Fprintf(buf, "keysize: %d, num entries: %d, total mem: %s", kvdb.kd.keySize, kvdb.Size(), humanize.Bytes(totalmem))
+	fmt.Fprintf(buf, "keysize: %d, num entries: %d, total mem: %s, appends distribution: %s",
+		kvdb.kd.keySize, kvdb.Size(), humanize.Bytes(totalmem), kvdb.kd.appendDistribution())
 
 	return buf.String()
 }
 
 func (kvdb *DB) BeginRefresh() error {
+	if kvdb.activeFileId == 0 {
+		return nil
+	}
+
 	finish := make(chan bool)
 	kvdb.wchan <- &kvPair{
 		op:     RotateOp,
@@ -475,6 +480,10 @@ func (kvdb *DB) BeginRefresh() error {
 }
 
 func (kvdb *DB) EndRefresh() error {
+	if kvdb.activeFileId == 0 {
+		return nil
+	}
+
 	kvdb.kd.forgetPast(kvdb.activeFileId)
 
 	return deleteOldDataFiles(kvdb.root, kvdb.kd, kvdb.activeFileId)
