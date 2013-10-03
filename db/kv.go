@@ -38,6 +38,8 @@ import (
 	"github.com/uwedeportivo/romba/types"
 	"io"
 	"path/filepath"
+
+	"github.com/golang/glog"
 )
 
 const (
@@ -111,42 +113,49 @@ func NewKVStoreDB(path string) (RomDB, error) {
 	kvdb := new(kvStore)
 	kvdb.path = path
 
+	glog.Infof("Loading Generation File")
 	gen, err := ReadGenerationFile(path)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.generation = gen
 
+	glog.Infof("Loading Dats DB")
 	db, err := openDb(filepath.Join(path, datsDBName), keySizeSha1)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.datsDB = db
 
+	glog.Infof("Loading CRC DB")
 	db, err = openDb(filepath.Join(path, crcDBName), keySizeCrc)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.crcDB = db
 
+	glog.Infof("Loading MD5 DB")
 	db, err = openDb(filepath.Join(path, md5DBName), keySizeMd5)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.md5DB = db
 
+	glog.Infof("Loading SHA1 DB")
 	db, err = openDb(filepath.Join(path, sha1DBName), keySizeSha1)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.sha1DB = db
 
+	glog.Infof("Loading CRC -> SHA1 DB")
 	db, err = openDb(filepath.Join(path, crcsha1DBName), keySizeCrc)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.crcsha1DB = db
 
+	glog.Infof("Loading MD5 -> SHA1 DB")
 	db, err = openDb(filepath.Join(path, md5sha1DBName), keySizeMd5)
 	if err != nil {
 		return nil, err

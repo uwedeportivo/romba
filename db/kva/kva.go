@@ -28,13 +28,20 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package kyoto
+package kva
 
 import (
 	"bytes"
 	"fmt"
-	"github.com/uwedeportivo/cabinet"
+	"os"
+	"path/filepath"
+
+	"github.com/cznic/kv"
 	"github.com/uwedeportivo/romba/db"
+)
+
+const (
+	dbFilename = "data"
 )
 
 func init() {
@@ -42,10 +49,23 @@ func init() {
 }
 
 func openDb(path string, keySize int) (db.KVStore, error) {
-	dbn := cabinet.New()
-	err := dbn.Open(path+".kch", cabinet.KCOWRITER|cabinet.KCOCREATE)
+	dbPath := filepath.Join(path, dbFilename)
+
+	createOpen := kv.Open
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		err = os.MkdirAll(path, 0755)
+		if err != nil {
+			return nil, err
+		}
+		createOpen = kv.Create
+	}
+
+	opts := &kv.Options{}
+
+	dbn, err := createOpen(dbPath, opts)
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open db at %s: %v\n", dbPath, err)
 	}
 	return &store{
 		dbn: dbn,
@@ -53,44 +73,46 @@ func openDb(path string, keySize int) (db.KVStore, error) {
 }
 
 type store struct {
-	dbn *cabinet.KCDB
+	dbn *kv.DB
 }
 
 func (s *store) Append(key, value []byte) error {
-	old, err := s.Get(key)
-	if err != nil {
-		return err
-	}
+	_, _, err := s.dbn.Put(nil, key,
+		func(key, old []byte) ([]byte, bool, error) {
+			if old == nil {
+				return value, true, nil
+			}
 
-	v, write, err := db.Upd(key, value, old)
-	if err != nil {
-		return err
-	}
+			found := false
+			vsize := len(value)
 
-	if write {
-		return s.Set(key, v)
-	}
-	return nil
+			for i := 0; i < len(old); i += vsize {
+				if bytes.Equal(value, old[i:i+vsize]) {
+					found = true
+					break
+				}
+			}
+
+			if found {
+				return nil, false, nil
+			}
+
+			return append(old, value...), true, nil
+		})
+
+	return err
 }
 
 func (s *store) Set(key, value []byte) error {
 	return s.dbn.Set(key, value)
 }
 
-func (s *store) Get(key []byte) ([]byte, error) {
-	v, err := s.dbn.Get(key)
-	if err != nil {
-		errno := err.(cabinet.Errno)
-
-		if errno != cabinet.KCENOREC {
-			return nil, fmt.Errorf("kyoto error on get: %v, error code: %d", err, s.dbn.Ecode())
-		}
-	}
-	return v, nil
+func (s *store) Delete(key []byte) error {
+	return s.dbn.Delete(key)
 }
 
-func (s *store) Delete(key []byte) error {
-	return s.dbn.Remove(key)
+func (s *store) Get(key []byte) ([]byte, error) {
+	return s.dbn.Get(nil, key)
 }
 
 func (s *store) Exists(key []byte) (bool, error) {
@@ -113,22 +135,13 @@ func (s *store) Size() int64 {
 }
 
 func (s *store) StartBatch() db.KVBatch {
-	bn := cabinet.New()
-	err := bn.Open("-", cabinet.KCOWRITER|cabinet.KCOCREATE)
-	if err != nil {
-		fmt.Printf("failed to open kyoto batch: %v\n", err)
-		panic(err)
-	}
-
 	return &batch{
-		bn: bn,
-		s:  s,
+		s: s,
 	}
 }
 
 func (s *store) WriteBatch(b db.KVBatch) error {
-	cb := b.(*batch)
-	return s.dbn.Merge([]*cabinet.KCDB{cb.bn}, cabinet.KCMSET)
+	return nil
 }
 
 func (s *store) Close() error {
@@ -136,35 +149,20 @@ func (s *store) Close() error {
 }
 
 type batch struct {
-	bn *cabinet.KCDB
-	s  *store
-}
-
-func (b *batch) Append(key, value []byte) error {
-	old, err := b.s.Get(key)
-	if err != nil {
-		return err
-	}
-
-	v, write, err := db.Upd(key, value, old)
-	if err != nil {
-		return err
-	}
-
-	if write {
-		return b.bn.Set(key, v)
-	}
-	return nil
+	s *store
 }
 
 func (b *batch) Set(key, value []byte) error {
-	return b.bn.Set(key, value)
+	return b.s.Set(key, value)
+}
+
+func (b *batch) Append(key, value []byte) error {
+	return b.s.Append(key, value)
 }
 
 func (b *batch) Delete(key []byte) error {
-	return b.bn.Remove(key)
+	return b.s.Delete(key)
 }
 
 func (b *batch) Clear() {
-	b.bn.Clear()
 }

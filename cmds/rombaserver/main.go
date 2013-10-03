@@ -36,18 +36,22 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 
 	"code.google.com/p/gcfg"
 	"code.google.com/p/go.net/websocket"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
 
+	"github.com/golang/glog"
+
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/service"
 
 	_ "expvar"
-	_ "github.com/uwedeportivo/romba/db/kivia"
+	_ "github.com/uwedeportivo/romba/db/clevel"
 	_ "net/http/pprof"
 )
 
@@ -74,6 +78,19 @@ type Config struct {
 	}
 }
 
+func signalCatcher(romDB db.RomDB) {
+	ch := make(chan os.Signal)
+	signal.Notify(ch, syscall.SIGINT)
+	<-ch
+	glog.Info("CTRL-C; exiting")
+	err := romDB.Close()
+	if err != nil {
+		glog.Errorf("error closing DB: %v", err)
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
 func main() {
 	config := new(Config)
 
@@ -86,12 +103,15 @@ func main() {
 	runtime.GOMAXPROCS(config.General.Workers)
 
 	flag.Set("log_dir", config.General.LogDir)
+	flag.Set("alsologtostderr", "true")
 
 	romDB, err := db.New(config.Index.Db)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "opening db failed: %v\n", err)
 		os.Exit(1)
 	}
+
+	go signalCatcher(romDB)
 
 	rs := service.NewRombaService(romDB, config.Index.Dats, config.General.Workers)
 

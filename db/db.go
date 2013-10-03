@@ -32,11 +32,13 @@ package db
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/golang/glog"
 
@@ -74,8 +76,56 @@ type RomDB interface {
 
 var DBFactory func(path string) (RomDB, error)
 
+func FormatDuration(d time.Duration) string {
+	secs := uint64(d.Seconds())
+	mins := secs / 60
+	secs = secs % 60
+	hours := mins / 60
+	mins = mins % 60
+
+	if hours > 0 {
+		return fmt.Sprintf("%dh%dm%ds", hours, mins, secs)
+	}
+
+	if mins > 0 {
+		return fmt.Sprintf("%dm%ds", mins, secs)
+	}
+	return fmt.Sprintf("%ds", secs)
+}
+
+func Upd(key, value, old []byte) ([]byte, bool, error) {
+	if old == nil {
+		return value, true, nil
+	}
+
+	found := false
+	vsize := len(value)
+
+	for i := 0; i < len(old); i += vsize {
+		if bytes.Equal(value, old[i:i+vsize]) {
+			found = true
+			break
+		}
+	}
+
+	if found {
+		return nil, false, nil
+	}
+
+	return append(old, value...), true, nil
+}
+
 func New(path string) (RomDB, error) {
-	return DBFactory(path)
+	glog.Infof("Loading DB")
+	startTime := time.Now()
+
+	db, err := DBFactory(path)
+
+	elapsed := time.Since(startTime)
+
+	glog.Infof("Done Loading DB in %s", FormatDuration(elapsed))
+
+	return db, err
 }
 
 func WriteGenerationFile(root string, size int64) error {
