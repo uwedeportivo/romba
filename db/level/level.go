@@ -32,13 +32,14 @@ package level
 
 import (
 	"fmt"
+
+	"github.com/uwedeportivo/romba/db"
+
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/cache"
-	"github.com/syndtr/goleveldb/leveldb/errors"
 	"github.com/syndtr/goleveldb/leveldb/filter"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/storage"
-	"github.com/uwedeportivo/romba/db"
 )
 
 const (
@@ -52,7 +53,7 @@ func init() {
 	db.StoreOpener = openDb
 }
 
-func openDb(path string) (db.KVStore, error) {
+func openDb(path string, keySize int) (db.KVStore, error) {
 	stor, err := storage.OpenFile(path)
 	if err != nil {
 		return nil, err
@@ -77,21 +78,62 @@ type store struct {
 	dbn *leveldb.DB
 }
 
+func (s *store) Append(key, value []byte) error {
+	old, err := s.Get(key)
+	if err != nil {
+		return err
+	}
+
+	v, write, err := db.Upd(key, value, old)
+	if err != nil {
+		return err
+	}
+
+	if write {
+		return s.Set(key, v)
+	}
+	return nil
+}
+
 func (s *store) Set(key, value []byte) error {
 	return s.dbn.Put(key, value, wOptions)
 }
 
 func (s *store) Get(key []byte) ([]byte, error) {
 	value, err := s.dbn.Get(key, rOptions)
-	if err != nil && err != errors.ErrNotFound {
+	if err != nil && err != leveldb.ErrNotFound {
 		return nil, err
 	}
 	return value, nil
 }
 
+func (s *store) Delete(key []byte) error {
+	return s.dbn.Delete(key, wOptions)
+}
+
+func (s *store) Exists(key []byte) (bool, error) {
+	v, err := s.Get(key)
+	if err != nil {
+		return false, err
+	}
+
+	return v != nil, nil
+}
+
+func (s *store) BeginRefresh() error { return nil }
+func (s *store) EndRefresh() error   { return nil }
+func (s *store) PrintStats() string  { return "" }
+
+func (s *store) Flush() {}
+
+func (s *store) Size() int64 {
+	return 0
+}
+
 func (s *store) StartBatch() db.KVBatch {
 	return &batch{
-		bn: leveldb.NewBatch(batchSize),
+		bn: new(leveldb.Batch),
+		s:  s,
 	}
 }
 
@@ -106,10 +148,34 @@ func (s *store) Close() error {
 
 type batch struct {
 	bn *leveldb.Batch
+	s  *store
 }
 
-func (b *batch) Set(key, value []byte) {
+func (b *batch) Append(key, value []byte) error {
+	old, err := b.s.Get(key)
+	if err != nil {
+		return err
+	}
+
+	v, write, err := db.Upd(key, value, old)
+	if err != nil {
+		return err
+	}
+
+	if write {
+		b.bn.Put(key, v)
+	}
+	return nil
+}
+
+func (b *batch) Set(key, value []byte) error {
 	b.bn.Put(key, value)
+	return nil
+}
+
+func (b *batch) Delete(key []byte) error {
+	b.bn.Delete(key)
+	return nil
 }
 
 func (b *batch) Clear() {

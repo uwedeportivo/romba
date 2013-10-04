@@ -31,7 +31,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package kyoto
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/uwedeportivo/cabinet"
 	"github.com/uwedeportivo/romba/db"

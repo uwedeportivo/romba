@@ -47,6 +47,7 @@ import (
 
 	"github.com/golang/glog"
 
+	"github.com/uwedeportivo/romba/archive"
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/service"
 
@@ -100,6 +101,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	for i := 0; i < len(config.Depot.MaxSize); i++ {
+		config.Depot.MaxSize[i] *= int64(archive.GB)
+	}
+
 	runtime.GOMAXPROCS(config.General.Workers)
 
 	flag.Set("log_dir", config.General.LogDir)
@@ -111,9 +116,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	depot, err := archive.NewDepot(config.Depot.Root, config.Depot.MaxSize, romDB)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "creating depot failed: %v\n", err)
+		os.Exit(1)
+	}
+
 	go signalCatcher(romDB)
 
-	rs := service.NewRombaService(romDB, config.Index.Dats, config.General.Workers)
+	rs := service.NewRombaService(romDB, depot, config.Index.Dats, config.General.Workers, config.General.LogDir)
 
 	s := rpc.NewServer()
 	s.RegisterCodec(json2.NewCustomCodec(&rpc.CompressionSelector{}), "application/json")

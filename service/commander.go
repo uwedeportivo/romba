@@ -127,7 +127,7 @@ contents of any changed dats.`,
 	}
 
 	cmd.Commands[1] = &commander.Command{
-		Run:       runCmd,
+		Run:       rs.startArchive,
 		UsageLine: "archive [-only-needed] <space-separated list of directories of ROM files>",
 		Short:     "Adds ROM files from the specified directories to the ROM archive.",
 		Long: `

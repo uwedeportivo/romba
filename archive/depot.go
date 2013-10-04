@@ -38,12 +38,13 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/golang/glog"
 
 	"github.com/uwedeportivo/torrentzip/czip"
 
@@ -53,15 +54,12 @@ import (
 )
 
 type Depot struct {
-	roots      []string
-	sizes      []int64
-	maxSizes   []int64
-	resumePath string
-	numWorkers int
-	romDB      db.RomDB
-	soFar      chan *completed
-	lock       *sync.Mutex
-	start      int
+	roots    []string
+	sizes    []int64
+	maxSizes []int64
+	romDB    db.RomDB
+	lock     *sync.Mutex
+	start    int
 }
 
 type completed struct {
@@ -69,13 +67,24 @@ type completed struct {
 	workerIndex int
 }
 
-type slave struct {
+type archiveWorker struct {
 	depot *Depot
 	hh    *Hashes
 	index int
+	pm    *archiveMaster
 }
 
-func NewDepot(roots []string, maxSize []int64, romDB db.RomDB, numWorkers int) (*Depot, error) {
+type archiveMaster struct {
+	depot           *Depot
+	resumePath      string
+	numWorkers      int
+	pt              worker.ProgressTracker
+	soFar           chan *completed
+	resumeLogFile   *os.File
+	resumeLogWriter *bufio.Writer
+}
+
+func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	depot := new(Depot)
 	depot.roots = make([]string, len(roots))
 	depot.sizes = make([]int64, len(roots))
@@ -91,54 +100,72 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB, numWorkers int) (
 		}
 		depot.sizes[k] = size
 	}
-	depot.soFar = make(chan *completed)
-	depot.lock = new(sync.Mutex)
 	depot.romDB = romDB
-	depot.numWorkers = numWorkers
+	depot.lock = new(sync.Mutex)
 	return depot, nil
 }
 
-func (depot *Depot) Archive(paths []string, resumePath string, resumeLog *log.Logger, archiveLog *log.Logger) error {
-	depot.resumePath = resumePath
+func (depot *Depot) Archive(paths []string, resumePath string, numWorkers int,
+	logDir string, pt worker.ProgressTracker) (string, error) {
 
-	go depot.loopObserver(resumeLog)
-
-	err := worker.Work("archive roms", paths, depot, archiveLog)
-
-	depot.soFar <- &completed{
-		workerIndex: -1,
-	}
-
+	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
+	resumeLogFile, err := os.Create(resumeLogPath)
 	if err != nil {
-		return err
+		return "", err
 	}
+	resumeLogWriter := bufio.NewWriter(resumeLogFile)
 
-	for k, root := range depot.roots {
-		err := writeSizeFile(root, depot.sizes[k])
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	pm := new(archiveMaster)
+	pm.depot = depot
+	pm.resumePath = resumePath
+	pm.pt = pt
+	pm.numWorkers = numWorkers
+	pm.soFar = make(chan *completed)
+	pm.resumeLogWriter = resumeLogWriter
+	pm.resumeLogFile = resumeLogFile
+
+	go pm.loopObserver(resumeLogWriter)
+
+	return worker.Work("archive roms", paths, pm)
 }
 
-func (depot *Depot) Accept(path string) bool {
-	if depot.resumePath != "" {
-		return path > depot.resumePath
+func (pm *archiveMaster) Accept(path string) bool {
+	if pm.resumePath != "" {
+		return path > pm.resumePath
 	}
 	return true
 }
 
-func (depot *Depot) NewWorker(index int) worker.Worker {
-	return &slave{
-		depot: depot,
+func (pm *archiveMaster) NewWorker(workerIndex int) worker.Worker {
+	return &archiveWorker{
+		depot: pm.depot,
 		hh:    newHashes(),
-		index: index,
+		index: workerIndex,
+		pm:    pm,
 	}
 }
 
-func (depot *Depot) NumWorkers() int {
-	return depot.numWorkers
+func (pm *archiveMaster) NumWorkers() int {
+	return pm.numWorkers
+}
+
+func (pm *archiveMaster) ProgressTracker() worker.ProgressTracker {
+	return pm.pt
+}
+
+func (pm *archiveMaster) FinishUp() error {
+	pm.soFar <- &completed{
+		workerIndex: -1,
+	}
+
+	pm.depot.writeSizes()
+	pm.resumeLogWriter.Flush()
+
+	return pm.resumeLogFile.Close()
+}
+
+func (pm *archiveMaster) Start() error {
+	return nil
 }
 
 func (depot *Depot) reserveRoot(size int64) (int, error) {
@@ -156,6 +183,18 @@ func (depot *Depot) reserveRoot(size int64) (int, error) {
 	return -1, fmt.Errorf("out of disk space")
 }
 
+func (depot *Depot) writeSizes() {
+	depot.lock.Lock()
+	defer depot.lock.Unlock()
+
+	for k, root := range depot.roots {
+		err := writeSizeFile(root, depot.sizes[k])
+		if err != nil {
+			glog.Errorf("failed to write size file into %s: %v\n", root, err)
+		}
+	}
+}
+
 func (depot *Depot) adjustSize(index int, delta int64) {
 	depot.lock.Lock()
 	defer depot.lock.Unlock()
@@ -163,7 +202,7 @@ func (depot *Depot) adjustSize(index int, delta int64) {
 	depot.sizes[index] += delta
 }
 
-func (w *slave) Process(path string, size int64, logger *log.Logger) error {
+func (w *archiveWorker) Process(path string, size int64) error {
 	var err error
 
 	if filepath.Ext(path) == zipSuffix {
@@ -177,9 +216,9 @@ func (w *slave) Process(path string, size int64, logger *log.Logger) error {
 	}
 
 	rom := new(types.Rom)
-	rom.Crc = make([]byte, 0, crc32.Size)
-	rom.Md5 = make([]byte, 0, md5.Size)
-	rom.Sha1 = make([]byte, 0, sha1.Size)
+	rom.Crc = make([]byte, crc32.Size)
+	rom.Md5 = make([]byte, md5.Size)
+	rom.Sha1 = make([]byte, sha1.Size)
 	copy(rom.Crc, w.hh.Crc)
 	copy(rom.Md5, w.hh.Md5)
 	copy(rom.Sha1, w.hh.Sha1)
@@ -192,20 +231,20 @@ func (w *slave) Process(path string, size int64, logger *log.Logger) error {
 		return err
 	}
 
-	w.depot.soFar <- &completed{
+	w.pm.soFar <- &completed{
 		path:        path,
 		workerIndex: w.index,
 	}
 	return nil
 }
 
-func (w *slave) Close() error {
+func (w *archiveWorker) Close() error {
 	return nil
 }
 
 type readerOpener func() (io.ReadCloser, error)
 
-func (w *slave) archive(ro readerOpener, size int64) (int64, error) {
+func (w *archiveWorker) archive(ro readerOpener, size int64) (int64, error) {
 	r, err := ro()
 	if err != nil {
 		return 0, err
@@ -256,7 +295,7 @@ func (w *slave) archive(ro readerOpener, size int64) (int64, error) {
 	return compressedSize, nil
 }
 
-func (w *slave) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
+func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
 	zr, err := czip.OpenReader(inpath)
 	if err != nil {
 		return 0, err
@@ -283,17 +322,17 @@ func (w *slave) archiveZip(inpath string, size int64, addZipItself bool) (int64,
 	return compressedSize, nil
 }
 
-func (w *slave) archiveRom(inpath string, size int64) (int64, error) {
+func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
 	return w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, size)
 }
 
-func (depot *Depot) loopObserver(logger *log.Logger) {
+func (pm *archiveMaster) loopObserver(writer io.Writer) {
 	ticker := time.NewTicker(time.Minute * 1)
-	comps := make([]string, depot.numWorkers)
+	comps := make([]string, pm.numWorkers)
 
 	for {
 		select {
-		case comp := <-depot.soFar:
+		case comp := <-pm.soFar:
 			if comp.workerIndex == -1 {
 				break
 			}
@@ -301,17 +340,8 @@ func (depot *Depot) loopObserver(logger *log.Logger) {
 		case <-ticker.C:
 			if comps[0] != "" {
 				sort.Strings(comps)
-				logger.Println(comps[0])
-
-				depot.lock.Lock()
-
-				for k, root := range depot.roots {
-					err := writeSizeFile(root, depot.sizes[k])
-					if err != nil {
-						fmt.Printf("failed to write size file into %s: %v\n", root, err)
-					}
-				}
-				depot.lock.Unlock()
+				fmt.Fprint(writer, "%s\n", comps[0])
+				pm.depot.writeSizes()
 			}
 		}
 	}

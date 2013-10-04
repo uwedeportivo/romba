@@ -52,6 +52,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/gonuts/commander"
 
+	"github.com/uwedeportivo/romba/archive"
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
@@ -71,6 +72,8 @@ type ProgressNessage struct {
 
 type RombaService struct {
 	romDB             db.RomDB
+	depot             *archive.Depot
+	logDir            string
 	dats              string
 	numWorkers        int
 	pt                worker.ProgressTracker
@@ -89,10 +92,12 @@ type TerminalReply struct {
 	Message string
 }
 
-func NewRombaService(romDB db.RomDB, dats string, numWorkers int) *RombaService {
+func NewRombaService(romDB db.RomDB, depot *archive.Depot, dats string, numWorkers int, logDir string) *RombaService {
 	rs := new(RombaService)
 	rs.romDB = romDB
+	rs.depot = depot
 	rs.dats = dats
+	rs.logDir = logDir
 	rs.numWorkers = numWorkers
 	rs.pt = worker.NewProgressTracker()
 	rs.jobMutex = new(sync.Mutex)
@@ -384,4 +389,65 @@ func (rs *RombaService) SendProgress(ws *websocket.Conn) {
 
 	rs.unregisterProgressListener(listName)
 	close(listC)
+}
+
+func (rs *RombaService) startArchive(cmd *commander.Command, args []string) error {
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	if len(args) == 0 {
+		return nil
+	}
+
+	if rs.busy {
+		p := rs.pt.GetProgress()
+
+		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+			p.FilesSoFar, p.TotalFiles, humanize.Bytes(uint64(p.BytesSoFar)), humanize.Bytes(uint64(p.TotalBytes)))
+		return nil
+	}
+
+	rs.pt.Reset()
+	rs.busy = true
+	rs.jobName = "archive"
+
+	go func() {
+		glog.Infof("service starting archive")
+		rs.broadCastProgress(time.Now(), true, false, "")
+		ticker := time.NewTicker(time.Second * 5)
+		stopTicker := make(chan bool)
+		go func() {
+			glog.Infof("starting progress broadcaster")
+			for {
+				select {
+				case t := <-ticker.C:
+					rs.broadCastProgress(t, false, false, "")
+				case <-stopTicker:
+					glog.Info("stopped progress broadcaster")
+					return
+				}
+			}
+		}()
+
+		resume := cmd.Flag.Lookup("resume").Value.Get().(string)
+
+		endMsg, err := rs.depot.Archive(args, resume, rs.numWorkers, rs.logDir, rs.pt)
+		if err != nil {
+			glog.Errorf("error archiving: %v", err)
+		}
+
+		ticker.Stop()
+		stopTicker <- true
+
+		rs.jobMutex.Lock()
+		rs.busy = false
+		rs.jobName = ""
+		rs.jobMutex.Unlock()
+
+		rs.broadCastProgress(time.Now(), false, true, endMsg)
+		glog.Infof("service finished archiving")
+	}()
+
+	fmt.Fprintf(cmd.Stdout, "started archiving")
+	return nil
 }
