@@ -41,6 +41,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -319,48 +320,167 @@ func (rs *RombaService) shutdown(cmd *commander.Command, args []string) error {
 	return nil
 }
 
+type buildWorker struct {
+	pm *buildMaster
+}
+
+func (pw *buildWorker) Process(path string, size int64) error {
+	hashes, err := archive.HashesForFile(path)
+	if err != nil {
+		return err
+	}
+
+	dat, err := pw.pm.rs.romDB.GetDat(hashes.Sha1)
+	if err != nil {
+		return err
+	}
+
+	if dat == nil {
+		// TODO(uwe): maybe parse it and add it to the DB
+		glog.Warningf("did not find a DAT for %s, maybe a refresh is needed", path)
+		return nil
+	}
+
+	reldatdir, err := filepath.Rel(pw.pm.commonRootPath, filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+
+	datdir := filepath.Join(pw.pm.outpath, reldatdir)
+
+	err = os.MkdirAll(datdir, 0777)
+	if err != nil {
+		return err
+	}
+
+	// TODO(uwe): make sure all the roms have sha1
+	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir)
+	if err != nil {
+		return err
+	}
+
+	glog.Infof("finished building dat %s in directory %s\n", dat.Name, datdir)
+	if !datComplete {
+		glog.Info("dat has missing roms")
+	}
+	return nil
+}
+
+func (pw *buildWorker) Close() error {
+	return nil
+}
+
+type buildMaster struct {
+	rs             *RombaService
+	numWorkers     int
+	pt             worker.ProgressTracker
+	commonRootPath string
+	outpath        string
+}
+
+func (pm *buildMaster) Accept(path string) bool {
+	ext := filepath.Ext(path)
+	return ext == ".dat" || ext == ".xml"
+}
+
+func (pm *buildMaster) NewWorker(workerIndex int) worker.Worker {
+	return &buildWorker{
+		pm: pm,
+	}
+}
+
+func (pm *buildMaster) NumWorkers() int {
+	return pm.numWorkers
+}
+
+func (pm *buildMaster) ProgressTracker() worker.ProgressTracker {
+	return pm.pt
+}
+
+func (pm *buildMaster) FinishUp() error {
+	return nil
+}
+
+func (pm *buildMaster) Start() error {
+	return nil
+}
+
+func (pm *buildMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {
+	pm.commonRootPath = commonRootPath
+}
+
 func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 	outpath := cmd.Flag.Lookup("out").Value.Get().(string)
+	if !filepath.IsAbs(outpath) {
+		absoutpath, err := filepath.Abs(outpath)
+		if err != nil {
+			return err
+		}
+		outpath = absoutpath
+	}
+
 	if err := os.MkdirAll(outpath, 0777); err != nil {
 		return err
 	}
 
-	for _, arg := range args {
-		exists, err := archive.PathExists(arg)
-		if err != nil {
-			return err
-		}
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
 
-		if !exists {
-			continue
-		}
+	if rs.busy {
+		p := rs.pt.GetProgress()
 
-		hashes, err := archive.HashesForFile(arg)
-		if err != nil {
-			return err
-		}
-
-		dat, err := rs.romDB.GetDat(hashes.Sha1)
-		if err != nil {
-			return err
-		}
-
-		if dat == nil {
-			continue
-		}
-
-		// TODO(uwe): make sure all the roms have sha1
-		datComplete, err := rs.depot.BuildDat(dat, outpath)
-		if err != nil {
-			return err
-		}
-
-		fmt.Fprintf(cmd.Stdout, "finished building dat %s  in directory %s\n", dat.Name, outpath)
-		if !datComplete {
-			fmt.Fprintf(cmd.Stdout, "dat has missing roms, see log output for details\n")
-		}
+		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+			p.FilesSoFar, p.TotalFiles, humanize.Bytes(uint64(p.BytesSoFar)), humanize.Bytes(uint64(p.TotalBytes)))
+		return nil
 	}
 
+	rs.pt.Reset()
+	rs.busy = true
+	rs.jobName = "build"
+
+	go func() {
+		glog.Infof("service starting build")
+		rs.broadCastProgress(time.Now(), true, false, "")
+		ticker := time.NewTicker(time.Second * 5)
+		stopTicker := make(chan bool)
+		go func() {
+			glog.Infof("starting progress broadcaster")
+			for {
+				select {
+				case t := <-ticker.C:
+					rs.broadCastProgress(t, false, false, "")
+				case <-stopTicker:
+					glog.Info("stopped progress broadcaster")
+					return
+				}
+			}
+		}()
+
+		pm := &buildMaster{
+			outpath:    outpath,
+			rs:         rs,
+			numWorkers: rs.numWorkers,
+			pt:         rs.pt,
+		}
+
+		endMsg, err := worker.Work("building dats", args, pm)
+		if err != nil {
+			glog.Errorf("error building dats: %v", err)
+		}
+
+		ticker.Stop()
+		stopTicker <- true
+
+		rs.jobMutex.Lock()
+		rs.busy = false
+		rs.jobName = ""
+		rs.jobMutex.Unlock()
+
+		rs.broadCastProgress(time.Now(), false, true, endMsg)
+		glog.Infof("service finished build")
+	}()
+
+	fmt.Fprintf(cmd.Stdout, "started build")
 	return nil
 }
 

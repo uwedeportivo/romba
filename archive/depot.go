@@ -152,6 +152,14 @@ func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
 	return nil, nil
 }
 
+func incompleteFilename(name string) string {
+	dir, file := filepath.Split(name)
+	ext := filepath.Ext(file)
+	base := file[:len(file)-len(ext)]
+
+	return filepath.Join(dir, fmt.Sprintf("%s-incomplete%s", base, ext))
+}
+
 func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
 	datPath := filepath.Join(outpath, dat.Name)
 
@@ -162,9 +170,15 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
 
 	datComplete := true
 	for _, game := range dat.Games {
-		gameComplete, err := depot.buildGame(game, datPath)
+		gamePath, gameComplete, err := depot.buildGame(game, datPath)
 		if err != nil {
 			return false, err
+		}
+		if !gameComplete {
+			err = os.Rename(gamePath, incompleteFilename(gamePath))
+			if err != nil {
+				return false, err
+			}
 		}
 		datComplete = datComplete && gameComplete
 	}
@@ -172,25 +186,32 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
 	return datComplete, nil
 }
 
-func (depot *Depot) buildGame(game *types.Game, datPath string) (bool, error) {
-	gameFile, err := os.Create(filepath.Join(datPath, game.Name+zipSuffix))
+func (depot *Depot) buildGame(game *types.Game, datPath string) (string, bool, error) {
+	gamePath := filepath.Join(datPath, game.Name+zipSuffix)
+	gameFile, err := os.Create(gamePath)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 	defer gameFile.Close()
 
 	gameTorrent, err := torrentzip.NewWriter(gameFile)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 	defer gameTorrent.Close()
 
 	gameComplete := true
 
 	for _, rom := range game.Roms {
+		if rom.Sha1 == nil {
+			gameComplete = false
+			glog.Warningf("game %s has missing rom %s", game.Name, rom.Name)
+			continue
+		}
+
 		romGZ, err := depot.OpenRomGZ(rom)
 		if err != nil {
-			return false, err
+			return "", false, err
 		}
 
 		if romGZ == nil {
@@ -201,23 +222,23 @@ func (depot *Depot) buildGame(game *types.Game, datPath string) (bool, error) {
 
 		src, err := cgzip.NewReader(romGZ)
 		if err != nil {
-			return false, err
+			return "", false, err
 		}
 
 		dst, err := gameTorrent.Create(rom.Name)
 		if err != nil {
-			return false, err
+			return "", false, err
 		}
 
 		_, err = io.Copy(dst, src)
 		if err != nil {
-			return false, err
+			return "", false, err
 		}
 
 		src.Close()
 		romGZ.Close()
 	}
-	return gameComplete, nil
+	return gamePath, gameComplete, nil
 }
 
 func (pm *archiveMaster) Accept(path string) bool {
@@ -258,6 +279,8 @@ func (pm *archiveMaster) FinishUp() error {
 func (pm *archiveMaster) Start() error {
 	return nil
 }
+
+func (pm *archiveMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
 
 func (depot *Depot) reserveRoot(size int64) (int, error) {
 	depot.lock.Lock()

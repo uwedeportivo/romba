@@ -224,6 +224,8 @@ func (pm *refreshMaster) Start() error {
 	return pm.romdb.BeginDatRefresh()
 }
 
+func (pm *refreshMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
+
 func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTracker) (string, error) {
 	err := romdb.OrphanDats()
 	if err != nil {

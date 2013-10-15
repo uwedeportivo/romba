@@ -95,6 +95,8 @@ func (pm *parseMaster) Start() error {
 	return nil
 }
 
+func (pm *parseMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
+
 func (pm *parseMaster) ProgressTracker() worker.ProgressTracker {
 	return worker.NewProgressTracker()
 }

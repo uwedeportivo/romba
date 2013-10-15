@@ -43,15 +43,73 @@ import (
 )
 
 type countVisitor struct {
-	numBytes int64
-	numFiles int
-	master   Master
+	numBytes       int64
+	numFiles       int
+	commonRootPath string
+	master         Master
+}
+
+func commonRoot(pa, pb string) string {
+	if pa == "" || pb == "" {
+		return ""
+	}
+
+	pac := filepath.Clean(pa)
+	pbc := filepath.Clean(pb)
+
+	va := filepath.VolumeName(pac)
+	vb := filepath.VolumeName(pbc)
+
+	if va != vb {
+		return ""
+	}
+
+	sa := pac[len(va):]
+	sb := pbc[len(vb):]
+
+	na := len(sa)
+	nb := len(sb)
+
+	var cursor, lastSep int
+	lastSep = -1
+
+	for {
+		if cursor < na && cursor < nb && sa[cursor] == sb[cursor] {
+			if sa[cursor] == filepath.Separator {
+				lastSep = cursor
+			}
+			cursor++
+		} else {
+			break
+		}
+	}
+
+	if cursor == na && na == nb {
+		return pac
+	}
+
+	if lastSep == -1 {
+		return va + string(filepath.Separator)
+	}
+
+	res := pac[0 : len(va)+lastSep]
+
+	if res == "" && filepath.Separator == '/' {
+		return "/"
+	}
+
+	return res
 }
 
 func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 	if !f.IsDir() && cv.master.Accept(path) {
 		cv.numFiles += 1
 		cv.numBytes += f.Size()
+		if cv.commonRootPath == "" {
+			cv.commonRootPath = path
+		} else {
+			cv.commonRootPath = commonRoot(cv.commonRootPath, path)
+		}
 	}
 	return nil
 }
@@ -83,6 +141,7 @@ type Master interface {
 	ProgressTracker() ProgressTracker
 	FinishUp() error
 	Start() error
+	Scanned(numFiles int, numBytes int64, commonRootPath string)
 }
 
 type workUnit struct {
@@ -134,6 +193,16 @@ func Work(workname string, paths []string, master Master) (string, error) {
 	cv := new(countVisitor)
 	cv.master = master
 
+	for k, name := range paths {
+		if !filepath.IsAbs(name) {
+			absname, err := filepath.Abs(name)
+			if err != nil {
+				return "", err
+			}
+			paths[k] = absname
+		}
+	}
+
 	for _, name := range paths {
 		glog.Infof("initial scan of %s to determine amount of work\n", name)
 
@@ -145,6 +214,8 @@ func Work(workname string, paths []string, master Master) (string, error) {
 	}
 
 	glog.Infof("found %d files and %s to do. starting work...\n", cv.numFiles, humanize.Bytes(uint64(cv.numBytes)))
+
+	master.Scanned(cv.numFiles, cv.numBytes, cv.commonRootPath)
 
 	pt.SetTotalBytes(cv.numBytes)
 	pt.SetTotalFiles(int32(cv.numFiles))
