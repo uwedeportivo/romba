@@ -246,7 +246,7 @@ tree structure.`,
 	cmd.Commands[7].Flag.String("out", "", "output dir")
 
 	cmd.Commands[8] = &commander.Command{
-		Run:       runCmd,
+		Run:       rs.build,
 		UsageLine: "build -out <outputdir> <list of DAT files or folders with DAT files>",
 		Short:     "For each specified DAT file it creates the torrentzip files.",
 		Long: `

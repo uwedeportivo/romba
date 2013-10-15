@@ -46,6 +46,8 @@ import (
 
 	"github.com/golang/glog"
 
+	"github.com/uwedeportivo/torrentzip"
+	"github.com/uwedeportivo/torrentzip/cgzip"
 	"github.com/uwedeportivo/torrentzip/czip"
 
 	"github.com/uwedeportivo/romba/db"
@@ -127,6 +129,95 @@ func (depot *Depot) Archive(paths []string, resumePath string, numWorkers int,
 	go pm.loopObserver(resumeLogWriter)
 
 	return worker.Work("archive roms", paths, pm)
+}
+
+func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
+	if rom.Sha1 == nil {
+		return nil, fmt.Errorf("cannot open rom %s because SHA1 is missing", rom.Name)
+	}
+
+	sha1Hex := hex.EncodeToString(rom.Sha1)
+
+	for _, root := range depot.roots {
+		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
+		exists, err := PathExists(rompath)
+		if err != nil {
+			return nil, err
+		}
+
+		if exists {
+			return os.Open(rompath)
+		}
+	}
+	return nil, nil
+}
+
+func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
+	datPath := filepath.Join(outpath, dat.Name)
+
+	err := os.Mkdir(datPath, 0777)
+	if err != nil {
+		return false, err
+	}
+
+	datComplete := true
+	for _, game := range dat.Games {
+		gameComplete, err := depot.buildGame(game, datPath)
+		if err != nil {
+			return false, err
+		}
+		datComplete = datComplete && gameComplete
+	}
+
+	return datComplete, nil
+}
+
+func (depot *Depot) buildGame(game *types.Game, datPath string) (bool, error) {
+	gameFile, err := os.Create(filepath.Join(datPath, game.Name+zipSuffix))
+	if err != nil {
+		return false, err
+	}
+	defer gameFile.Close()
+
+	gameTorrent, err := torrentzip.NewWriter(gameFile)
+	if err != nil {
+		return false, err
+	}
+	defer gameTorrent.Close()
+
+	gameComplete := true
+
+	for _, rom := range game.Roms {
+		romGZ, err := depot.OpenRomGZ(rom)
+		if err != nil {
+			return false, err
+		}
+
+		if romGZ == nil {
+			gameComplete = false
+			glog.Warningf("game %s has missing rom %s", game.Name, rom.Name)
+			continue
+		}
+
+		src, err := cgzip.NewReader(romGZ)
+		if err != nil {
+			return false, err
+		}
+
+		dst, err := gameTorrent.Create(rom.Name)
+		if err != nil {
+			return false, err
+		}
+
+		_, err = io.Copy(dst, src)
+		if err != nil {
+			return false, err
+		}
+
+		src.Close()
+		romGZ.Close()
+	}
+	return gameComplete, nil
 }
 
 func (pm *archiveMaster) Accept(path string) bool {

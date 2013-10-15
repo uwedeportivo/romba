@@ -319,6 +319,51 @@ func (rs *RombaService) shutdown(cmd *commander.Command, args []string) error {
 	return nil
 }
 
+func (rs *RombaService) build(cmd *commander.Command, args []string) error {
+	outpath := cmd.Flag.Lookup("out").Value.Get().(string)
+	if err := os.MkdirAll(outpath, 0777); err != nil {
+		return err
+	}
+
+	for _, arg := range args {
+		exists, err := archive.PathExists(arg)
+		if err != nil {
+			return err
+		}
+
+		if !exists {
+			continue
+		}
+
+		hashes, err := archive.HashesForFile(arg)
+		if err != nil {
+			return err
+		}
+
+		dat, err := rs.romDB.GetDat(hashes.Sha1)
+		if err != nil {
+			return err
+		}
+
+		if dat == nil {
+			continue
+		}
+
+		// TODO(uwe): make sure all the roms have sha1
+		datComplete, err := rs.depot.BuildDat(dat, outpath)
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintf(cmd.Stdout, "finished building dat %s  in directory %s\n", dat.Name, outpath)
+		if !datComplete {
+			fmt.Fprintf(cmd.Stdout, "dat has missing roms, see log output for details\n")
+		}
+	}
+
+	return nil
+}
+
 func (rs *RombaService) memstats(cmd *commander.Command, args []string) error {
 	rs.jobMutex.Lock()
 	defer rs.jobMutex.Unlock()
