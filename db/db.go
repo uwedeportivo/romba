@@ -69,6 +69,7 @@ type RomDB interface {
 	Close() error
 	GetDat(sha1 []byte) (*types.Dat, error)
 	DatsForRom(rom *types.Rom) ([]*types.Dat, error)
+	CompleteRom(rom *types.Rom) error
 	BeginDatRefresh() error
 	EndDatRefresh() error
 	PrintStats() string

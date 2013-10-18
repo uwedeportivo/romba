@@ -281,8 +281,13 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 			return err
 		}
 
+		err = rs.romDB.CompleteRom(r)
+		if err != nil {
+			return err
+		}
+
 		if len(dats) > 0 {
-			fmt.Fprintf(cmd.Stdout, "rom with hash %s = %s\n", arg, types.PrintRomInDats(dats))
+			fmt.Fprintf(cmd.Stdout, "rom in %s\n", types.PrintRomInDats(dats))
 		}
 	}
 
@@ -353,7 +358,15 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		return err
 	}
 
-	// TODO(uwe): make sure all the roms have sha1
+	for _, game := range dat.Games {
+		for _, rom := range game.Roms {
+			err = pw.pm.rs.romDB.CompleteRom(rom)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir)
 	if err != nil {
 		return err

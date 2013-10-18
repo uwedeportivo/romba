@@ -92,6 +92,22 @@ func (hh *Hashes) forReader(in io.Reader) error {
 	return nil
 }
 
+func HashesForGZFile(inpath string) (*Hashes, error) {
+	file, err := os.Open(inpath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	gzipReader, err := cgzip.NewReader(file)
+	if err != nil {
+		return nil, err
+	}
+	defer gzipReader.Close()
+
+	return hashesForReader(gzipReader)
+}
+
 func HashesForFile(inpath string) (*Hashes, error) {
 	file, err := os.Open(inpath)
 	if err != nil {
@@ -190,19 +206,28 @@ func archive(outpath string, r io.Reader) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer outfile.Close()
 
 	cw := &countWriter{
 		w: outfile,
 	}
 
 	bufout := bufio.NewWriter(cw)
-	defer bufout.Flush()
 
 	zipWriter := cgzip.NewWriter(bufout)
-	defer zipWriter.Close()
 
 	_, err = io.Copy(zipWriter, br)
+	if err != nil {
+		return 0, err
+	}
+
+	err = zipWriter.Close()
+	if err != nil {
+		return 0, err
+	}
+
+	bufout.Flush()
+
+	err = outfile.Close()
 	if err != nil {
 		return 0, err
 	}

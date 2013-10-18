@@ -32,6 +32,7 @@ package archive
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/hex"
@@ -45,6 +46,8 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+
+	"github.com/dustin/go-humanize"
 
 	"github.com/uwedeportivo/torrentzip"
 	"github.com/uwedeportivo/torrentzip/cgzip"
@@ -102,6 +105,14 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 		}
 		depot.sizes[k] = size
 	}
+
+	glog.Info("Initializing Depot with the following roots")
+
+	for k, root := range depot.roots {
+		glog.Infof("root = %s, maxSize = %s, size = %s", root,
+			humanize.Bytes(uint64(depot.maxSizes[k])), humanize.Bytes(uint64(depot.sizes[k])))
+	}
+
 	depot.romDB = romDB
 	depot.lock = new(sync.Mutex)
 	return depot, nil
@@ -136,19 +147,59 @@ func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("cannot open rom %s because SHA1 is missing", rom.Name)
 	}
 
-	sha1Hex := hex.EncodeToString(rom.Sha1)
+	if len(rom.Sha1) == sha1.Size {
+		sha1Hex := hex.EncodeToString(rom.Sha1)
 
-	for _, root := range depot.roots {
-		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
-		exists, err := PathExists(rompath)
-		if err != nil {
-			return nil, err
+		for _, root := range depot.roots {
+			rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
+			exists, err := PathExists(rompath)
+			if err != nil {
+				return nil, err
+			}
+
+			if exists {
+				return os.Open(rompath)
+			}
 		}
+	} else {
+		glog.Infof("searching for the right file for rom %s because of hash collisions", rom.Name)
+		for i := 0; i < len(rom.Sha1); i += sha1.Size {
+			sha1Hex := hex.EncodeToString(rom.Sha1[i : i+sha1.Size])
 
-		if exists {
-			return os.Open(rompath)
+			glog.Infof("trying SHA1 %s", sha1Hex)
+
+			for _, root := range depot.roots {
+				rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
+				exists, err := PathExists(rompath)
+				if err != nil {
+					return nil, err
+				}
+
+				if exists {
+					// double check that it matches crc or md5
+					if rom.Crc != nil || rom.Md5 != nil {
+						hh, err := HashesForGZFile(rompath)
+						if err != nil {
+							return nil, err
+						}
+
+						if rom.Md5 != nil && bytes.Equal(rom.Md5, hh.Md5) {
+							return os.Open(rompath)
+						}
+
+						if rom.Crc != nil && bytes.Equal(rom.Crc, hh.Crc) {
+							return os.Open(rompath)
+						}
+
+					} else {
+						glog.Warningf("rom %s with collision SHA1 and no other hash to disambigue", rom.Name)
+						return os.Open(rompath)
+					}
+				}
+			}
 		}
 	}
+
 	return nil, nil
 }
 
@@ -205,7 +256,7 @@ func (depot *Depot) buildGame(game *types.Game, datPath string) (string, bool, e
 	for _, rom := range game.Roms {
 		if rom.Sha1 == nil {
 			gameComplete = false
-			glog.Warningf("game %s has missing rom %s", game.Name, rom.Name)
+			glog.Warningf("game %s has rom with missing SHA1 %s", game.Name, rom.Name)
 			continue
 		}
 
@@ -216,7 +267,7 @@ func (depot *Depot) buildGame(game *types.Game, datPath string) (string, bool, e
 
 		if romGZ == nil {
 			gameComplete = false
-			glog.Warningf("game %s has missing rom %s", game.Name, rom.Name)
+			glog.Warningf("game %s has missing rom %s (sha1 %s)", game.Name, rom.Name, hex.EncodeToString(rom.Sha1))
 			continue
 		}
 
@@ -294,7 +345,14 @@ func (depot *Depot) reserveRoot(size int64) (int, error) {
 			depot.start = i
 		}
 	}
-	return -1, fmt.Errorf("out of disk space")
+
+	glog.Error("Depot with the following roots ran out of disk space")
+	for k, root := range depot.roots {
+		glog.Errorf("root = %s, maxSize = %s, size = %s", root,
+			humanize.Bytes(uint64(depot.maxSizes[k])), humanize.Bytes(uint64(depot.sizes[k])))
+	}
+
+	return -1, fmt.Errorf("depot ran out of disk space")
 }
 
 func (depot *Depot) writeSizes() {
@@ -329,22 +387,6 @@ func (w *archiveWorker) Process(path string, size int64) error {
 		return err
 	}
 
-	rom := new(types.Rom)
-	rom.Crc = make([]byte, crc32.Size)
-	rom.Md5 = make([]byte, md5.Size)
-	rom.Sha1 = make([]byte, sha1.Size)
-	copy(rom.Crc, w.hh.Crc)
-	copy(rom.Md5, w.hh.Md5)
-	copy(rom.Sha1, w.hh.Sha1)
-	rom.Name = filepath.Base(path)
-	rom.Size = size
-	rom.Path = path
-
-	err = w.depot.romDB.IndexRom(rom)
-	if err != nil {
-		return err
-	}
-
 	w.pm.soFar <- &completed{
 		path:        path,
 		workerIndex: w.index,
@@ -358,7 +400,7 @@ func (w *archiveWorker) Close() error {
 
 type readerOpener func() (io.ReadCloser, error)
 
-func (w *archiveWorker) archive(ro readerOpener, size int64) (int64, error) {
+func (w *archiveWorker) archive(ro readerOpener, root int, name, path string, size int64) (int64, error) {
 	r, err := ro()
 	if err != nil {
 		return 0, err
@@ -376,12 +418,23 @@ func (w *archiveWorker) archive(ro readerOpener, size int64) (int64, error) {
 		return 0, err
 	}
 
-	sha1Hex := hex.EncodeToString(w.hh.Sha1)
+	rom := new(types.Rom)
+	rom.Crc = make([]byte, crc32.Size)
+	rom.Md5 = make([]byte, md5.Size)
+	rom.Sha1 = make([]byte, sha1.Size)
+	copy(rom.Crc, w.hh.Crc)
+	copy(rom.Md5, w.hh.Md5)
+	copy(rom.Sha1, w.hh.Sha1)
+	rom.Name = name
+	rom.Size = size
+	rom.Path = path
 
-	root, err := w.depot.reserveRoot(size)
+	err = w.depot.romDB.IndexRom(rom)
 	if err != nil {
 		return 0, err
 	}
+
+	sha1Hex := hex.EncodeToString(w.hh.Sha1)
 
 	outpath := pathFromSha1HexEncoding(w.depot.roots[root], sha1Hex, gzipSuffix)
 
@@ -405,11 +458,16 @@ func (w *archiveWorker) archive(ro readerOpener, size int64) (int64, error) {
 		return 0, err
 	}
 
-	w.depot.adjustSize(root, compressedSize-size)
+	w.depot.adjustSize(root, compressedSize)
 	return compressedSize, nil
 }
 
 func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
+	root, err := w.depot.reserveRoot(size)
+	if err != nil {
+		return 0, err
+	}
+
 	zr, err := czip.OpenReader(inpath)
 	if err != nil {
 		return 0, err
@@ -419,7 +477,8 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 	var compressedSize int64
 
 	for _, zf := range zr.File {
-		cs, err := w.archive(func() (io.ReadCloser, error) { return zf.Open() }, size)
+		cs, err := w.archive(func() (io.ReadCloser, error) { return zf.Open() }, root,
+			zf.FileInfo().Name(), filepath.Join(inpath, zf.FileInfo().Name()), zf.FileInfo().Size())
 		if err != nil {
 			return 0, err
 		}
@@ -427,7 +486,7 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 	}
 
 	if addZipItself {
-		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, size)
+		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, root, filepath.Base(inpath), inpath, size)
 		if err != nil {
 			return 0, err
 		}
@@ -437,7 +496,11 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 }
 
 func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
-	return w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, size)
+	root, err := w.depot.reserveRoot(size)
+	if err != nil {
+		return 0, err
+	}
+	return w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, root, filepath.Base(inpath), inpath, size)
 }
 
 func (pm *archiveMaster) loopObserver(writer io.Writer) {

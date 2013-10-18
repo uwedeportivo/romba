@@ -63,7 +63,13 @@ game (
 ){{end}}{{end}}
 `
 const datsTemplate = `
-{{range .}}{{.Path}}{{end}}
+{{range .}}
+dat (
+	name "{{.Name}}"
+	description "{{.Description}}"
+	path "{{.Path}}"
+)
+{{end}}
 `
 
 var ff = template.FuncMap{

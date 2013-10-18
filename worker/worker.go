@@ -102,6 +102,9 @@ func commonRoot(pa, pb string) string {
 }
 
 func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
+	if f == nil || f.Name() == ".DS_Store" {
+		return nil
+	}
 	if !f.IsDir() && cv.master.Accept(path) {
 		cv.numFiles += 1
 		cv.numBytes += f.Size()
@@ -120,6 +123,9 @@ type scanVisitor struct {
 }
 
 func (sv *scanVisitor) visit(path string, f os.FileInfo, err error) error {
+	if f == nil || f.Name() == ".DS_Store" {
+		return nil
+	}
 	if !f.IsDir() && sv.master.Accept(path) {
 		sv.inwork <- &workUnit{
 			path: path,
