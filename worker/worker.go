@@ -35,7 +35,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -156,31 +155,34 @@ type workUnit struct {
 }
 
 type slave struct {
-	wg      *sync.WaitGroup
-	closeWg *sync.WaitGroup
-	pt      ProgressTracker
-	worker  Worker
+	closeC chan error
+	pt     ProgressTracker
+	worker Worker
 }
 
 func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string) {
 	glog.Infof("starting worker %d for %s", workerNum, workname)
+	var perr error
 	for wu := range inwork {
 		path := wu.path
 
 		err := w.worker.Process(path, wu.size)
 		if err != nil {
 			glog.Errorf("failed to process %s: %v", path, err)
+			if perr == nil {
+				perr = err
+			}
 		}
 
 		w.pt.AddBytesFromFile(wu.size)
-		w.wg.Done()
 	}
+
 	err := w.worker.Close()
 	if err != nil {
 		glog.Errorf("failed to close worker: %v", err)
 	}
 
-	w.closeWg.Done()
+	w.closeC <- perr
 	glog.Infof("exiting worker %d for %s", workerNum, workname)
 }
 
@@ -233,17 +235,13 @@ func Work(workname string, paths []string, master Master) (string, error) {
 		master: master,
 	}
 
-	wg := new(sync.WaitGroup)
-	wg.Add(cv.numFiles)
-	closeWg := new(sync.WaitGroup)
-	closeWg.Add(master.NumWorkers())
+	closeC := make(chan error, master.NumWorkers())
 
 	for i := 0; i < master.NumWorkers(); i++ {
 		worker := &slave{
-			pt:      pt,
-			worker:  master.NewWorker(i),
-			wg:      wg,
-			closeWg: closeWg,
+			pt:     pt,
+			worker: master.NewWorker(i),
+			closeC: closeC,
 		}
 
 		go runSlave(worker, inwork, i, workname)
@@ -253,24 +251,54 @@ func Work(workname string, paths []string, master Master) (string, error) {
 		err := filepath.Walk(name, sv.visit)
 		if err != nil {
 			glog.Errorf("failed to scan dir %s: %v\n", name, err)
+
 			close(inwork)
-			closeWg.Wait()
+			pt.Finished()
+
+			glog.Infof("Flushing workers and closing work. Hang in there...\n")
+			for i := 0; i < master.NumWorkers(); i++ {
+				perr := <-closeC
+				if perr != nil {
+					glog.Errorf("master found worker error %v", perr)
+				}
+			}
 			return "", err
 		}
 	}
 
-	wg.Wait()
 	close(inwork)
 
-	pt.Finished()
+	var perr error
+	for i := 0; i < master.NumWorkers(); i++ {
+		err := <-closeC
+		if err != nil {
+			glog.Errorf("master found worker error %v", err)
+			if perr == nil {
+				perr = err
+			}
+		}
+	}
 
-	glog.Infof("Flushing workers and closing work. Hang in there...\n")
-	closeWg.Wait()
+	pt.Finished()
 
 	err = master.FinishUp()
 	if err != nil {
 		glog.Errorf("failed to finish up master: %v\n", err)
 		return "", err
+	}
+
+	if perr != nil {
+		glog.Infof("Failed due to worker errors.\n")
+
+		var endMsg bytes.Buffer
+
+		endMsg.WriteString(fmt.Sprintf("error processing %s: \n", workname, perr))
+
+		endS := endMsg.String()
+
+		glog.Info(endS)
+
+		return endS, perr
 	}
 
 	glog.Infof("Done.\n")

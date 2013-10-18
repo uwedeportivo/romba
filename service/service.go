@@ -353,6 +353,8 @@ func (pw *buildWorker) Process(path string, size int64) error {
 
 	datdir := filepath.Join(pw.pm.outpath, reldatdir)
 
+	glog.Infof("buildWorker processing %s, reldatdir=%s, datdir=%s", path, reldatdir, datdir)
+
 	err = os.MkdirAll(datdir, 0777)
 	if err != nil {
 		return err
@@ -419,10 +421,30 @@ func (pm *buildMaster) Start() error {
 }
 
 func (pm *buildMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {
+	glog.Infof("buildMaster common root path: %s", commonRootPath)
 	pm.commonRootPath = commonRootPath
+	fi, err := os.Stat(pm.commonRootPath)
+	if err != nil {
+		pm.commonRootPath = "/"
+		return
+	}
+	if !fi.IsDir() {
+		pm.commonRootPath = filepath.Dir(pm.commonRootPath)
+	}
 }
 
 func (rs *RombaService) build(cmd *commander.Command, args []string) error {
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	if rs.busy {
+		p := rs.pt.GetProgress()
+
+		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+			p.FilesSoFar, p.TotalFiles, humanize.Bytes(uint64(p.BytesSoFar)), humanize.Bytes(uint64(p.TotalBytes)))
+		return nil
+	}
+
 	outpath := cmd.Flag.Lookup("out").Value.Get().(string)
 	if !filepath.IsAbs(outpath) {
 		absoutpath, err := filepath.Abs(outpath)
@@ -434,17 +456,6 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 
 	if err := os.MkdirAll(outpath, 0777); err != nil {
 		return err
-	}
-
-	rs.jobMutex.Lock()
-	defer rs.jobMutex.Unlock()
-
-	if rs.busy {
-		p := rs.pt.GetProgress()
-
-		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
-			p.FilesSoFar, p.TotalFiles, humanize.Bytes(uint64(p.BytesSoFar)), humanize.Bytes(uint64(p.TotalBytes)))
-		return nil
 	}
 
 	rs.pt.Reset()
