@@ -179,7 +179,7 @@ structure. It also deletes the specified DATs from the DAT index.`,
 	cmd.Commands[3].Flag.String("backup", "", "backup directory where backup files are moved to")
 
 	cmd.Commands[4] = &commander.Command{
-		Run:       runCmd,
+		Run:       rs.dir2dat,
 		UsageLine: "dir2dat -out <outputfile> -source <sourcedir>",
 		Short:     "Creates a DAT file for the specified input directory and saves it to the -out filename.",
 		Long: `

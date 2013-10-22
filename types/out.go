@@ -33,6 +33,7 @@ package types
 import (
 	"bytes"
 	"encoding/hex"
+	"io"
 	"text/template"
 )
 
@@ -46,7 +47,8 @@ dat (
 game (
 	name "{{.Name}}"
 	description "{{.Description}}"
-	{{with .Roms}}{{range .}}rom ( name "{{.Name}}" size {{.Size}} crc {{hex .Crc}} md5 {{hex .Md5}} sha1 {{hex .Sha1}} ){{end}}{{end}}
+	{{with .Roms}}{{range .}}
+	rom ( name "{{.Name}}" size {{.Size}} crc {{hex .Crc}} md5 {{hex .Md5}} sha1 {{hex .Sha1}} ){{end}}{{end}}
 ){{end}}{{end}}
 `
 
@@ -89,6 +91,10 @@ func PrintDat(d *Dat) []byte {
 	}
 
 	return buf.Bytes()
+}
+
+func ComposeDat(d *Dat, w io.Writer) error {
+	return dt.Execute(w, d)
 }
 
 func PrintShortDat(d *Dat) []byte {

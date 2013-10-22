@@ -640,3 +640,43 @@ func (rs *RombaService) startArchive(cmd *commander.Command, args []string) erro
 	fmt.Fprintf(cmd.Stdout, "started archiving")
 	return nil
 }
+
+/*
+	cmd.Commands[4].Flag.String("out", "", "output filename")
+	cmd.Commands[4].Flag.String("source", "", "source directory")
+	cmd.Commands[4].Flag.String("name", "", "name value in DAT header")
+	cmd.Commands[4].Flag.String("description", "", "description value in DAT header")
+	cmd.Commands[4].Flag.String("category", "", "category value in DAT header")
+	cmd.Commands[4].Flag.String("version", "", "vesrion value in DAT header")
+	cmd.Commands[4].Flag.String("author", "", "author value in DAT header")
+*/
+
+func (rs *RombaService) dir2dat(cmd *commander.Command, args []string) error {
+	outpath := cmd.Flag.Lookup("out").Value.Get().(string)
+
+	if err := os.MkdirAll(outpath, 0777); err != nil {
+		return err
+	}
+
+	srcpath := cmd.Flag.Lookup("source").Value.Get().(string)
+	srcInfo, err := os.Stat(srcpath)
+	if err != nil {
+		return err
+	}
+
+	if !srcInfo.IsDir() {
+		return fmt.Errorf("%s is not a directory", srcpath)
+	}
+
+	dat := new(types.Dat)
+	dat.Name = cmd.Flag.Lookup("name").Value.Get().(string)
+	dat.Description = cmd.Flag.Lookup("description").Value.Get().(string)
+
+	err = archive.Dir2Dat(dat, srcpath, outpath)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(cmd.Stdout, "dir2dat successfully completed a DAT in %s for directory %s", outpath, srcpath)
+	return nil
+}
