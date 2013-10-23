@@ -194,7 +194,7 @@ func (w *countWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func archive(outpath string, r io.Reader) (int64, error) {
+func archive(outpath string, r io.Reader, extra []byte) (int64, error) {
 	br := bufio.NewReader(r)
 
 	err := os.MkdirAll(filepath.Dir(outpath), 0777)
@@ -214,6 +214,13 @@ func archive(outpath string, r io.Reader) (int64, error) {
 	bufout := bufio.NewWriter(cw)
 
 	zipWriter := cgzip.NewWriter(bufout)
+
+	if len(extra) > 0 {
+		err = zipWriter.SetExtraHeader(extra)
+		if err != nil {
+			return 0, err
+		}
+	}
 
 	_, err = io.Copy(zipWriter, br)
 	if err != nil {

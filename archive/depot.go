@@ -73,10 +73,11 @@ type completed struct {
 }
 
 type archiveWorker struct {
-	depot *Depot
-	hh    *Hashes
-	index int
-	pm    *archiveMaster
+	depot        *Depot
+	hh           *Hashes
+	md5crcBuffer []byte
+	index        int
+	pm           *archiveMaster
 }
 
 type archiveMaster struct {
@@ -301,10 +302,11 @@ func (pm *archiveMaster) Accept(path string) bool {
 
 func (pm *archiveMaster) NewWorker(workerIndex int) worker.Worker {
 	return &archiveWorker{
-		depot: pm.depot,
-		hh:    newHashes(),
-		index: workerIndex,
-		pm:    pm,
+		depot:        pm.depot,
+		hh:           newHashes(),
+		md5crcBuffer: make([]byte, md5.Size+crc32.Size),
+		index:        workerIndex,
+		pm:           pm,
 	}
 }
 
@@ -418,6 +420,9 @@ func (w *archiveWorker) archive(ro readerOpener, root int, name, path string, si
 		return 0, err
 	}
 
+	copy(w.md5crcBuffer[0:md5.Size], w.hh.Md5)
+	copy(w.md5crcBuffer[md5.Size:], w.hh.Crc)
+
 	rom := new(types.Rom)
 	rom.Crc = make([]byte, crc32.Size)
 	rom.Md5 = make([]byte, md5.Size)
@@ -453,7 +458,7 @@ func (w *archiveWorker) archive(ro readerOpener, root int, name, path string, si
 	}
 	defer r.Close()
 
-	compressedSize, err := archive(outpath, r)
+	compressedSize, err := archive(outpath, r, w.md5crcBuffer)
 	if err != nil {
 		return 0, err
 	}
