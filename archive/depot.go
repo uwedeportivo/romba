@@ -88,6 +88,8 @@ type archiveMaster struct {
 	soFar           chan *completed
 	resumeLogFile   *os.File
 	resumeLogWriter *bufio.Writer
+	includezips     bool
+	onlyneeded      bool
 }
 
 func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
@@ -119,7 +121,7 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	return depot, nil
 }
 
-func (depot *Depot) Archive(paths []string, resumePath string, numWorkers int,
+func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, onlyneeded bool, numWorkers int,
 	logDir string, pt worker.ProgressTracker) (string, error) {
 
 	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
@@ -137,6 +139,8 @@ func (depot *Depot) Archive(paths []string, resumePath string, numWorkers int,
 	pm.soFar = make(chan *completed)
 	pm.resumeLogWriter = resumeLogWriter
 	pm.resumeLogFile = resumeLogFile
+	pm.includezips = includezips
+	pm.onlyneeded = onlyneeded
 
 	go pm.loopObserver(resumeLogWriter)
 
@@ -380,7 +384,7 @@ func (w *archiveWorker) Process(path string, size int64) error {
 	var err error
 
 	if filepath.Ext(path) == zipSuffix {
-		_, err = w.archiveZip(path, size, false)
+		_, err = w.archiveZip(path, size, w.pm.includezips)
 	} else {
 		_, err = w.archiveRom(path, size)
 	}
@@ -433,6 +437,25 @@ func (w *archiveWorker) archive(ro readerOpener, root int, name, path string, si
 	rom.Name = name
 	rom.Size = size
 	rom.Path = path
+
+	if w.pm.onlyneeded {
+		dats, err := w.depot.romDB.DatsForRom(rom)
+		if err != nil {
+			return 0, err
+		}
+
+		needed := false
+
+		for _, dat := range dats {
+			if !dat.Artificial {
+				needed = true
+				break
+			}
+		}
+		if !needed {
+			return 0, nil
+		}
+	}
 
 	err = w.depot.romDB.IndexRom(rom)
 	if err != nil {

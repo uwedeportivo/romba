@@ -128,7 +128,7 @@ contents of any changed dats.`,
 
 	cmd.Commands[1] = &commander.Command{
 		Run:       rs.startArchive,
-		UsageLine: "archive [-only-needed] <space-separated list of directories of ROM files>",
+		UsageLine: "archive [-only-needed] [-include-zips] [-resume resumelog] <space-separated list of directories of ROM files>",
 		Short:     "Adds ROM files from the specified directories to the ROM archive.",
 		Long: `
 Adds ROM files from the specified directories to the ROM archive.
@@ -145,6 +145,7 @@ have a current entry in the DAT index.`,
 
 	cmd.Commands[1].Flag.Bool("only-needed", false, "only archive ROM files actually referenced by DAT files from the DAT index")
 	cmd.Commands[1].Flag.String("resume", "", "resume a previously interrupted archive operation from the specified path")
+	cmd.Commands[1].Flag.Bool("include-zips", false, "add zip files themselves into the depot in addition to their contents")
 
 	cmd.Commands[2] = &commander.Command{
 		Run:       runCmd,

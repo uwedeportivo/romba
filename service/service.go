@@ -619,8 +619,10 @@ func (rs *RombaService) startArchive(cmd *commander.Command, args []string) erro
 		}()
 
 		resume := cmd.Flag.Lookup("resume").Value.Get().(string)
+		includezips := cmd.Flag.Lookup("include-zips").Value.Get().(bool)
+		onlyneeded := cmd.Flag.Lookup("only-needed").Value.Get().(bool)
 
-		endMsg, err := rs.depot.Archive(args, resume, rs.numWorkers, rs.logDir, rs.pt)
+		endMsg, err := rs.depot.Archive(args, resume, includezips, onlyneeded, rs.numWorkers, rs.logDir, rs.pt)
 		if err != nil {
 			glog.Errorf("error archiving: %v", err)
 		}
@@ -640,16 +642,6 @@ func (rs *RombaService) startArchive(cmd *commander.Command, args []string) erro
 	fmt.Fprintf(cmd.Stdout, "started archiving")
 	return nil
 }
-
-/*
-	cmd.Commands[4].Flag.String("out", "", "output filename")
-	cmd.Commands[4].Flag.String("source", "", "source directory")
-	cmd.Commands[4].Flag.String("name", "", "name value in DAT header")
-	cmd.Commands[4].Flag.String("description", "", "description value in DAT header")
-	cmd.Commands[4].Flag.String("category", "", "category value in DAT header")
-	cmd.Commands[4].Flag.String("version", "", "vesrion value in DAT header")
-	cmd.Commands[4].Flag.String("author", "", "author value in DAT header")
-*/
 
 func (rs *RombaService) dir2dat(cmd *commander.Command, args []string) error {
 	outpath := cmd.Flag.Lookup("out").Value.Get().(string)
