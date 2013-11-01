@@ -115,7 +115,7 @@ func Dir2Dat(dat *types.Dat, srcpath, outpath string) error {
 		}
 	}
 
-	outfilename := filepath.Join(outpath, dat.Name+".dat")
+	outfilename := filepath.Join(outpath, dat.Name+datSuffix)
 	outf, err := os.Create(outfilename)
 	if err != nil {
 		return err
