@@ -45,6 +45,11 @@ import (
 	"strings"
 )
 
+const (
+	xmlPrefix        = "<?xml"
+	xmlPrefixWithBOM = "\xef\xbb\xbf<?xml"
+)
+
 type parser struct {
 	ll *lexer
 	d  *types.Dat
@@ -324,7 +329,7 @@ func isXML(path string) (bool, error) {
 
 	lr := io.LimitedReader{
 		R: file,
-		N: 256,
+		N: 21,
 	}
 
 	snippet, err := ioutil.ReadAll(&lr)
@@ -332,7 +337,9 @@ func isXML(path string) (bool, error) {
 		return false, err
 	}
 
-	return strings.HasPrefix(string(snippet), "<?xml"), nil
+	ss := string(snippet)
+
+	return strings.HasPrefix(ss, xmlPrefix) || strings.HasPrefix(ss, xmlPrefixWithBOM), nil
 }
 
 func Parse(path string) (*types.Dat, []byte, error) {

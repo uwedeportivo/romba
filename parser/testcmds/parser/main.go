@@ -33,12 +33,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 
 	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/worker"
@@ -121,45 +118,10 @@ func main() {
 
 	runtime.GOMAXPROCS(numWorkers)
 
-	ss, err := worker.Work("parse dats", flag.Args(), new(parseMaster))
+	_, err := worker.Work("parse dats", flag.Args(), new(parseMaster))
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, " error: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Printf("finished, starting http server now %s\n", ss)
-
-	debug.FreeOSMemory()
-
-	s := new(runtime.MemStats)
-	runtime.ReadMemStats(s)
-
-	fmt.Printf("\n# runtime.MemStats\n")
-	fmt.Printf("# Alloc = %d\n", s.Alloc)
-	fmt.Printf("# TotalAlloc = %d\n", s.TotalAlloc)
-	fmt.Printf("# Sys = %d\n", s.Sys)
-	fmt.Printf("# Lookups = %d\n", s.Lookups)
-	fmt.Printf("# Mallocs = %d\n", s.Mallocs)
-	fmt.Printf("# Frees = %d\n", s.Frees)
-
-	fmt.Printf("# HeapAlloc = %d\n", s.HeapAlloc)
-	fmt.Printf("# HeapSys = %d\n", s.HeapSys)
-	fmt.Printf("# HeapIdle = %d\n", s.HeapIdle)
-	fmt.Printf("# HeapInuse = %d\n", s.HeapInuse)
-	fmt.Printf("# HeapReleased = %d\n", s.HeapReleased)
-	fmt.Printf("# HeapObjects = %d\n", s.HeapObjects)
-
-	fmt.Printf("# Stack = %d / %d\n", s.StackInuse, s.StackSys)
-	fmt.Printf("# MSpan = %d / %d\n", s.MSpanInuse, s.MSpanSys)
-	fmt.Printf("# MCache = %d / %d\n", s.MCacheInuse, s.MCacheSys)
-	fmt.Printf("# BuckHashSys = %d\n", s.BuckHashSys)
-
-	fmt.Printf("# NextGC = %d\n", s.NextGC)
-	fmt.Printf("# PauseNs = %d\n", s.PauseNs)
-	fmt.Printf("# NumGC = %d\n", s.NumGC)
-	fmt.Printf("# EnableGC = %v\n", s.EnableGC)
-	fmt.Printf("# DebugGC = %v\n", s.DebugGC)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", 8876), nil))
 }
