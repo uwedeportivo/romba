@@ -160,7 +160,7 @@ func (rs *RombaService) broadCastProgress(t time.Time, starting bool, stopping b
 func (rs *RombaService) Execute(r *http.Request, req *TerminalRequest, reply *TerminalReply) error {
 	outbuf := new(bytes.Buffer)
 
-	cmd := newCommander(outbuf, rs)
+	cmd := newCommand(outbuf, rs)
 
 	cmdTxtSplit, err := splitIntoArgs(req.CmdTxt)
 	if err != nil {
@@ -175,7 +175,7 @@ func (rs *RombaService) Execute(r *http.Request, req *TerminalRequest, reply *Te
 	}
 
 	args := cmd.Flag.Args()
-	err = cmd.Run(args)
+	err = cmd.Dispatch(args)
 	if err != nil {
 		reply.Message = fmt.Sprintf("error: executing command failed: %v\n", err)
 		glog.Errorf("error executing command %s: %v", req.CmdTxt, err)

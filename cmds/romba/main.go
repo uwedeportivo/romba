@@ -32,16 +32,10 @@ package main
 
 import (
 	"bufio"
-	"code.google.com/p/gcfg"
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"github.com/gonuts/commander"
-	"github.com/gonuts/flag"
-	"github.com/uwedeportivo/romba/archive"
-	"github.com/uwedeportivo/romba/db"
-	"github.com/uwedeportivo/romba/types"
 	"hash/crc32"
 	"log"
 	"net/http"
@@ -49,10 +43,16 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	"code.google.com/p/gcfg"
+	"github.com/gonuts/commander"
+	"github.com/gonuts/flag"
+	"github.com/uwedeportivo/romba/archive"
+	"github.com/uwedeportivo/romba/db"
+	"github.com/uwedeportivo/romba/types"
 
 	_ "expvar"
-	_ "github.com/uwedeportivo/romba/db/kivia"
 	_ "net/http/pprof"
+	_ "github.com/uwedeportivo/romba/db/kivia"
 )
 
 type Config struct {
@@ -75,18 +75,18 @@ type Config struct {
 }
 
 var config *Config
-var cmd *commander.Commander
+var cmd *commander.Command
 var romDB db.RomDB
 
 func init() {
 	config = new(Config)
 
-	cmd = new(commander.Commander)
-	cmd.Name = os.Args[0]
-	cmd.Commands = make([]*commander.Command, 10)
-	cmd.Flag = flag.NewFlagSet("romba", flag.ExitOnError)
+	cmd = new(commander.Command)
+	cmd.UsageLine = os.Args[0]
+	cmd.Subcommands = make([]*commander.Command, 10)
+	cmd.Flag = *flag.NewFlagSet("romba", flag.ExitOnError)
 
-	cmd.Commands[0] = &commander.Command{
+	cmd.Subcommands[0] = &commander.Command{
 		Run:       refreshDats,
 		UsageLine: "refresh-dats",
 		Short:     "Refreshes the DAT index from the files in the DAT master directory tree.",
@@ -98,7 +98,7 @@ contents of any changed dats.`,
 		Flag: *flag.NewFlagSet("romba-refresh-dats", flag.ExitOnError),
 	}
 
-	cmd.Commands[1] = &commander.Command{
+	cmd.Subcommands[1] = &commander.Command{
 		Run:       archiveRoms,
 		UsageLine: "archive [-only-needed] <space-separated list of directories of ROM files>",
 		Short:     "Adds ROM files from the specified directories to the ROM archive.",
@@ -113,10 +113,10 @@ have a current entry in the DAT index.`,
 		Flag: *flag.NewFlagSet("romba-archive", flag.ExitOnError),
 	}
 
-	cmd.Commands[1].Flag.Bool("only-needed", false, "only archive ROM files actually referenced by DAT files from the DAT index")
-	cmd.Commands[1].Flag.String("resume", "", "resume a previously interrupted archive operation from the specified path")
+	cmd.Subcommands[1].Flag.Bool("only-needed", false, "only archive ROM files actually referenced by DAT files from the DAT index")
+	cmd.Subcommands[1].Flag.String("resume", "", "resume a previously interrupted archive operation from the specified path")
 
-	cmd.Commands[2] = &commander.Command{
+	cmd.Subcommands[2] = &commander.Command{
 		Run:       runCmd,
 		UsageLine: "purge-delete <list of DAT files or folders with DAT files>",
 		Short:     "Deletes DAT index entries for orphaned DATs.",
@@ -128,7 +128,7 @@ the DAT index.`,
 		Flag: *flag.NewFlagSet("romba-purge-delete", flag.ExitOnError),
 	}
 
-	cmd.Commands[3] = &commander.Command{
+	cmd.Subcommands[3] = &commander.Command{
 		Run:       runCmd,
 		UsageLine: "purge-backup -backup <backupdir> <list of DAT files or folders with DAT files>",
 		Short:     "Moves DAT index entries for orphaned DATs.",
@@ -142,9 +142,9 @@ structure. It also deletes the specified DATs from the DAT index.`,
 		Flag: *flag.NewFlagSet("romba-purge-backup", flag.ExitOnError),
 	}
 
-	cmd.Commands[3].Flag.String("backup", "", "backup directory where backup files are moved to")
+	cmd.Subcommands[3].Flag.String("backup", "", "backup directory where backup files are moved to")
 
-	cmd.Commands[4] = &commander.Command{
+	cmd.Subcommands[4] = &commander.Command{
 		Run:       runCmd,
 		UsageLine: "dir2dat -out <outputfile> -source <sourcedir>",
 		Short:     "Creates a DAT file for the specified input directory and saves it to the -out filename.",
@@ -154,15 +154,15 @@ structure. Saves this DAT file in specified output filename.`,
 		Flag: *flag.NewFlagSet("romba-dir2dat", flag.ExitOnError),
 	}
 
-	cmd.Commands[4].Flag.String("out", "", "output filename")
-	cmd.Commands[4].Flag.String("source", "", "source directory")
-	cmd.Commands[4].Flag.String("name", "", "name value in DAT header")
-	cmd.Commands[4].Flag.String("description", "", "description value in DAT header")
-	cmd.Commands[4].Flag.String("category", "", "category value in DAT header")
-	cmd.Commands[4].Flag.String("version", "", "vesrion value in DAT header")
-	cmd.Commands[4].Flag.String("author", "", "author value in DAT header")
+	cmd.Subcommands[4].Flag.String("out", "", "output filename")
+	cmd.Subcommands[4].Flag.String("source", "", "source directory")
+	cmd.Subcommands[4].Flag.String("name", "", "name value in DAT header")
+	cmd.Subcommands[4].Flag.String("description", "", "description value in DAT header")
+	cmd.Subcommands[4].Flag.String("category", "", "category value in DAT header")
+	cmd.Subcommands[4].Flag.String("version", "", "vesrion value in DAT header")
+	cmd.Subcommands[4].Flag.String("author", "", "author value in DAT header")
 
-	cmd.Commands[5] = &commander.Command{
+	cmd.Subcommands[5] = &commander.Command{
 		Run:       runCmd,
 		UsageLine: "diffdat -old <datfile> -new <datfile> -out <outputfile>",
 		Short:     "Creates a DAT file with those entries that are in -new DAT.",
@@ -172,11 +172,11 @@ in -old DAT file. Ignores those entries in -old that are not in -new.`,
 		Flag: *flag.NewFlagSet("romba-diffdat", flag.ExitOnError),
 	}
 
-	cmd.Commands[5].Flag.String("out", "", "output filename")
-	cmd.Commands[5].Flag.String("old", "", "old DAT file")
-	cmd.Commands[5].Flag.String("new", "", "new DAT file")
+	cmd.Subcommands[5].Flag.String("out", "", "output filename")
+	cmd.Subcommands[5].Flag.String("old", "", "old DAT file")
+	cmd.Subcommands[5].Flag.String("new", "", "new DAT file")
 
-	cmd.Commands[6] = &commander.Command{
+	cmd.Subcommands[6] = &commander.Command{
 		Run:       runCmd,
 		UsageLine: "fixdat -out <outputdir> <list of DAT files or folders with DAT files>",
 		Short:     "For each specified DAT file it creates a fix DAT.",
@@ -187,9 +187,9 @@ particular DAT.`,
 		Flag: *flag.NewFlagSet("romba-fixdat", flag.ExitOnError),
 	}
 
-	cmd.Commands[6].Flag.String("out", "", "output dir")
+	cmd.Subcommands[6].Flag.String("out", "", "output dir")
 
-	cmd.Commands[7] = &commander.Command{
+	cmd.Subcommands[7] = &commander.Command{
 		Run:       runCmd,
 		UsageLine: "miss -out <outputdir> <list of DAT files or folders with DAT files>",
 		Short:     "For each specified DAT file it creates a miss file and a have file.",
@@ -201,9 +201,9 @@ tree structure.`,
 		Flag: *flag.NewFlagSet("romba-miss", flag.ExitOnError),
 	}
 
-	cmd.Commands[7].Flag.String("out", "", "output dir")
+	cmd.Subcommands[7].Flag.String("out", "", "output dir")
 
-	cmd.Commands[8] = &commander.Command{
+	cmd.Subcommands[8] = &commander.Command{
 		Run:       runCmd,
 		UsageLine: "build -out <outputdir> <list of DAT files or folders with DAT files>",
 		Short:     "For each specified DAT file it creates the torrentzip files.",
@@ -214,9 +214,9 @@ structure according to the original DAT master directory tree structure.`,
 		Flag: *flag.NewFlagSet("romba-build", flag.ExitOnError),
 	}
 
-	cmd.Commands[8].Flag.String("out", "", "output dir")
+	cmd.Subcommands[8].Flag.String("out", "", "output dir")
 
-	cmd.Commands[9] = &commander.Command{
+	cmd.Subcommands[9] = &commander.Command{
 		Run:       lookup,
 		UsageLine: "lookup <list of hashes or files>",
 		Short:     "For each specified hash or file it looks up any available information.",
@@ -229,17 +229,18 @@ then looks up any available information.`,
 
 }
 
-func runCmd(cmd *commander.Command, args []string) {
+func runCmd(cmd *commander.Command, args []string) error {
 	fmt.Printf("command %v with args %v\n", cmd, args)
+	return nil
 }
 
-func refreshDats(cmd *commander.Command, args []string) {
+func refreshDats(cmd *commander.Command, args []string) error {
 	logPath := filepath.Join(config.General.LogDir, fmt.Sprintf("refresh-%s.log", time.Now().Format("2006-01-02-15_04_05")))
 
 	logfile, err := os.Create(logPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create log file %s: %v\n", logPath, err)
-		os.Exit(1)
+		return err
 	}
 	defer logfile.Close()
 
@@ -249,13 +250,15 @@ func refreshDats(cmd *commander.Command, args []string) {
 	err = db.Refresh(romDB, config.Index.Dats, log.New(buflog, "", 0))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refreshing dat index failed: %v\n", err)
-		os.Exit(1)
+		return err
 	}
+
+	return err
 }
 
-func archiveRoms(cmd *commander.Command, args []string) {
+func archiveRoms(cmd *commander.Command, args []string) error {
 	if len(args) == 0 {
-		return
+		return nil
 	}
 
 	logPath := filepath.Join(config.General.LogDir, fmt.Sprintf("archive-%s.log", time.Now().Format("2006-01-02-15_04_05")))
@@ -263,7 +266,7 @@ func archiveRoms(cmd *commander.Command, args []string) {
 	logfile, err := os.Create(logPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create log file %s: %v\n", logPath, err)
-		os.Exit(1)
+		return err
 	}
 	defer logfile.Close()
 
@@ -273,14 +276,14 @@ func archiveRoms(cmd *commander.Command, args []string) {
 	depot, err := archive.NewDepot(config.Depot.Root, config.Depot.MaxSize, romDB, 8)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "creating depot failed: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	resumeLogPath := filepath.Join(config.General.LogDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
 	resumeLogFile, err := os.Create(resumeLogPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create log file %s: %v\n", resumeLogPath, err)
-		os.Exit(1)
+		return err
 	}
 	defer resumeLogFile.Close()
 
@@ -293,8 +296,10 @@ func archiveRoms(cmd *commander.Command, args []string) {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "archiving failed: %v\n", err)
-		os.Exit(1)
+		return err
 	}
+
+	return err
 }
 
 func lookupByHash(hash []byte) (bool, error) {
@@ -336,28 +341,28 @@ func lookupByHash(hash []byte) (bool, error) {
 	return found, nil
 }
 
-func lookup(cmd *commander.Command, args []string) {
+func lookup(cmd *commander.Command, args []string) error {
 	if len(args) == 0 {
-		return
+		return nil
 	}
 
 	for _, arg := range args {
 		exists, err := archive.PathExists(arg)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to stat %s: %v\n", arg, err)
-			os.Exit(1)
+			return err
 		}
 		if exists {
 			hh, err := archive.HashesForFile(arg)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "failed to compute hashes for %s: %v\n", arg, err)
-				os.Exit(1)
+				return err
 			}
 
 			found, err := lookupByHash(hh.Sha1)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "failed to lookup by sha1 hash for %s: %v\n", arg, err)
-				os.Exit(1)
+				return err
 			}
 			if found {
 				continue
@@ -365,7 +370,7 @@ func lookup(cmd *commander.Command, args []string) {
 			found, err = lookupByHash(hh.Md5)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "failed to lookup by md5 hash for %s: %v\n", arg, err)
-				os.Exit(1)
+				return err
 			}
 			if found {
 				continue
@@ -374,22 +379,23 @@ func lookup(cmd *commander.Command, args []string) {
 			found, err = lookupByHash(hh.Crc)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "failed to lookup by crc hash for %s: %v\n", arg, err)
-				os.Exit(1)
+				return err
 			}
 		} else {
 			hash, err := hex.DecodeString(arg)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "failed to decode hex string %s: %v\n", arg, err)
-				os.Exit(1)
+				return err
 			}
 			_, err = lookupByHash(hash)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "failed to lookup by hash for %s: %v\n", arg, err)
-				os.Exit(1)
+				return err
 			}
 		}
 	}
 
+	return nil
 }
 
 func main() {
@@ -424,7 +430,7 @@ func main() {
 	}
 
 	args := cmd.Flag.Args()
-	err = cmd.Run(args)
+	err = cmd.Dispatch(args)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
