@@ -37,6 +37,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"syscall"
 
@@ -103,6 +104,34 @@ func main() {
 
 	for i := 0; i < len(config.Depot.MaxSize); i++ {
 		config.Depot.MaxSize[i] *= int64(archive.GB)
+	}
+
+	config.General.LogDir, err = filepath.Abs(config.General.LogDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
+		os.Exit(1)
+	}
+	config.General.TmpDir, err = filepath.Abs(config.General.TmpDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
+		os.Exit(1)
+	}
+	for i, pv := range config.Depot.Root {
+		config.Depot.Root[i], err = filepath.Abs(pv)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	config.Index.Dats, err = filepath.Abs(config.Index.Dats)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
+		os.Exit(1)
+	}
+	config.Index.Db, err = filepath.Abs(config.Index.Db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
+		os.Exit(1)
 	}
 
 	runtime.GOMAXPROCS(config.General.Workers)
