@@ -35,8 +35,8 @@ import (
 	"io"
 	"unicode"
 
-	"github.com/gonuts/commander"
 	"github.com/gonuts/flag"
+	"github.com/uwedeportivo/commander"
 )
 
 type splitState struct {

@@ -51,7 +51,7 @@ import (
 	"code.google.com/p/go.net/websocket"
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
-	"github.com/gonuts/commander"
+	"github.com/uwedeportivo/commander"
 
 	"github.com/uwedeportivo/romba/archive"
 	"github.com/uwedeportivo/romba/db"

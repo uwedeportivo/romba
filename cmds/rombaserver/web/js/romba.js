@@ -9,6 +9,7 @@ var termFn = function(command, term){
 			method : "RombaService.Execute",
 			params : {
 				cmdTxt: command,
+				cmdOrigin: "web",
 			},
 		};
 		$.jsonrpc(req, {
