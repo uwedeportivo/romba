@@ -1,7 +1,7 @@
 romba
 =====
 
-### Installation on Ubuntu
+### Installation on Linux/Mac OS X
 
 #### Install Go
 
