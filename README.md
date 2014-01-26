@@ -3,8 +3,6 @@ romba
 
 ### Installation on Linux/Mac OS X
 
-#### Install Go
-
 * Go to [Golang](https://code.google.com/p/go/downloads/list), download the latest 64bit version tarball and then in terminal go to the Downloads folder, and execute:
 
 ```
