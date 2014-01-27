@@ -52,8 +52,7 @@ game (
 ){{end}}{{end}}
 `
 
-const compliantDatTemplate = `
-clrmamepro (
+const compliantDatTemplate = `clrmamepro (
 	name "{{.Name}}"
 	description "{{.Description}}"
 ){{with .Games}}{{range .}}
