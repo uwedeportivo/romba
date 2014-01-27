@@ -66,6 +66,8 @@ func commonRoot(pa, pb string) string {
 	sa := pac[len(va):]
 	sb := pbc[len(vb):]
 
+	fmt.Printf("sa=%s, sb=%s\n", sa, sb)
+
 	na := len(sa)
 	nb := len(sb)
 
@@ -87,6 +89,14 @@ func commonRoot(pa, pb string) string {
 		return pac
 	}
 
+	if cursor == na && na < nb && sb[na] == filepath.Separator {
+		return pac
+	}
+
+	if cursor == nb && nb < na && sa[nb] == filepath.Separator {
+		return pbc
+	}
+
 	if lastSep == -1 {
 		return va + string(filepath.Separator)
 	}
@@ -105,6 +115,7 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 		return nil
 	}
 	if !f.IsDir() && cv.master.Accept(path) {
+		glog.Infof("visiting path %s, current common root is %s", path, cv.commonRootPath)
 		cv.numFiles += 1
 		cv.numBytes += f.Size()
 		if cv.commonRootPath == "" {
@@ -112,6 +123,7 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 		} else {
 			cv.commonRootPath = commonRoot(cv.commonRootPath, path)
 		}
+		glog.Infof("new current common root is %s", cv.commonRootPath)
 	}
 	return nil
 }

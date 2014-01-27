@@ -446,6 +446,11 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 	}
 
 	outpath := cmd.Flag.Lookup("out").Value.Get().(string)
+
+	if outpath == "" {
+		fmt.Fprintf(cmd.Stdout, "-out flag is required")
+		return nil
+	}
 	if !filepath.IsAbs(outpath) {
 		absoutpath, err := filepath.Abs(outpath)
 		if err != nil {

@@ -50,7 +50,11 @@ func TestCommonRoot(t *testing.T) {
 	executeTestCommonRoot("/a/b/c", "/a/b/d", "/a/b", t)
 	executeTestCommonRoot("/a", "/a", "/a", t)
 	executeTestCommonRoot("/a/c", "/a/b", "/a", t)
+	executeTestCommonRoot("/a/b/c", "/a/b", "/a/b", t)
+	executeTestCommonRoot("/a/b", "/a/b/c", "/a/b", t)
 	executeTestCommonRoot("/a/b/v/", "/a/b/v", "/a/b/v", t)
 	executeTestCommonRoot("/a", "/", "/", t)
 	executeTestCommonRoot("/", "", "", t)
+	executeTestCommonRoot("/Users/uwe/romba/dats/AgeMAME/AgeMameRoms.dat", "/Users/uwe/romba/dats/AgeMAME",
+		"/Users/uwe/romba/dats/AgeMAME", t)
 }
