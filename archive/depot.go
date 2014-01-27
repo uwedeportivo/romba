@@ -246,7 +246,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
 		fixWriter := bufio.NewWriter(fixFile)
 		defer fixWriter.Flush()
 
-		err = types.ComposeDat(fixDat, fixWriter)
+		err = types.ComposeCompliantDat(fixDat, fixWriter)
 		if err != nil {
 			return false, err
 		}

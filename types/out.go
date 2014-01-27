@@ -52,6 +52,19 @@ game (
 ){{end}}{{end}}
 `
 
+const compliantDatTemplate = `
+clrmamepro (
+	name "{{.Name}}"
+	description "{{.Description}}"
+){{with .Games}}{{range .}}
+game (
+	name "{{.Name}}"
+	description "{{.Description}}"
+	{{with .Roms}}{{range .}}
+	rom ( name "{{.Name}}" size {{.Size}} crc {{hex .Crc}} md5 {{hex .Md5}} sha1 {{hex .Sha1}} ){{end}}{{end}}
+){{end}}{{end}}
+`
+
 const datShortTemplate = `
 dat (
 	name "{{.Name}}"
@@ -79,6 +92,7 @@ var ff = template.FuncMap{
 }
 
 var dt = template.Must(template.New("datout").Funcs(ff).Parse(datTemplate))
+var cdt = template.Must(template.New("compliantdatout").Funcs(ff).Parse(compliantDatTemplate))
 var sdt = template.Must(template.New("datshortout").Funcs(ff).Parse(datShortTemplate))
 var dts = template.Must(template.New("datsout").Funcs(ff).Parse(datsTemplate))
 
@@ -95,6 +109,21 @@ func PrintDat(d *Dat) []byte {
 
 func ComposeDat(d *Dat, w io.Writer) error {
 	return dt.Execute(w, d)
+}
+
+func PrintCompliantDat(d *Dat) []byte {
+	buf := new(bytes.Buffer)
+
+	err := cdt.Execute(buf, d)
+	if err != nil {
+		panic(err)
+	}
+
+	return buf.Bytes()
+}
+
+func ComposeCompliantDat(d *Dat, w io.Writer) error {
+	return cdt.Execute(w, d)
 }
 
 func PrintShortDat(d *Dat) []byte {
