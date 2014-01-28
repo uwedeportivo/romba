@@ -48,7 +48,7 @@ game (
 	name "{{.Name}}"
 	description "{{.Description}}"
 	{{with .Roms}}{{range .}}
-	rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}}){{end}}{{end}}
+	rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}} ){{end}}{{end}}
 ){{end}}{{end}}
 `
 
@@ -60,7 +60,7 @@ game (
 	name "{{.Name}}"
 	description "{{.Description}}"
 	{{with .Roms}}{{range .}}
-	rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}}){{end}}{{end}}
+	rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}} ){{end}}{{end}}
 ){{end}}{{end}}
 `
 
