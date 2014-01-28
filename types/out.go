@@ -48,7 +48,7 @@ game (
 	name "{{.Name}}"
 	description "{{.Description}}"
 	{{with .Roms}}{{range .}}
-	rom ( name "{{.Name}}" size {{.Size}} crc {{hex .Crc}} md5 {{hex .Md5}} sha1 {{hex .Sha1}} ){{end}}{{end}}
+	rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}}){{end}}{{end}}
 ){{end}}{{end}}
 `
 
@@ -60,7 +60,7 @@ game (
 	name "{{.Name}}"
 	description "{{.Description}}"
 	{{with .Roms}}{{range .}}
-	rom ( name "{{.Name}}" size {{.Size}} crc {{hex .Crc}} md5 {{hex .Md5}} sha1 {{hex .Sha1}} ){{end}}{{end}}
+	rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}}){{end}}{{end}}
 ){{end}}{{end}}
 `
 
@@ -86,8 +86,29 @@ dat (
 {{end}}
 `
 
+func hexstr(which string, bs []byte) string {
+	if len(bs) == 0 {
+		return ""
+	}
+	return " " + which + " " + hex.EncodeToString(bs)
+}
+
+func crcstr(bs []byte) string {
+	return hexstr("crc", bs)
+}
+
+func md5str(bs []byte) string {
+	return hexstr("md5", bs)
+}
+
+func sha1str(bs []byte) string {
+	return hexstr("sha1", bs)
+}
+
 var ff = template.FuncMap{
-	"hex": hex.EncodeToString,
+	"hexcrc":  crcstr,
+	"hexmd5":  md5str,
+	"hexsha1": sha1str,
 }
 
 var dt = template.Must(template.New("datout").Funcs(ff).Parse(datTemplate))
