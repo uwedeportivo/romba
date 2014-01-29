@@ -34,7 +34,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/gob"
-	"encoding/hex"
+	//"encoding/hex"
 	"fmt"
 	"github.com/uwedeportivo/romba/types"
 	"io"
@@ -276,7 +276,7 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
 		if len(dBytes) >= sha1.Size {
 			rom.Sha1 = dBytes
 		} else {
-			glog.Warningf("no mapping from MD5 %s to SHA1", hex.EncodeToString(rom.Md5))
+			//glog.Warningf("no mapping from MD5 %s to SHA1", hex.EncodeToString(rom.Md5))
 		}
 		return nil
 	}
@@ -289,7 +289,7 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
 		if len(dBytes) >= sha1.Size {
 			rom.Sha1 = dBytes
 		} else {
-			glog.Warningf("no mapping from CRC %s to SHA1", hex.EncodeToString(rom.Crc))
+			//glog.Warningf("no mapping from CRC %s to SHA1", hex.EncodeToString(rom.Crc))
 		}
 	}
 	return nil

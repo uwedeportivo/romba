@@ -32,6 +32,7 @@ package worker
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -131,9 +132,16 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 type scanVisitor struct {
 	inwork chan *workUnit
 	master Master
+	pt     ProgressTracker
 }
 
+var scanStopped = errors.New("scan stopped")
+
 func (sv *scanVisitor) visit(path string, f os.FileInfo, err error) error {
+	if sv.pt.Stopped() {
+		glog.Info("scan stopped")
+		return scanStopped
+	}
 	if f == nil || f.Name() == ".DS_Store" {
 		return nil
 	}
@@ -245,6 +253,7 @@ func Work(workname string, paths []string, master Master) (string, error) {
 	sv := &scanVisitor{
 		inwork: inwork,
 		master: master,
+		pt:     pt,
 	}
 
 	closeC := make(chan error, master.NumWorkers())
@@ -260,7 +269,13 @@ func Work(workname string, paths []string, master Master) (string, error) {
 	}
 
 	for _, name := range paths {
+		if pt.Stopped() {
+			break
+		}
 		err := filepath.Walk(name, sv.visit)
+		if err == scanStopped {
+			break
+		}
 		if err != nil {
 			glog.Errorf("failed to scan dir %s: %v\n", name, err)
 
@@ -316,6 +331,10 @@ func Work(workname string, paths []string, master Master) (string, error) {
 	glog.Infof("Done.\n")
 
 	elapsed := time.Since(startTime)
+
+	if pt.Stopped() {
+		return "cancelled " + workname, nil
+	}
 
 	var endMsg bytes.Buffer
 

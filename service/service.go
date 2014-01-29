@@ -559,6 +559,21 @@ func (rs *RombaService) dbstats(cmd *commander.Command, args []string) error {
 	return nil
 }
 
+func (rs *RombaService) cancel(cmd *commander.Command, args []string) error {
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	if rs.busy {
+		rs.pt.Stop()
+
+		fmt.Fprintf(cmd.Stdout, "cancelling %s \n", rs.jobName)
+		return nil
+	}
+
+	fmt.Fprintf(cmd.Stdout, "nothing running worth cancelling")
+	return nil
+}
+
 func (rs *RombaService) SendProgress(ws *websocket.Conn) {
 	b := make([]byte, 10)
 	n, err := io.ReadFull(rand.Reader, b)

@@ -107,7 +107,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommand(writer io.Writer, rs *RombaService) *commander.Command {
 	cmd := new(commander.Command)
 	cmd.UsageLine = "Romba"
-	cmd.Subcommands = make([]*commander.Command, 14)
+	cmd.Subcommands = make([]*commander.Command, 15)
 	cmd.Flag = *flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -315,5 +315,17 @@ Print db stats.`,
 		Stdout: writer,
 		Stderr: writer,
 	}
+
+	cmd.Subcommands[14] = &commander.Command{
+		Run:       rs.cancel,
+		UsageLine: "cancel",
+		Short:     "Cancels current long-running job",
+		Long: `
+Cancels current long-running job.`,
+		Flag:   *flag.NewFlagSet("romba-cancel", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
+	}
+
 	return cmd
 }
