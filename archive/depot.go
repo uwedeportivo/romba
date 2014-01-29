@@ -219,7 +219,8 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
 	var fixDat *types.Dat
 
 	for _, game := range dat.Games {
-		fixGame, err := depot.buildGame(game, datPath)
+		gamePath := filepath.Join(datPath, game.Name+zipSuffix)
+		fixGame, foundRom, err := depot.buildGame(game, gamePath)
 		if err != nil {
 			return false, err
 		}
@@ -231,6 +232,12 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
 				fixDat.Path = dat.Path
 			}
 			fixDat.Games = append(fixDat.Games, fixGame)
+		}
+		if !foundRom {
+			err = os.Remove(gamePath)
+			if err != nil {
+				return false, err
+			}
 		}
 	}
 
@@ -255,21 +262,22 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
 	return fixDat == nil, nil
 }
 
-func (depot *Depot) buildGame(game *types.Game, datPath string) (*types.Game, error) {
-	gamePath := filepath.Join(datPath, game.Name+zipSuffix)
+func (depot *Depot) buildGame(game *types.Game, gamePath string) (*types.Game, bool, error) {
 	gameFile, err := os.Create(gamePath)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer gameFile.Close()
 
 	gameTorrent, err := torrentzip.NewWriter(gameFile)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer gameTorrent.Close()
 
 	var fixGame *types.Game
+
+	foundRom := false
 
 	for _, rom := range game.Roms {
 		if rom.Sha1 == nil {
@@ -286,7 +294,7 @@ func (depot *Depot) buildGame(game *types.Game, datPath string) (*types.Game, er
 
 		romGZ, err := depot.OpenRomGZ(rom)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		if romGZ == nil {
@@ -301,25 +309,26 @@ func (depot *Depot) buildGame(game *types.Game, datPath string) (*types.Game, er
 			continue
 		}
 
+		foundRom = true
 		src, err := cgzip.NewReader(romGZ)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		dst, err := gameTorrent.Create(rom.Name)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		_, err = io.Copy(dst, src)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		src.Close()
 		romGZ.Close()
 	}
-	return fixGame, nil
+	return fixGame, foundRom, nil
 }
 
 func (pm *archiveMaster) Accept(path string) bool {

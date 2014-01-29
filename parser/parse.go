@@ -126,6 +126,9 @@ func (p *parser) datStmt() error {
 			if err != nil {
 				return err
 			}
+			if strings.ContainsAny(p.d.Name, "/") {
+				return fmt.Errorf("/ is not allowed in name: %s", p.d.Name)
+			}
 		case i.typ == itemDescription:
 			p.d.Description, err = p.consumeStringValue()
 			if err != nil {

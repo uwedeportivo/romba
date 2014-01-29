@@ -125,5 +125,5 @@ func Dir2Dat(dat *types.Dat, srcpath, outpath string) error {
 	outbuf := bufio.NewWriter(outf)
 	defer outbuf.Flush()
 
-	return types.ComposeDat(dat, outbuf)
+	return types.ComposeCompliantDat(dat, outbuf)
 }
