@@ -566,6 +566,46 @@ func stripExt(path string) string {
 	return path[:len(path)-len(ext)]
 }
 
+type gzipReadCloser struct {
+	file *os.File
+	zr   *cgzip.Reader
+}
+
+func (grc *gzipReadCloser) Close() error {
+	err := grc.zr.Close()
+	if err != nil {
+		grc.file.Close()
+		return err
+	}
+	return grc.file.Close()
+}
+
+func (grc *gzipReadCloser) Read(p []byte) (n int, err error) {
+	return grc.zr.Read(p)
+}
+
+func openGzipReadCloser(inpath string) (io.ReadCloser, error) {
+	f, err := os.Open(inpath)
+	if err != nil {
+		return nil, err
+	}
+	_, err = f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	zr, err := cgzip.NewReader(f)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	return &gzipReadCloser{
+		file: f,
+		zr:   zr,
+	}, nil
+}
+
 func (w *archiveWorker) archiveGzip(inpath string, size int64, addZipItself bool) (int64, error) {
 	if addZipItself {
 		return w.archiveRom(inpath, size)
@@ -576,23 +616,7 @@ func (w *archiveWorker) archiveGzip(inpath string, size int64, addZipItself bool
 		return 0, err
 	}
 
-	f, err := os.Open(inpath)
-	if err != nil {
-		return 0, err
-	}
-	_, err = f.Stat()
-	if err != nil {
-		f.Close()
-		return 0, err
-	}
-	defer f.Close()
-
-	zr, err := cgzip.NewReader(f)
-	if err != nil {
-		return 0, err
-	}
-
-	return w.archive(func() (io.ReadCloser, error) { return zr, nil }, root, filepath.Base(inpath), stripExt(inpath), size)
+	return w.archive(func() (io.ReadCloser, error) { return openGzipReadCloser(inpath) }, root, filepath.Base(inpath), stripExt(inpath), size)
 }
 
 func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
