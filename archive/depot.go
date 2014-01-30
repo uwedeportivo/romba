@@ -417,8 +417,12 @@ func (depot *Depot) adjustSize(index int, delta int64) {
 func (w *archiveWorker) Process(path string, size int64) error {
 	var err error
 
-	if filepath.Ext(path) == zipSuffix {
+	pathext := filepath.Ext(path)
+
+	if pathext == zipSuffix {
 		_, err = w.archiveZip(path, size, w.pm.includezips)
+	} else if pathext == gzipSuffix {
+		_, err = w.archiveGzip(path, size, w.pm.includezips)
 	} else {
 		_, err = w.archiveRom(path, size)
 	}
@@ -555,6 +559,40 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 		compressedSize += cs
 	}
 	return compressedSize, nil
+}
+
+func stripExt(path string) string {
+	ext := filepath.Ext(path)
+	return path[:len(path)-len(ext)]
+}
+
+func (w *archiveWorker) archiveGzip(inpath string, size int64, addZipItself bool) (int64, error) {
+	if addZipItself {
+		return w.archiveRom(inpath, size)
+	}
+
+	root, err := w.depot.reserveRoot(size)
+	if err != nil {
+		return 0, err
+	}
+
+	f, err := os.Open(inpath)
+	if err != nil {
+		return 0, err
+	}
+	_, err = f.Stat()
+	if err != nil {
+		f.Close()
+		return 0, err
+	}
+	defer f.Close()
+
+	zr, err := cgzip.NewReader(f)
+	if err != nil {
+		return 0, err
+	}
+
+	return w.archive(func() (io.ReadCloser, error) { return zr, nil }, root, filepath.Base(inpath), stripExt(inpath), size)
 }
 
 func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
