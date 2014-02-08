@@ -422,6 +422,10 @@ func ParseXml(r io.Reader, path string) (*types.Dat, []byte, error) {
 		return nil, nil, fmt.Errorf("xml parsing error %d: %v", lr.line, err)
 	}
 
+	if strings.ContainsAny(d.Name, "/") {
+		return nil, nil, fmt.Errorf("/ is not allowed in name: %s", d.Name)
+	}
+
 	for _, g := range d.Games {
 		for _, rom := range g.Roms {
 			fixHashes(rom)

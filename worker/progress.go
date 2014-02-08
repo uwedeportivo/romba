@@ -32,12 +32,16 @@ package worker
 
 import (
 	"sync"
+
+	"github.com/golang/glog"
 )
+
+const ErrorLimit = 100
 
 type ProgressTracker interface {
 	SetTotalBytes(value int64)
 	SetTotalFiles(value int32)
-	AddBytesFromFile(value int64)
+	AddBytesFromFile(value int64, erred bool)
 	Finished()
 	Reset()
 	GetProgress() *Progress
@@ -48,6 +52,7 @@ type ProgressTracker interface {
 type Progress struct {
 	TotalBytes int64
 	TotalFiles int32
+	ErrorFiles int32
 	BytesSoFar int64
 	FilesSoFar int32
 	stopped    bool
@@ -68,12 +73,20 @@ func (pt *Progress) SetTotalFiles(value int32) {
 	pt.TotalFiles = value
 }
 
-func (pt *Progress) AddBytesFromFile(value int64) {
+func (pt *Progress) AddBytesFromFile(value int64, erred bool) {
 	pt.m.Lock()
 	defer pt.m.Unlock()
 
 	pt.BytesSoFar += value
 	pt.FilesSoFar++
+
+	if erred {
+		pt.ErrorFiles++
+		if pt.ErrorFiles > ErrorLimit {
+			glog.Infof("reached error limit %d, stopping ...", ErrorLimit)
+			pt.stopped = true
+		}
+	}
 }
 
 func (pt *Progress) Stop() {
@@ -110,6 +123,7 @@ func (pt *Progress) GetProgress() *Progress {
 	p := new(Progress)
 	p.TotalBytes = pt.TotalBytes
 	p.TotalFiles = pt.TotalFiles
+	p.ErrorFiles = pt.ErrorFiles
 	p.BytesSoFar = pt.BytesSoFar
 	p.FilesSoFar = pt.FilesSoFar
 	return p

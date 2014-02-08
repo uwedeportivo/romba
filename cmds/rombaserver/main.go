@@ -37,8 +37,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 
 	"code.google.com/p/gcfg"
@@ -49,6 +51,7 @@ import (
 	"github.com/golang/glog"
 
 	"github.com/uwedeportivo/romba/archive"
+	"github.com/uwedeportivo/romba/config"
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/service"
 
@@ -56,29 +59,6 @@ import (
 	_ "github.com/uwedeportivo/romba/db/clevel"
 	_ "net/http/pprof"
 )
-
-type Config struct {
-	General struct {
-		LogDir    string
-		TmpDir    string
-		Workers   int
-		Verbosity int
-	}
-
-	Depot struct {
-		Root    []string
-		MaxSize []int64
-	}
-
-	Index struct {
-		Db   string
-		Dats string
-	}
-
-	Server struct {
-		Port int
-	}
-}
 
 func signalCatcher(romDB db.RomDB) {
 	ch := make(chan os.Signal)
@@ -93,59 +73,98 @@ func signalCatcher(romDB db.RomDB) {
 	os.Exit(0)
 }
 
+func findINI() (string, error) {
+	u, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	path := "romba.ini"
+	exists, err := archive.PathExists(path)
+	if err != nil {
+		return "", err
+	}
+	if exists {
+		return path, nil
+	}
+
+	path = filepath.Join(u.HomeDir, ".romba", "romba.ini")
+	exists, err = archive.PathExists(path)
+	if err != nil {
+		return "", err
+	}
+	if exists {
+		return path, nil
+	}
+	return "", fmt.Errorf("couldn't find romba.ini")
+}
+
 func main() {
-	config := new(Config)
+	cfg := new(config.Config)
 
-	err := gcfg.ReadFileInto(config, "romba.ini")
+	iniPath, err := findINI()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "finding romba ini failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	err = gcfg.ReadFileInto(cfg, iniPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "reading romba ini from %s failed: %v\n", iniPath, err)
+		os.Exit(1)
+	}
+
+	for i := 0; i < len(cfg.Depot.MaxSize); i++ {
+		cfg.Depot.MaxSize[i] *= int64(archive.GB)
+	}
+
+	cfg.General.LogDir, err = filepath.Abs(cfg.General.LogDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
 		os.Exit(1)
 	}
-
-	for i := 0; i < len(config.Depot.MaxSize); i++ {
-		config.Depot.MaxSize[i] *= int64(archive.GB)
-	}
-
-	config.General.LogDir, err = filepath.Abs(config.General.LogDir)
+	cfg.General.TmpDir, err = filepath.Abs(cfg.General.TmpDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
 		os.Exit(1)
 	}
-	config.General.TmpDir, err = filepath.Abs(config.General.TmpDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
-		os.Exit(1)
-	}
-	for i, pv := range config.Depot.Root {
-		config.Depot.Root[i], err = filepath.Abs(pv)
+	for i, pv := range cfg.Depot.Root {
+		cfg.Depot.Root[i], err = filepath.Abs(pv)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
 			os.Exit(1)
 		}
 	}
-	config.Index.Dats, err = filepath.Abs(config.Index.Dats)
+	cfg.Index.Dats, err = filepath.Abs(cfg.Index.Dats)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
 		os.Exit(1)
 	}
-	config.Index.Db, err = filepath.Abs(config.Index.Db)
+	cfg.Index.Db, err = filepath.Abs(cfg.Index.Db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
+		os.Exit(1)
+	}
+	cfg.General.WebDir, err = filepath.Abs(cfg.General.WebDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	runtime.GOMAXPROCS(config.General.Workers)
+	config.GlobalConfig = cfg
 
-	flag.Set("log_dir", config.General.LogDir)
+	runtime.GOMAXPROCS(cfg.General.Workers)
+
+	flag.Set("log_dir", cfg.General.LogDir)
 	flag.Set("alsologtostderr", "true")
+	flag.Set("v", strconv.Itoa(cfg.General.Verbosity))
 
-	romDB, err := db.New(config.Index.Db)
+	romDB, err := db.New(cfg.Index.Db)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "opening db failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	depot, err := archive.NewDepot(config.Depot.Root, config.Depot.MaxSize, romDB)
+	depot, err := archive.NewDepot(cfg.Depot.Root, cfg.Depot.MaxSize, romDB)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "creating depot failed: %v\n", err)
 		os.Exit(1)
@@ -153,16 +172,16 @@ func main() {
 
 	go signalCatcher(romDB)
 
-	rs := service.NewRombaService(romDB, depot, config.Index.Dats, config.General.Workers, config.General.LogDir)
+	rs := service.NewRombaService(romDB, depot, cfg)
 
 	s := rpc.NewServer()
 	s.RegisterCodec(json2.NewCustomCodec(&rpc.CompressionSelector{}), "application/json")
 	s.RegisterService(rs, "")
-	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("./web"))))
+	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir(cfg.General.WebDir))))
 	http.Handle("/jsonrpc/", s)
 	http.Handle("/progress", websocket.Handler(rs.SendProgress))
 
-	fmt.Printf("starting romba server at localhost:%d/romba.html\n", config.Server.Port)
+	fmt.Printf("starting romba server at localhost:%d/romba.html\n", cfg.Server.Port)
 
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", config.Server.Port), nil))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.Port), nil))
 }

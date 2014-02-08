@@ -167,11 +167,15 @@ func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
 			}
 		}
 	} else {
-		//glog.Infof("searching for the right file for rom %s because of hash collisions", rom.Name)
+		if glog.V(2) {
+			glog.Infof("searching for the right file for rom %s because of hash collisions", rom.Name)
+		}
 		for i := 0; i < len(rom.Sha1); i += sha1.Size {
 			sha1Hex := hex.EncodeToString(rom.Sha1[i : i+sha1.Size])
 
-			//glog.Infof("trying SHA1 %s", sha1Hex)
+			if glog.V(3) {
+				glog.Infof("trying SHA1 %s", sha1Hex)
+			}
 
 			for _, root := range depot.roots {
 				rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
@@ -197,7 +201,9 @@ func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
 						}
 
 					} else {
-						//glog.Warningf("rom %s with collision SHA1 and no other hash to disambigue", rom.Name)
+						if glog.V(2) {
+							glog.Warningf("rom %s with collision SHA1 and no other hash to disambigue", rom.Name)
+						}
 						return os.Open(rompath)
 					}
 				}
@@ -281,7 +287,9 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string) (*types.Game, b
 
 	for _, rom := range game.Roms {
 		if rom.Sha1 == nil {
-			//glog.Warningf("game %s has rom with missing SHA1 %s", game.Name, rom.Name)
+			if glog.V(2) {
+				glog.Warningf("game %s has rom with missing SHA1 %s", game.Name, rom.Name)
+			}
 			if fixGame == nil {
 				fixGame = new(types.Game)
 				fixGame.Name = game.Name
@@ -298,7 +306,9 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string) (*types.Game, b
 		}
 
 		if romGZ == nil {
-			//glog.Warningf("game %s has missing rom %s (sha1 %s)", game.Name, rom.Name, hex.EncodeToString(rom.Sha1))
+			if glog.V(2) {
+				glog.Warningf("game %s has missing rom %s (sha1 %s)", game.Name, rom.Name, hex.EncodeToString(rom.Sha1))
+			}
 			if fixGame == nil {
 				fixGame = new(types.Game)
 				fixGame.Name = game.Name

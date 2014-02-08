@@ -54,6 +54,7 @@ import (
 	"github.com/uwedeportivo/commander"
 
 	"github.com/uwedeportivo/romba/archive"
+	"github.com/uwedeportivo/romba/config"
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
@@ -93,13 +94,13 @@ type TerminalReply struct {
 	Message string
 }
 
-func NewRombaService(romDB db.RomDB, depot *archive.Depot, dats string, numWorkers int, logDir string) *RombaService {
+func NewRombaService(romDB db.RomDB, depot *archive.Depot, cfg *config.Config) *RombaService {
 	rs := new(RombaService)
 	rs.romDB = romDB
 	rs.depot = depot
-	rs.dats = dats
-	rs.logDir = logDir
-	rs.numWorkers = numWorkers
+	rs.dats = cfg.Index.Dats
+	rs.logDir = cfg.General.LogDir
+	rs.numWorkers = cfg.General.Workers
 	rs.pt = worker.NewProgressTracker()
 	rs.jobMutex = new(sync.Mutex)
 	rs.progressMutex = new(sync.Mutex)

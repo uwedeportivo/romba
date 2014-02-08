@@ -28,81 +28,30 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package kivi
+package config
 
-import (
-	"io/ioutil"
-	"testing"
-)
-
-func TestSaveOpen(t *testing.T) {
-	kd := newKeydir(keySizeSha1)
-
-	for i := 0; i < 10000; i++ {
-		fileId := int32(i / 100)
-
-		kde := &keydirEntry{
-			fileId: fileId,
-			vpos:   int32(i),
-			vsize:  256,
-		}
-
-		key := randomBytes(t, keySizeSha1)
-
-		kd.put(key, kde)
+type Config struct {
+	General struct {
+		LogDir    string
+		TmpDir    string
+		WebDir    string
+		Workers   int
+		Verbosity int
 	}
 
-	root, err := ioutil.TempDir("", "kivi_test")
-	if err != nil {
-		t.Fatalf("cannot open tempdir: %v", err)
+	Depot struct {
+		Root    []string
+		MaxSize []int64
 	}
 
-	err = saveKeydir(root, kd, 7)
-	if err != nil {
-		t.Fatalf("failed to save keydir: %v", err)
+	Index struct {
+		Db   string
+		Dats string
 	}
 
-	savedKd, fileId, err := openKeydir(root)
-	if err != nil {
-		t.Fatalf("failed to open keydir: %v", err)
-	}
-
-	if savedKd == nil {
-		t.Fatalf("nothing read back")
-	}
-
-	if fileId != 7 {
-		t.Fatalf("fileId not right")
-	}
-
-	if savedKd.keySize != kd.keySize {
-		t.Fatalf("key size differ: original %d, from file %d", kd.keySize, savedKd.keySize)
-	}
-
-	if savedKd.orphaned != kd.orphaned {
-		t.Fatalf("orphaned differ: original %d, from file %d", kd.orphaned, savedKd.orphaned)
-	}
-
-	if savedKd.size() != kd.size() {
-		t.Fatalf("total differ: original %d, from file %d", kd.size(), savedKd.size())
-	}
-
-	for k := 0; k < numParts; k++ {
-		p := kd.parts[k]
-
-		for key, kdes := range p.mSha1 {
-			kde := kdes[0]
-
-			skdes := savedKd.get(key[:])
-			if len(skdes) != 1 {
-				t.Fatal("keydir entry missing")
-			}
-
-			skde := skdes[0]
-
-			if skde.fileId != kde.fileId || skde.vpos != kde.vpos || skde.vsize != kde.vsize {
-				t.Fatal("keydir entry differs")
-			}
-		}
+	Server struct {
+		Port int
 	}
 }
+
+var GlobalConfig *Config

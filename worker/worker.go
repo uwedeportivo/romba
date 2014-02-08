@@ -159,6 +159,10 @@ type Worker interface {
 	Close() error
 }
 
+type ErrorHandler interface {
+	Handle(path string)
+}
+
 type Master interface {
 	Accept(path string) bool
 	NewWorker(workerIndex int) Worker
@@ -180,21 +184,32 @@ type slave struct {
 	worker Worker
 }
 
+func handleErredFile(path string) {
+	glog.Infof("to be implemented: handle file that caused error: %s", path)
+}
+
 func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string) {
 	glog.Infof("starting worker %d for %s", workerNum, workname)
 	var perr error
 	for wu := range inwork {
 		path := wu.path
 
+		if glog.V(3) {
+			glog.Infof("processing file %s", path)
+		}
+
+		erred := false
 		err := w.worker.Process(path, wu.size)
 		if err != nil {
+			erred = true
 			glog.Errorf("failed to process %s: %v", path, err)
 			if perr == nil {
 				perr = err
 			}
+			handleErredFile(path)
 		}
 
-		w.pt.AddBytesFromFile(wu.size)
+		w.pt.AddBytesFromFile(wu.size, erred)
 	}
 
 	err := w.worker.Close()
@@ -315,17 +330,7 @@ func Work(workname string, paths []string, master Master) (string, error) {
 	}
 
 	if perr != nil {
-		glog.Infof("Failed due to worker errors.\n")
-
-		var endMsg bytes.Buffer
-
-		endMsg.WriteString(fmt.Sprintf("error processing %s: \n", workname, perr))
-
-		endS := endMsg.String()
-
-		glog.Info(endS)
-
-		return endS, perr
+		glog.Infof("Worker errors happened. First error was %v.\n", perr)
 	}
 
 	glog.Infof("Done.\n")
@@ -333,14 +338,20 @@ func Work(workname string, paths []string, master Master) (string, error) {
 	elapsed := time.Since(startTime)
 
 	if pt.Stopped() {
-		return "cancelled " + workname, nil
+		return "Cancelled " + workname, nil
 	}
 
 	var endMsg bytes.Buffer
 
+	pgr := pt.GetProgress()
+
 	endMsg.WriteString(fmt.Sprintf("finished %s\n", workname))
 	endMsg.WriteString(fmt.Sprintf("total number of files: %d\n", cv.numFiles))
+	endMsg.WriteString(fmt.Sprintf("number of files processed: %d\n", pgr.TotalFiles))
+	endMsg.WriteString(fmt.Sprintf("number of files with errors: %d\n", pgr.ErrorFiles))
+
 	endMsg.WriteString(fmt.Sprintf("total number of bytes: %s\n", humanize.Bytes(uint64(cv.numBytes))))
+	endMsg.WriteString(fmt.Sprintf("number of bytes processed: %s\n", humanize.Bytes(uint64(pgr.TotalBytes))))
 	endMsg.WriteString(fmt.Sprintf("elapsed time: %s\n", formatDuration(elapsed)))
 
 	ts := uint64(float64(cv.numBytes) / float64(elapsed.Seconds()))
@@ -351,7 +362,7 @@ func Work(workname string, paths []string, master Master) (string, error) {
 
 	glog.Info(endS)
 
-	return endS, nil
+	return endS, perr
 }
 
 func formatDuration(d time.Duration) string {
