@@ -95,6 +95,7 @@ type TerminalReply struct {
 }
 
 func NewRombaService(romDB db.RomDB, depot *archive.Depot, cfg *config.Config) *RombaService {
+	glog.Info("Service init")
 	rs := new(RombaService)
 	rs.romDB = romDB
 	rs.depot = depot
@@ -105,6 +106,7 @@ func NewRombaService(romDB db.RomDB, depot *archive.Depot, cfg *config.Config) *
 	rs.jobMutex = new(sync.Mutex)
 	rs.progressMutex = new(sync.Mutex)
 	rs.progressListeners = make(map[string]chan *ProgressNessage)
+	glog.Info("Service init finished")
 	return rs
 }
 

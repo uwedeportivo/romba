@@ -93,6 +93,7 @@ type archiveMaster struct {
 }
 
 func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
+	glog.Info("Depot init")
 	depot := new(Depot)
 	depot.roots = make([]string, len(roots))
 	depot.sizes = make([]int64, len(roots))
@@ -102,6 +103,7 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	copy(depot.maxSizes, maxSize)
 
 	for k, root := range depot.roots {
+		glog.Infof("establishing size of %s", root)
 		size, err := establishSize(root)
 		if err != nil {
 			return nil, err
@@ -118,6 +120,7 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 
 	depot.romDB = romDB
 	depot.lock = new(sync.Mutex)
+	glog.Info("Depot init finished")
 	return depot, nil
 }
 

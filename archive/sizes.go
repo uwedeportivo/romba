@@ -37,6 +37,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/golang/glog"
 )
 
 const (
@@ -122,6 +124,9 @@ func (sv *sizeVisitor) visit(path string, f os.FileInfo, err error) error {
 }
 
 func calcSize(root string) (int64, error) {
+	if glog.V(3) {
+		glog.Infof("calculating size for %s", root)
+	}
 	sv := new(sizeVisitor)
 
 	err := filepath.Walk(root, sv.visit)
