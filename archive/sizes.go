@@ -144,7 +144,7 @@ func establishSize(root string) (int64, error) {
 	size, err := readSize(root)
 
 	if err != nil {
-		size, err := calcSize(root)
+		size, err = calcSize(root)
 		if err != nil {
 			return 0, err
 		}
