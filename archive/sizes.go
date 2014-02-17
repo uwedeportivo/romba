@@ -117,7 +117,9 @@ type sizeVisitor struct {
 }
 
 func (sv *sizeVisitor) visit(path string, f os.FileInfo, err error) error {
-	glog.Infof("size Visitor visiting %s", path)
+	if glog.V(6) {
+		glog.Infof("size Visitor visiting %s", path)
+	}
 	if !f.IsDir() {
 		sv.size += f.Size()
 	}
