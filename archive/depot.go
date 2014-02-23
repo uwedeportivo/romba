@@ -150,6 +150,21 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips bool,
 	return worker.Work("archive roms", paths, pm)
 }
 
+func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, error) {
+	for _, root := range depot.roots {
+		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
+		exists, err := PathExists(rompath)
+		if err != nil {
+			return false, err
+		}
+
+		if exists {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
 	if rom.Sha1 == nil {
 		return nil, fmt.Errorf("cannot open rom %s because SHA1 is missing", rom.Name)
@@ -457,7 +472,7 @@ func (w *archiveWorker) Close() error {
 
 type readerOpener func() (io.ReadCloser, error)
 
-func (w *archiveWorker) archive(ro readerOpener, root int, name, path string, size int64) (int64, error) {
+func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64) (int64, error) {
 	r, err := ro()
 	if err != nil {
 		return 0, err
@@ -514,10 +529,7 @@ func (w *archiveWorker) archive(ro readerOpener, root int, name, path string, si
 	}
 
 	sha1Hex := hex.EncodeToString(w.hh.Sha1)
-
-	outpath := pathFromSha1HexEncoding(w.depot.roots[root], sha1Hex, gzipSuffix)
-
-	exists, err := PathExists(outpath)
+	exists, err := w.depot.SHA1InDepot(sha1Hex)
 	if err != nil {
 		return 0, err
 	}
@@ -525,6 +537,15 @@ func (w *archiveWorker) archive(ro readerOpener, root int, name, path string, si
 	if exists {
 		return 0, nil
 	}
+
+	estimatedCompressedSize := size / 5
+
+	root, err := w.depot.reserveRoot(estimatedCompressedSize)
+	if err != nil {
+		return 0, err
+	}
+
+	outpath := pathFromSha1HexEncoding(w.depot.roots[root], sha1Hex, gzipSuffix)
 
 	r, err = ro()
 	if err != nil {
@@ -537,16 +558,11 @@ func (w *archiveWorker) archive(ro readerOpener, root int, name, path string, si
 		return 0, err
 	}
 
-	w.depot.adjustSize(root, compressedSize)
+	w.depot.adjustSize(root, compressedSize-estimatedCompressedSize)
 	return compressedSize, nil
 }
 
 func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
-	root, err := w.depot.reserveRoot(size)
-	if err != nil {
-		return 0, err
-	}
-
 	zr, err := czip.OpenReader(inpath)
 	if err != nil {
 		return 0, err
@@ -556,7 +572,7 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 	var compressedSize int64
 
 	for _, zf := range zr.File {
-		cs, err := w.archive(func() (io.ReadCloser, error) { return zf.Open() }, root,
+		cs, err := w.archive(func() (io.ReadCloser, error) { return zf.Open() },
 			zf.FileInfo().Name(), filepath.Join(inpath, zf.FileInfo().Name()), zf.FileInfo().Size())
 		if err != nil {
 			return 0, err
@@ -565,7 +581,7 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 	}
 
 	if addZipItself {
-		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, root, filepath.Base(inpath), inpath, size)
+		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, filepath.Base(inpath), inpath, size)
 		if err != nil {
 			return 0, err
 		}
@@ -624,20 +640,12 @@ func (w *archiveWorker) archiveGzip(inpath string, size int64, addZipItself bool
 		return w.archiveRom(inpath, size)
 	}
 
-	root, err := w.depot.reserveRoot(size)
-	if err != nil {
-		return 0, err
-	}
-
-	return w.archive(func() (io.ReadCloser, error) { return openGzipReadCloser(inpath) }, root, filepath.Base(inpath), stripExt(inpath), size)
+	return w.archive(func() (io.ReadCloser, error) { return openGzipReadCloser(inpath) },
+		filepath.Base(inpath), stripExt(inpath), size)
 }
 
 func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
-	root, err := w.depot.reserveRoot(size)
-	if err != nil {
-		return 0, err
-	}
-	return w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, root, filepath.Base(inpath), inpath, size)
+	return w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, filepath.Base(inpath), inpath, size)
 }
 
 func (pm *archiveMaster) loopObserver(writer io.Writer) {
