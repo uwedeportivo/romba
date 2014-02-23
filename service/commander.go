@@ -107,7 +107,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommand(writer io.Writer, rs *RombaService) *commander.Command {
 	cmd := new(commander.Command)
 	cmd.UsageLine = "Romba"
-	cmd.Subcommands = make([]*commander.Command, 15)
+	cmd.Subcommands = make([]*commander.Command, 14)
 	cmd.Flag = *flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -231,22 +231,6 @@ particular DAT.`,
 	cmd.Subcommands[6].Flag.String("out", "", "output dir")
 
 	cmd.Subcommands[7] = &commander.Command{
-		Run:       runCmd,
-		UsageLine: "miss -out <outputdir> <list of DAT files or folders with DAT files>",
-		Short:     "For each specified DAT file it creates a miss file and a have file.",
-		Long: `
-For each specified DAT file it creates a miss file and a have file in the
-specified output dir. The files will be placed in the specified location using
-a folder structure according to the original DAT master directory
-tree structure.`,
-		Flag:   *flag.NewFlagSet("romba-miss", flag.ContinueOnError),
-		Stdout: writer,
-		Stderr: writer,
-	}
-
-	cmd.Subcommands[7].Flag.String("out", "", "output dir")
-
-	cmd.Subcommands[8] = &commander.Command{
 		Run:       rs.build,
 		UsageLine: "build -out <outputdir> <list of DAT files or folders with DAT files>",
 		Short:     "For each specified DAT file it creates the torrentzip files.",
@@ -259,9 +243,9 @@ structure according to the original DAT master directory tree structure.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[8].Flag.String("out", "", "output dir")
+	cmd.Subcommands[7].Flag.String("out", "", "output dir")
 
-	cmd.Subcommands[9] = &commander.Command{
+	cmd.Subcommands[8] = &commander.Command{
 		Run:       rs.lookup,
 		UsageLine: "lookup <list of hashes>",
 		Short:     "For each specified hash it looks up any available information.",
@@ -272,7 +256,7 @@ For each specified hash it looks up any available information (dat or rom).`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[10] = &commander.Command{
+	cmd.Subcommands[9] = &commander.Command{
 		Run:       rs.progress,
 		UsageLine: "progress",
 		Short:     "Shows progress of the currently running command.",
@@ -283,7 +267,7 @@ Shows progress of the currently running command.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[11] = &commander.Command{
+	cmd.Subcommands[10] = &commander.Command{
 		Run:       rs.shutdown,
 		UsageLine: "shutdown",
 		Short:     "Gracefully shuts down server.",
@@ -294,7 +278,7 @@ Gracefully shuts down server saving all the cached data.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[12] = &commander.Command{
+	cmd.Subcommands[11] = &commander.Command{
 		Run:       rs.memstats,
 		UsageLine: "memstats",
 		Short:     "Prints memory stats.",
@@ -305,7 +289,7 @@ Print memory stats.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[13] = &commander.Command{
+	cmd.Subcommands[12] = &commander.Command{
 		Run:       rs.dbstats,
 		UsageLine: "dbstats",
 		Short:     "Prints db stats.",
@@ -316,7 +300,7 @@ Print db stats.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[14] = &commander.Command{
+	cmd.Subcommands[13] = &commander.Command{
 		Run:       rs.cancel,
 		UsageLine: "cancel",
 		Short:     "Cancels current long-running job",
