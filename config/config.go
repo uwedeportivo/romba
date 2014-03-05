@@ -35,6 +35,7 @@ type Config struct {
 		LogDir    string
 		TmpDir    string
 		WebDir    string
+		BadDir    string
 		Workers   int
 		Verbosity int
 	}

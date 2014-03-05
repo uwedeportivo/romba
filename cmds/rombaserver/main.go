@@ -149,6 +149,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
 		os.Exit(1)
 	}
+	cfg.General.BadDir, err = filepath.Abs(cfg.General.BadDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "reading romba ini failed: %v\n", err)
+		os.Exit(1)
+	}
 
 	config.GlobalConfig = cfg
 

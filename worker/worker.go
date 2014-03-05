@@ -35,11 +35,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
+
+	"github.com/uwedeportivo/romba/config"
 )
 
 type countVisitor struct {
@@ -66,8 +70,6 @@ func commonRoot(pa, pb string) string {
 
 	sa := pac[len(va):]
 	sb := pbc[len(vb):]
-
-	fmt.Printf("sa=%s, sb=%s\n", sa, sb)
 
 	na := len(sa)
 	nb := len(sb)
@@ -184,8 +186,30 @@ type slave struct {
 	worker Worker
 }
 
+func mv(src, dst string) error {
+	dstDir := filepath.Dir(dst)
+	err := os.MkdirAll(dstDir, 0777)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("mv", src, dst)
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func handleErredFile(path string) {
-	glog.Infof("to be implemented: handle file that caused error: %s", path)
+	dstroot := config.GlobalConfig.General.BadDir
+	commonPrefix := commonRoot(path, dstroot)
+	srcSuffix := strings.TrimPrefix(path, commonPrefix)
+	dst := filepath.Join(dstroot, srcSuffix)
+	glog.Infof("moving bad file %s to %s", path, dst)
+	err := mv(path, dst)
+	if err != nil {
+		glog.Errorf("failed to handle erred file %s: %v", path, err)
+	}
 }
 
 func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string) {
@@ -210,6 +234,10 @@ func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string)
 		}
 
 		w.pt.AddBytesFromFile(wu.size, erred)
+
+		if glog.V(3) {
+			glog.Infof("finished processing file %s", path)
+		}
 	}
 
 	err := w.worker.Close()

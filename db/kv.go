@@ -276,7 +276,7 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
 		if len(dBytes) >= sha1.Size {
 			rom.Sha1 = dBytes
 		} else {
-			if glog.V(2) {
+			if glog.V(4) {
 				glog.Warningf("no mapping from MD5 %s to SHA1", hex.EncodeToString(rom.Md5))
 			}
 		}
@@ -291,7 +291,7 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
 		if len(dBytes) >= sha1.Size {
 			rom.Sha1 = dBytes
 		} else {
-			if glog.V(2) {
+			if glog.V(4) {
 				glog.Warningf("no mapping from CRC %s to SHA1", hex.EncodeToString(rom.Crc))
 			}
 		}
@@ -428,7 +428,7 @@ func (kvb *kvBatch) Close() error {
 }
 
 func (kvb *kvBatch) IndexRom(rom *types.Rom) error {
-	if glog.V(2) {
+	if glog.V(4) {
 		glog.Infof("indexing rom %s", rom.Name)
 	}
 
@@ -439,7 +439,7 @@ func (kvb *kvBatch) IndexRom(rom *types.Rom) error {
 
 	if len(dats) > 0 {
 		if rom.Crc != nil && rom.Sha1 != nil {
-			if glog.V(2) {
+			if glog.V(4) {
 				glog.Infof("declaring crc %s -> sha1 %s ampping", hex.EncodeToString(rom.Crc), hex.EncodeToString(rom.Sha1))
 			}
 			err = kvb.crcsha1Batch.Append(rom.Crc, rom.Sha1)
@@ -449,7 +449,7 @@ func (kvb *kvBatch) IndexRom(rom *types.Rom) error {
 			kvb.size += int64(sha1.Size)
 		}
 		if rom.Md5 != nil && rom.Sha1 != nil {
-			if glog.V(2) {
+			if glog.V(4) {
 				glog.Infof("declaring md5 %s -> sha1 %s ampping", hex.EncodeToString(rom.Md5), hex.EncodeToString(rom.Sha1))
 			}
 			err = kvb.md5sha1Batch.Append(rom.Md5, rom.Sha1)
@@ -543,7 +543,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 					kvb.size += int64(sha1.Size)
 
 					if r.Sha1 != nil {
-						if glog.V(2) {
+						if glog.V(4) {
 							glog.Infof("declaring md5 %s -> sha1 %s ampping", hex.EncodeToString(r.Md5), hex.EncodeToString(r.Sha1))
 						}
 						err = kvb.md5sha1Batch.Append(r.Md5, r.Sha1)
@@ -562,7 +562,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 					kvb.size += int64(sha1.Size)
 
 					if r.Sha1 != nil {
-						if glog.V(2) {
+						if glog.V(4) {
 							glog.Infof("declaring crc %s -> sha1 %s ampping", hex.EncodeToString(r.Crc), hex.EncodeToString(r.Sha1))
 						}
 						err = kvb.crcsha1Batch.Append(r.Crc, r.Sha1)

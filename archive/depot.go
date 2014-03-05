@@ -563,6 +563,9 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64) 
 }
 
 func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
+	if glog.V(2) {
+		glog.Infof("archiving zip %s ", inpath)
+	}
 	zr, err := czip.OpenReader(inpath)
 	if err != nil {
 		return 0, err
@@ -572,9 +575,13 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 	var compressedSize int64
 
 	for _, zf := range zr.File {
+		if glog.V(2) {
+			glog.Infof("archiving zip %s: file %s ", inpath, zf.Name)
+		}
 		cs, err := w.archive(func() (io.ReadCloser, error) { return zf.Open() },
 			zf.FileInfo().Name(), filepath.Join(inpath, zf.FileInfo().Name()), zf.FileInfo().Size())
 		if err != nil {
+			glog.Errorf("zip error %s: %v", inpath, err)
 			return 0, err
 		}
 		compressedSize += cs
