@@ -118,7 +118,7 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 		return nil
 	}
 	if !f.IsDir() && cv.master.Accept(path) {
-		glog.Infof("visiting path %s, current common root is %s", path, cv.commonRootPath)
+		glog.V(2).Infof("visiting path %s, current common root is %s", path, cv.commonRootPath)
 		cv.numFiles += 1
 		cv.numBytes += f.Size()
 		if cv.commonRootPath == "" {
@@ -126,7 +126,7 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 		} else {
 			cv.commonRootPath = commonRoot(cv.commonRootPath, path)
 		}
-		glog.Infof("new current common root is %s", cv.commonRootPath)
+		glog.V(2).Infof("new current common root is %s", cv.commonRootPath)
 	}
 	return nil
 }

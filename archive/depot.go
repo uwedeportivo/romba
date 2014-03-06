@@ -145,7 +145,7 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips bool,
 	pm.includezips = includezips
 	pm.onlyneeded = onlyneeded
 
-	go pm.loopObserver(resumeLogWriter)
+	go pm.loopObserver()
 
 	return worker.Work("archive roms", paths, pm)
 }
@@ -655,7 +655,15 @@ func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
 	return w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, filepath.Base(inpath), inpath, size)
 }
 
-func (pm *archiveMaster) loopObserver(writer io.Writer) {
+func (pm *archiveMaster) writeResumeLogEntry(comps []string) {
+	if comps[0] != "" {
+		sort.Strings(comps)
+		fmt.Fprint(pm.resumeLogWriter, "%s\n", comps[0])
+		pm.depot.writeSizes()
+	}
+}
+
+func (pm *archiveMaster) loopObserver() {
 	ticker := time.NewTicker(time.Minute * 1)
 	comps := make([]string, pm.numWorkers)
 
@@ -663,15 +671,12 @@ func (pm *archiveMaster) loopObserver(writer io.Writer) {
 		select {
 		case comp := <-pm.soFar:
 			if comp.workerIndex == -1 {
+				pm.writeResumeLogEntry(comps)
 				break
 			}
 			comps[comp.workerIndex] = comp.path
 		case <-ticker.C:
-			if comps[0] != "" {
-				sort.Strings(comps)
-				fmt.Fprint(writer, "%s\n", comps[0])
-				pm.depot.writeSizes()
-			}
+			pm.writeResumeLogEntry(comps)
 		}
 	}
 
