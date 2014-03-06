@@ -313,17 +313,27 @@ func (rs *RombaService) progress(cmd *commander.Command, args []string) error {
 	return nil
 }
 
-func (rs *RombaService) shutdown(cmd *commander.Command, args []string) error {
-	fmt.Printf("shutting down now\n")
+func (rs *RombaService) ShutDown() error {
 	rs.jobMutex.Lock()
 	defer rs.jobMutex.Unlock()
 
-	err := rs.romDB.Close()
-	if err != nil {
-		glog.Errorf("error closing rom database: %v", err)
+	if rs.busy {
+		wc := make(chan bool)
+		rs.pt.Stop(wc)
+		<-wc
 	}
 
-	fmt.Printf("done saving cached data, exiting...\n")
+	return rs.romDB.Close()
+}
+
+func (rs *RombaService) shutdown(cmd *commander.Command, args []string) error {
+	fmt.Printf("shutting down now\n")
+
+	err := rs.ShutDown()
+	if err != nil {
+		glog.Errorf("error shutting down: %v", err)
+	}
+
 	os.Exit(0)
 	return nil
 }
@@ -567,9 +577,8 @@ func (rs *RombaService) cancel(cmd *commander.Command, args []string) error {
 	defer rs.jobMutex.Unlock()
 
 	if rs.busy {
-		rs.pt.Stop()
-
 		fmt.Fprintf(cmd.Stdout, "cancelling %s \n", rs.jobName)
+		rs.pt.Stop(nil)
 		return nil
 	}
 

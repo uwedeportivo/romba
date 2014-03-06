@@ -45,7 +45,7 @@ type ProgressTracker interface {
 	Finished()
 	Reset()
 	GetProgress() *Progress
-	Stop()
+	Stop(wc chan bool)
 	Stopped() bool
 }
 
@@ -57,6 +57,7 @@ type Progress struct {
 	FilesSoFar int32
 	stopped    bool
 	m          *sync.Mutex
+	wc         chan bool
 }
 
 func NewProgressTracker() ProgressTracker {
@@ -89,11 +90,12 @@ func (pt *Progress) AddBytesFromFile(value int64, erred bool) {
 	}
 }
 
-func (pt *Progress) Stop() {
+func (pt *Progress) Stop(wc chan bool) {
 	pt.m.Lock()
 	defer pt.m.Unlock()
 
 	pt.stopped = true
+	pt.wc = wc
 }
 
 func (pt *Progress) Stopped() bool {
@@ -104,8 +106,15 @@ func (pt *Progress) Stopped() bool {
 }
 
 func (pt *Progress) Finished() {
+	pt.m.Lock()
+	defer pt.m.Unlock()
+
 	pt.BytesSoFar = pt.TotalBytes
 	pt.FilesSoFar = pt.TotalFiles
+	if pt.wc != nil {
+		pt.wc <- true
+		pt.wc = nil
+	}
 }
 
 func (pt *Progress) Reset() {
@@ -114,6 +123,7 @@ func (pt *Progress) Reset() {
 	pt.BytesSoFar = 0
 	pt.FilesSoFar = 0
 	pt.stopped = false
+	pt.wc = nil
 }
 
 func (pt *Progress) GetProgress() *Progress {

@@ -60,14 +60,15 @@ import (
 	_ "net/http/pprof"
 )
 
-func signalCatcher(romDB db.RomDB) {
+func signalCatcher(rs *service.RombaService) {
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGINT)
 	<-ch
 	glog.Info("CTRL-C; exiting")
-	err := romDB.Close()
+
+	err := rs.ShutDown()
 	if err != nil {
-		glog.Errorf("error closing DB: %v", err)
+		glog.Errorf("error shutting down: %v", err)
 		os.Exit(1)
 	}
 	os.Exit(0)
@@ -175,9 +176,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	go signalCatcher(romDB)
-
 	rs := service.NewRombaService(romDB, depot, cfg)
+
+	go signalCatcher(rs)
 
 	s := rpc.NewServer()
 	s.RegisterCodec(json2.NewCustomCodec(&rpc.CompressionSelector{}), "application/json")
