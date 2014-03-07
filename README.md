@@ -6,7 +6,7 @@ romba
 * Go to [Golang](https://code.google.com/p/go/downloads/list), download the latest 64bit version tarball and then in terminal go to the Downloads folder, and execute:
 
 ```
-sudo tar -C /usr/local -xzf go1.2.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go....latest
 ```
 
 * Add the following lines to your .profile or .bashrc file (gedit ~/.bashrc):
