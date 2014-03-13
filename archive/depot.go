@@ -176,18 +176,22 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 		return "", fmt.Errorf("could not extract a resume point from %s, file seems empty", resumePath)
 	}
 
+	nl := numWorkers
 	if numLines < numWorkers {
 		glog.Warningf("extracting resume point from %s: expected %d lines, got %d", resumePath, numWorkers, numLines)
+		nl = numLines
 	}
 
-	lines := make([]string, numWorkers)
+	lines := make([]string, nl)
 	lineCursor := 0
 
 	rng.Do(func(v interface{}) {
-		line := v.(string)
-		if len(line) > 0 {
-			lines[lineCursor] = line
-			lineCursor++
+		if v != nil {
+			line := v.(string)
+			if len(line) > 0 {
+				lines[lineCursor] = line
+				lineCursor++
+			}
 		}
 	})
 

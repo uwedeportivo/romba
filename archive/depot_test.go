@@ -47,3 +47,17 @@ func TestExtractResumePoint(t *testing.T) {
 		t.Errorf("expected resume point %s, got %s", expectedResumePoint, resumePoint)
 	}
 }
+
+func TestShortResumePoint(t *testing.T) {
+	expectedResumePoint := "/mnt/roms/4/NAM-1975 (1994)(SNK)(JP-US)[!].zip"
+	resumePath := "testdata/resume2.log"
+
+	resumePoint, err := extractResumePoint(resumePath, 5)
+	if err != nil {
+		t.Errorf("extracting resume point from %s failed: %v", resumePath, err)
+	}
+
+	if resumePoint != expectedResumePoint {
+		t.Errorf("expected resume point %s, got %s", expectedResumePoint, resumePoint)
+	}
+}
