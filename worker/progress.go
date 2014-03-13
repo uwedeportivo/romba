@@ -112,6 +112,7 @@ func (pt *Progress) Reset() {
 	pt.TotalFiles = 0
 	pt.BytesSoFar = 0
 	pt.FilesSoFar = 0
+	pt.ErrorFiles = 0
 	pt.stopped = false
 	pt.wc = nil
 }
