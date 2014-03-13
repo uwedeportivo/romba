@@ -217,6 +217,8 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips bool,
 		}
 	}
 
+	glog.Infof("resuming with path %s", resumePoint)
+
 	pm := new(archiveMaster)
 	pm.depot = depot
 	pm.resumePath = resumePoint
