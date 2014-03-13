@@ -43,6 +43,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,6 +159,9 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 		if err != nil && err != io.EOF {
 			return "", err
 		}
+
+		line = strings.TrimSpace(line)
+
 		if len(line) > 0 {
 			numLines++
 			rng.Value = line
@@ -176,7 +180,7 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 		glog.Warningf("extracting resume point from %s: expected %d lines, got %d", resumePath, numWorkers, numLines)
 	}
 
-	lines := make([]string, numLines)
+	lines := make([]string, numWorkers)
 	lineCursor := 0
 
 	rng.Do(func(v interface{}) {
@@ -733,7 +737,7 @@ func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
 func (pm *archiveMaster) writeResumeLogEntry(comps []string) {
 	if comps[0] != "" {
 		sort.Strings(comps)
-		fmt.Fprint(pm.resumeLogWriter, "%s\n", comps[0])
+		fmt.Fprintf(pm.resumeLogWriter, "%s\n", comps[0])
 		pm.depot.writeSizes()
 	}
 }
