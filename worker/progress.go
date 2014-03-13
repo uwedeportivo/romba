@@ -30,13 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package worker
 
-import (
-	"sync"
-
-	"github.com/golang/glog"
-)
-
-const ErrorLimit = 100
+import "sync"
 
 type ProgressTracker interface {
 	SetTotalBytes(value int64)
@@ -83,10 +77,6 @@ func (pt *Progress) AddBytesFromFile(value int64, erred bool) {
 
 	if erred {
 		pt.ErrorFiles++
-		if pt.ErrorFiles > ErrorLimit {
-			glog.Infof("reached error limit %d, stopping ...", ErrorLimit)
-			pt.stopped = true
-		}
 	}
 }
 
