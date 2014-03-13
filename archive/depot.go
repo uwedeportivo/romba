@@ -33,6 +33,7 @@ package archive
 import (
 	"bufio"
 	"bytes"
+	"container/ring"
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/hex"
@@ -124,6 +125,72 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	return depot, nil
 }
 
+func extractResumePoint(resumePath string, numWorkers int) (string, error) {
+	// we need the last n lines from the file, where n == numWorkers
+	f, err := os.Open(resumePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+
+	bufSize := int64(10240)
+	if bufSize > fi.Size() {
+		bufSize = fi.Size()
+	}
+
+	buf := make([]byte, bufSize)
+	_, err = f.ReadAt(buf, fi.Size()-bufSize)
+	if err != nil {
+		return "", err
+	}
+
+	rng := ring.New(numWorkers)
+	reader := bufio.NewReader(bytes.NewReader(buf))
+
+	numLines := 0
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return "", err
+		}
+		if len(line) > 0 {
+			numLines++
+			rng.Value = line
+			rng = rng.Next()
+		}
+		if err == io.EOF {
+			break
+		}
+	}
+
+	if numLines == 0 {
+		return "", fmt.Errorf("could not extract a resume point from %s, file seems empty", resumePath)
+	}
+
+	if numLines < numWorkers {
+		glog.Warningf("extracting resume point from %s: expected %d lines, got %d", resumePath, numWorkers, numLines)
+	}
+
+	lines := make([]string, numLines)
+	lineCursor := 0
+
+	rng.Do(func(v interface{}) {
+		line := v.(string)
+		if len(line) > 0 {
+			lines[lineCursor] = line
+			lineCursor++
+		}
+	})
+
+	sort.Strings(lines)
+	return lines[0], nil
+}
+
 func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, onlyneeded bool, numWorkers int,
 	logDir string, pt worker.ProgressTracker) (string, error) {
 
@@ -134,9 +201,17 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips bool,
 	}
 	resumeLogWriter := bufio.NewWriter(resumeLogFile)
 
+	resumePoint := ""
+	if len(resumePath) > 0 {
+		resumePoint, err = extractResumePoint(resumePath, numWorkers)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	pm := new(archiveMaster)
 	pm.depot = depot
-	pm.resumePath = resumePath
+	pm.resumePath = resumePoint
 	pm.pt = pt
 	pm.numWorkers = numWorkers
 	pm.soFar = make(chan *completed)
