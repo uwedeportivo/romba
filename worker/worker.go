@@ -186,13 +186,13 @@ type slave struct {
 	worker Worker
 }
 
-func mv(src, dst string) error {
+func cp(src, dst string) error {
 	dstDir := filepath.Dir(dst)
 	err := os.MkdirAll(dstDir, 0777)
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command("mv", src, dst)
+	cmd := exec.Command("cp", src, dst)
 	err = cmd.Run()
 	if err != nil {
 		return err
@@ -205,8 +205,8 @@ func handleErredFile(path string) {
 	commonPrefix := commonRoot(path, dstroot)
 	srcSuffix := strings.TrimPrefix(path, commonPrefix)
 	dst := filepath.Join(dstroot, srcSuffix)
-	glog.Infof("moving bad file %s to %s", path, dst)
-	err := mv(path, dst)
+	glog.Infof("copying bad file %s to %s", path, dst)
+	err := cp(path, dst)
 	if err != nil {
 		glog.Errorf("failed to handle erred file %s: %v", path, err)
 	}
