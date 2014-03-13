@@ -84,6 +84,19 @@ func TestSplits(t *testing.T) {
 	}
 }
 
+func TestArchiveResume(t *testing.T) {
+	argLine := "archive -resume='/home/thejay/romba/logs/archive-resume-2014-03-13-12_08_32.log' '/mnt/roms/4'"
+
+	rr, err := splitIntoArgs(argLine)
+	if err != nil {
+		t.Fatalf("failed to split: %v", err)
+	}
+
+	for i, v := range rr {
+		t.Logf("rr[%d]=%s", i, v)
+	}
+}
+
 func TestOpenQuote(t *testing.T) {
 	testData := "one two 'foo bar   "
 

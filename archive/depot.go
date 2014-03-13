@@ -178,8 +178,8 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 
 	nl := numWorkers
 	if numLines < numWorkers {
-		glog.Warningf("extracting resume point from %s: expected %d lines, got %d", resumePath, numWorkers, numLines)
-		nl = numLines
+		glog.Warningf("extracting resume point from %s: expected %d lines, got %d, cannot resume", resumePath, numWorkers, numLines)
+		return "", nil
 	}
 
 	lines := make([]string, nl)
@@ -741,15 +741,24 @@ func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
 }
 
 func (pm *archiveMaster) writeResumeLogEntry(comps []string) {
-	if comps[0] != "" {
-		sort.Strings(comps)
-		fmt.Fprintf(pm.resumeLogWriter, "%s\n", comps[0])
-		pm.depot.writeSizes()
+	nonEmptyComps := []string{}
+
+	for _, comp := range comps {
+		comp = strings.TrimSpace(comp)
+		if len(comp) > 0 {
+			nonEmptyComps = append(nonEmptyComps, comp)
+		}
 	}
+	sort.Strings(nonEmptyComps)
+
+	for _, ncomp := range nonEmptyComps {
+		fmt.Fprintf(pm.resumeLogWriter, "%s\n", ncomp)
+	}
+	pm.depot.writeSizes()
 }
 
 func (pm *archiveMaster) loopObserver() {
-	ticker := time.NewTicker(time.Minute * 1)
+	ticker := time.NewTicker(time.Minute)
 	comps := make([]string, pm.numWorkers)
 
 	for {

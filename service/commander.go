@@ -33,6 +33,7 @@ package service
 import (
 	"fmt"
 	"io"
+	"strings"
 	"unicode"
 
 	"github.com/gonuts/flag"
@@ -47,8 +48,10 @@ type splitState struct {
 func (st *splitState) shouldSplit(rne rune) bool {
 	if rne == '\'' && st.previousRne != '\\' {
 		st.inQuotedZone = !st.inQuotedZone
-		st.previousRne = rne
-		return true
+	}
+
+	if rne == '=' && !st.inQuotedZone {
+		rne = ' '
 	}
 
 	if unicode.IsSpace(rne) && st.previousRne != '\\' && !st.inQuotedZone {
@@ -85,7 +88,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 	for i, rne := range argLine {
 		if st.shouldSplit(rne) {
 			if fieldStart >= 0 {
-				a[na] = argLine[fieldStart:i]
+				a[na] = strings.Trim(argLine[fieldStart:i], "'")
 				na++
 				fieldStart = -1
 			}
@@ -95,7 +98,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 	}
 
 	if fieldStart >= 0 {
-		a[na] = argLine[fieldStart:]
+		a[na] = strings.Trim(argLine[fieldStart:], "'")
 	}
 
 	if st.inQuotedZone {
