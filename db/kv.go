@@ -36,9 +36,10 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
-	"github.com/uwedeportivo/romba/types"
 	"io"
 	"path/filepath"
+
+	"github.com/uwedeportivo/romba/types"
 
 	"github.com/golang/glog"
 )
@@ -195,6 +196,10 @@ func (kvdb *kvStore) OrphanDats() error {
 		return err
 	}
 	return nil
+}
+
+func (kvdb *kvStore) Generation() int64 {
+	return kvdb.generation
 }
 
 func (kvdb *kvStore) GetDat(sha1Bytes []byte) (*types.Dat, error) {

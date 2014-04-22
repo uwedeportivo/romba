@@ -32,168 +32,474 @@ package archive
 
 import (
 	"bufio"
+	"bytes"
+	"container/ring"
 	"crypto/md5"
 	"crypto/sha1"
+	"encoding/hex"
+	"fmt"
 	"hash/crc32"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 
+	"github.com/dustin/go-humanize"
+	"github.com/golang/glog"
+	"github.com/uwedeportivo/romba/types"
+	"github.com/uwedeportivo/romba/worker"
 	"github.com/uwedeportivo/torrentzip/cgzip"
+	"github.com/uwedeportivo/torrentzip/czip"
 )
 
-const (
-	zipSuffix  = ".zip"
-	gzipSuffix = ".gz"
-	datSuffix  = ".dat"
-	fixPrefix  = "fix-"
-)
-
-type Hashes struct {
-	Crc  []byte
-	Md5  []byte
-	Sha1 []byte
+type completed struct {
+	path        string
+	workerIndex int
 }
 
-func newHashes() *Hashes {
-	rs := new(Hashes)
-	rs.Crc = make([]byte, 0, crc32.Size)
-	rs.Md5 = make([]byte, 0, md5.Size)
-	rs.Sha1 = make([]byte, 0, sha1.Size)
-	return rs
+type archiveWorker struct {
+	depot        *Depot
+	hh           *Hashes
+	md5crcBuffer []byte
+	index        int
+	pm           *archiveMaster
 }
 
-func (hh *Hashes) forFile(inpath string) error {
-	file, err := os.Open(inpath)
+type archiveMaster struct {
+	depot           *Depot
+	resumePath      string
+	numWorkers      int
+	pt              worker.ProgressTracker
+	soFar           chan *completed
+	resumeLogFile   *os.File
+	resumeLogWriter *bufio.Writer
+	includezips     bool
+	onlyneeded      bool
+}
+
+func extractResumePoint(resumePath string, numWorkers int) (string, error) {
+	// we need the last n lines from the file, where n == numWorkers
+	f, err := os.Open(resumePath)
 	if err != nil {
-		return err
+		return "", err
 	}
-	defer file.Close()
+	defer f.Close()
 
-	return hh.forReader(file)
-}
-
-func (hh *Hashes) forReader(in io.Reader) error {
-	br := bufio.NewReader(in)
-
-	hSha1 := sha1.New()
-	hMd5 := md5.New()
-	hCrc := cgzip.NewCrc32()
-
-	w := io.MultiWriter(hSha1, hMd5, hCrc)
-
-	_, err := io.Copy(w, br)
+	fi, err := f.Stat()
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	hh.Crc = hCrc.Sum(hh.Crc[0:0])
-	hh.Md5 = hMd5.Sum(hh.Md5[0:0])
-	hh.Sha1 = hSha1.Sum(hh.Sha1[0:0])
+	bufSize := int64(10240)
+	if bufSize > fi.Size() {
+		bufSize = fi.Size()
+	}
 
+	buf := make([]byte, bufSize)
+	_, err = f.ReadAt(buf, fi.Size()-bufSize)
+	if err != nil {
+		return "", err
+	}
+
+	rng := ring.New(numWorkers)
+	reader := bufio.NewReader(bytes.NewReader(buf))
+
+	numLines := 0
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return "", err
+		}
+
+		line = strings.TrimSpace(line)
+
+		if len(line) > 0 {
+			numLines++
+			rng.Value = line
+			rng = rng.Next()
+		}
+		if err == io.EOF {
+			break
+		}
+	}
+
+	if numLines == 0 {
+		return "", fmt.Errorf("could not extract a resume point from %s, file seems empty", resumePath)
+	}
+
+	nl := numWorkers
+	if numLines < numWorkers {
+		glog.Warningf("extracting resume point from %s: expected %d lines, got %d, cannot resume", resumePath, numWorkers, numLines)
+		return "", nil
+	}
+
+	lines := make([]string, nl)
+	lineCursor := 0
+
+	rng.Do(func(v interface{}) {
+		if v != nil {
+			line := v.(string)
+			if len(line) > 0 {
+				lines[lineCursor] = line
+				lineCursor++
+			}
+		}
+	})
+
+	sort.Strings(lines)
+	return lines[0], nil
+}
+
+func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, onlyneeded bool, numWorkers int,
+	logDir string, pt worker.ProgressTracker) (string, error) {
+
+	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
+	resumeLogFile, err := os.Create(resumeLogPath)
+	if err != nil {
+		return "", err
+	}
+	resumeLogWriter := bufio.NewWriter(resumeLogFile)
+
+	resumePoint := ""
+	if len(resumePath) > 0 {
+		resumePoint, err = extractResumePoint(resumePath, numWorkers)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	glog.Infof("resuming with path %s", resumePoint)
+
+	pm := new(archiveMaster)
+	pm.depot = depot
+	pm.resumePath = resumePoint
+	pm.pt = pt
+	pm.numWorkers = numWorkers
+	pm.soFar = make(chan *completed)
+	pm.resumeLogWriter = resumeLogWriter
+	pm.resumeLogFile = resumeLogFile
+	pm.includezips = includezips
+	pm.onlyneeded = onlyneeded
+
+	go pm.loopObserver()
+
+	return worker.Work("archive roms", paths, pm)
+}
+
+func (pm *archiveMaster) Accept(path string) bool {
+	if pm.resumePath != "" {
+		return path > pm.resumePath
+	}
+	return true
+}
+
+func (pm *archiveMaster) NewWorker(workerIndex int) worker.Worker {
+	return &archiveWorker{
+		depot:        pm.depot,
+		hh:           newHashes(),
+		md5crcBuffer: make([]byte, md5.Size+crc32.Size),
+		index:        workerIndex,
+		pm:           pm,
+	}
+}
+
+func (pm *archiveMaster) NumWorkers() int {
+	return pm.numWorkers
+}
+
+func (pm *archiveMaster) ProgressTracker() worker.ProgressTracker {
+	return pm.pt
+}
+
+func (pm *archiveMaster) FinishUp() error {
+	pm.soFar <- &completed{
+		workerIndex: -1,
+	}
+
+	pm.depot.writeSizes()
+	pm.resumeLogWriter.Flush()
+
+	return pm.resumeLogFile.Close()
+}
+
+func (pm *archiveMaster) Start() error {
 	return nil
 }
 
-func HashesForGZFile(inpath string) (*Hashes, error) {
-	file, err := os.Open(inpath)
+func (pm *archiveMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
+
+func (depot *Depot) reserveRoot(size int64) (int, error) {
+	depot.lock.Lock()
+	defer depot.lock.Unlock()
+
+	for i := depot.start; i < len(depot.roots); i++ {
+		if depot.sizes[i]+size < depot.maxSizes[i] {
+			depot.sizes[i] += size
+			return i, nil
+		} else if depot.sizes[i] >= depot.maxSizes[i] {
+			depot.start = i
+		}
+	}
+
+	glog.Error("Depot with the following roots ran out of disk space")
+	for k, root := range depot.roots {
+		glog.Errorf("root = %s, maxSize = %s, size = %s", root,
+			humanize.Bytes(uint64(depot.maxSizes[k])), humanize.Bytes(uint64(depot.sizes[k])))
+	}
+
+	return -1, fmt.Errorf("depot ran out of disk space")
+}
+
+func (w *archiveWorker) Process(path string, size int64) error {
+	var err error
+
+	pathext := filepath.Ext(path)
+
+	if pathext == zipSuffix {
+		_, err = w.archiveZip(path, size, w.pm.includezips)
+	} else if pathext == gzipSuffix {
+		_, err = w.archiveGzip(path, size, w.pm.includezips)
+	} else {
+		_, err = w.archiveRom(path, size)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	w.pm.soFar <- &completed{
+		path:        path,
+		workerIndex: w.index,
+	}
+	return nil
+}
+
+func (w *archiveWorker) Close() error {
+	return nil
+}
+
+type readerOpener func() (io.ReadCloser, error)
+
+func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64) (int64, error) {
+	r, err := ro()
+	if err != nil {
+		return 0, err
+	}
+
+	br := bufio.NewReader(r)
+
+	err = w.hh.forReader(br)
+	if err != nil {
+		r.Close()
+		return 0, err
+	}
+	err = r.Close()
+	if err != nil {
+		return 0, err
+	}
+
+	copy(w.md5crcBuffer[0:md5.Size], w.hh.Md5)
+	copy(w.md5crcBuffer[md5.Size:], w.hh.Crc)
+
+	rom := new(types.Rom)
+	rom.Crc = make([]byte, crc32.Size)
+	rom.Md5 = make([]byte, md5.Size)
+	rom.Sha1 = make([]byte, sha1.Size)
+	copy(rom.Crc, w.hh.Crc)
+	copy(rom.Md5, w.hh.Md5)
+	copy(rom.Sha1, w.hh.Sha1)
+	rom.Name = name
+	rom.Size = size
+	rom.Path = path
+
+	if w.pm.onlyneeded {
+		dats, err := w.depot.romDB.DatsForRom(rom)
+		if err != nil {
+			return 0, err
+		}
+
+		needed := false
+
+		for _, dat := range dats {
+			if !dat.Artificial {
+				needed = true
+				break
+			}
+		}
+		if !needed {
+			return 0, nil
+		}
+	}
+
+	err = w.depot.romDB.IndexRom(rom)
+	if err != nil {
+		return 0, err
+	}
+
+	sha1Hex := hex.EncodeToString(w.hh.Sha1)
+	exists, err := w.depot.SHA1InDepot(sha1Hex)
+	if err != nil {
+		return 0, err
+	}
+
+	if exists {
+		return 0, nil
+	}
+
+	estimatedCompressedSize := size / 5
+
+	root, err := w.depot.reserveRoot(estimatedCompressedSize)
+	if err != nil {
+		return 0, err
+	}
+
+	outpath := pathFromSha1HexEncoding(w.depot.roots[root], sha1Hex, gzipSuffix)
+
+	r, err = ro()
+	if err != nil {
+		return 0, err
+	}
+	defer r.Close()
+
+	compressedSize, err := archive(outpath, r, w.md5crcBuffer)
+	if err != nil {
+		return 0, err
+	}
+
+	w.depot.adjustSize(root, compressedSize-estimatedCompressedSize)
+	return compressedSize, nil
+}
+
+func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
+	if glog.V(2) {
+		glog.Infof("archiving zip %s ", inpath)
+	}
+	zr, err := czip.OpenReader(inpath)
+	if err != nil {
+		return 0, err
+	}
+	defer zr.Close()
+
+	var compressedSize int64
+
+	for _, zf := range zr.File {
+		if glog.V(2) {
+			glog.Infof("archiving zip %s: file %s ", inpath, zf.Name)
+		}
+		cs, err := w.archive(func() (io.ReadCloser, error) { return zf.Open() },
+			zf.FileInfo().Name(), filepath.Join(inpath, zf.FileInfo().Name()), zf.FileInfo().Size())
+		if err != nil {
+			glog.Errorf("zip error %s: %v", inpath, err)
+			return 0, err
+		}
+		compressedSize += cs
+	}
+
+	if addZipItself {
+		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, filepath.Base(inpath), inpath, size)
+		if err != nil {
+			return 0, err
+		}
+		compressedSize += cs
+	}
+	return compressedSize, nil
+}
+
+func stripExt(path string) string {
+	ext := filepath.Ext(path)
+	return path[:len(path)-len(ext)]
+}
+
+type gzipReadCloser struct {
+	file *os.File
+	zr   *cgzip.Reader
+}
+
+func (grc *gzipReadCloser) Close() error {
+	err := grc.zr.Close()
+	if err != nil {
+		grc.file.Close()
+		return err
+	}
+	return grc.file.Close()
+}
+
+func (grc *gzipReadCloser) Read(p []byte) (n int, err error) {
+	return grc.zr.Read(p)
+}
+
+func openGzipReadCloser(inpath string) (io.ReadCloser, error) {
+	f, err := os.Open(inpath)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-
-	gzipReader, err := cgzip.NewReader(file)
+	_, err = f.Stat()
 	if err != nil {
+		f.Close()
 		return nil, err
 	}
-	defer gzipReader.Close()
-
-	return hashesForReader(gzipReader)
-}
-
-func HashesForFile(inpath string) (*Hashes, error) {
-	file, err := os.Open(inpath)
+	zr, err := cgzip.NewReader(f)
 	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	return hashesForReader(file)
-}
-
-func hashesForReader(in io.Reader) (*Hashes, error) {
-	hSha1 := sha1.New()
-	hMd5 := md5.New()
-	hCrc := crc32.NewIEEE()
-
-	w := io.MultiWriter(hSha1, hMd5, hCrc)
-
-	_, err := io.Copy(w, in)
-	if err != nil {
+		f.Close()
 		return nil, err
 	}
 
-	res := new(Hashes)
-	res.Crc = hCrc.Sum(nil)
-	res.Md5 = hMd5.Sum(nil)
-	res.Sha1 = hSha1.Sum(nil)
-
-	return res, nil
+	return &gzipReadCloser{
+		file: f,
+		zr:   zr,
+	}, nil
 }
 
-func sha1ForFile(inpath string) ([]byte, error) {
-	file, err := os.Open(inpath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	return sha1ForReader(file)
-}
-
-func sha1ForReader(in io.Reader) ([]byte, error) {
-	h := sha1.New()
-
-	_, err := io.Copy(h, in)
-	if err != nil {
-		return nil, err
+func (w *archiveWorker) archiveGzip(inpath string, size int64, addZipItself bool) (int64, error) {
+	if addZipItself {
+		return w.archiveRom(inpath, size)
 	}
 
-	return h.Sum(nil), nil
+	return w.archive(func() (io.ReadCloser, error) { return openGzipReadCloser(inpath) },
+		filepath.Base(inpath), stripExt(inpath), size)
 }
 
-func pathFromSha1HexEncoding(root, hexStr, suffix string) string {
-	prefix := hexStr[0:8]
-	pieces := make([]string, 6)
+func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
+	return w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, filepath.Base(inpath), inpath, size)
+}
 
-	pieces[0] = root
-	for i := 0; i < 4; i++ {
-		pieces[i+1] = prefix[2*i : 2*i+2]
+func (pm *archiveMaster) writeResumeLogEntry(comps []string) {
+	nonEmptyComps := []string{}
+
+	for _, comp := range comps {
+		comp = strings.TrimSpace(comp)
+		if len(comp) > 0 {
+			nonEmptyComps = append(nonEmptyComps, comp)
+		}
 	}
-	pieces[5] = hexStr + suffix
+	sort.Strings(nonEmptyComps)
 
-	return filepath.Join(pieces...)
-}
-
-func PathExists(path string) (bool, error) {
-	_, err := os.Lstat(path)
-	if err == nil {
-		return true, nil
+	for _, ncomp := range nonEmptyComps {
+		fmt.Fprintf(pm.resumeLogWriter, "%s\n", ncomp)
 	}
-	if os.IsNotExist(err) {
-		return false, nil
+	pm.depot.writeSizes()
+}
+
+func (pm *archiveMaster) loopObserver() {
+	ticker := time.NewTicker(time.Minute)
+	comps := make([]string, pm.numWorkers)
+
+	for {
+		select {
+		case comp := <-pm.soFar:
+			if comp.workerIndex == -1 {
+				pm.writeResumeLogEntry(comps)
+				break
+			}
+			comps[comp.workerIndex] = comp.path
+		case <-ticker.C:
+			pm.writeResumeLogEntry(comps)
+		}
 	}
-	return false, err
-}
 
-type countWriter struct {
-	w     io.Writer
-	count int64
-}
-
-func (w *countWriter) Write(p []byte) (int, error) {
-	n, err := w.w.Write(p)
-	w.count += int64(n)
-	return n, err
+	ticker.Stop()
 }
 
 func archive(outpath string, r io.Reader, extra []byte) (int64, error) {

@@ -53,7 +53,7 @@ type countVisitor struct {
 	master         Master
 }
 
-func commonRoot(pa, pb string) string {
+func CommonRoot(pa, pb string) string {
 	if pa == "" || pb == "" {
 		return ""
 	}
@@ -124,7 +124,7 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 		if cv.commonRootPath == "" {
 			cv.commonRootPath = path
 		} else {
-			cv.commonRootPath = commonRoot(cv.commonRootPath, path)
+			cv.commonRootPath = CommonRoot(cv.commonRootPath, path)
 		}
 		glog.V(2).Infof("new current common root is %s", cv.commonRootPath)
 	}
@@ -186,7 +186,7 @@ type slave struct {
 	worker Worker
 }
 
-func cp(src, dst string) error {
+func Cp(src, dst string) error {
 	dstDir := filepath.Dir(dst)
 	err := os.MkdirAll(dstDir, 0777)
 	if err != nil {
@@ -200,13 +200,27 @@ func cp(src, dst string) error {
 	return nil
 }
 
+func Mv(src, dst string) error {
+	dstDir := filepath.Dir(dst)
+	err := os.MkdirAll(dstDir, 0777)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("mv", src, dst)
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func handleErredFile(path string) {
 	dstroot := config.GlobalConfig.General.BadDir
-	commonPrefix := commonRoot(path, dstroot)
+	commonPrefix := CommonRoot(path, dstroot)
 	srcSuffix := strings.TrimPrefix(path, commonPrefix)
 	dst := filepath.Join(dstroot, srcSuffix)
 	glog.Infof("copying bad file %s to %s", path, dst)
-	err := cp(path, dst)
+	err := Cp(path, dst)
 	if err != nil {
 		glog.Errorf("failed to handle erred file %s: %v", path, err)
 	}

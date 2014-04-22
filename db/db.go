@@ -73,6 +73,7 @@ type RomDB interface {
 	BeginDatRefresh() error
 	EndDatRefresh() error
 	PrintStats() string
+	Generation() int64
 }
 
 var DBFactory func(path string) (RomDB, error)

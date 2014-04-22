@@ -110,7 +110,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommand(writer io.Writer, rs *RombaService) *commander.Command {
 	cmd := new(commander.Command)
 	cmd.UsageLine = "Romba"
-	cmd.Subcommands = make([]*commander.Command, 14)
+	cmd.Subcommands = make([]*commander.Command, 13)
 	cmd.Flag = *flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -151,28 +151,13 @@ have a current entry in the DAT index.`,
 	cmd.Subcommands[1].Flag.Bool("include-zips", false, "add zip files themselves into the depot in addition to their contents")
 
 	cmd.Subcommands[2] = &commander.Command{
-		Run:       runCmd,
-		UsageLine: "purge-delete <list of DAT files or folders with DAT files>",
-		Short:     "Deletes DAT index entries for orphaned DATs.",
-		Long: `
-Deletes DAT index entries for orphaned DATs and deletes ROM files that are no
-longer associated with any current DATs. Deletes ROM files that are only
-associated with the specified DATs. It also deletes the specified DATs from
-the DAT index.`,
-		Flag:   *flag.NewFlagSet("romba-purge-delete", flag.ContinueOnError),
-		Stdout: writer,
-		Stderr: writer,
-	}
-
-	cmd.Subcommands[3] = &commander.Command{
-		Run:       runCmd,
-		UsageLine: "purge-backup -backup <backupdir> <list of DAT files or folders with DAT files>",
+		Run:       rs.purge,
+		UsageLine: "purge-backup -backup <backupdir>",
 		Short:     "Moves DAT index entries for orphaned DATs.",
 		Long: `
 Deletes DAT index entries for orphaned DATs and moves ROM files that are no
 longer associated with any current DATs to the specified backup folder.
-Moves to the specified backup folder those ROM files that are only associated
-with the specified DATs. The files will be placed in the backup location using
+The files will be placed in the backup location using
 a folder structure according to the original DAT master directory tree
 structure. It also deletes the specified DATs from the DAT index.`,
 		Flag:   *flag.NewFlagSet("romba-purge-backup", flag.ContinueOnError),
@@ -180,9 +165,9 @@ structure. It also deletes the specified DATs from the DAT index.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[3].Flag.String("backup", "", "backup directory where backup files are moved to")
+	cmd.Subcommands[2].Flag.String("backup", "", "backup directory where backup files are moved to")
 
-	cmd.Subcommands[4] = &commander.Command{
+	cmd.Subcommands[3] = &commander.Command{
 		Run:       rs.dir2dat,
 		UsageLine: "dir2dat -out <outputfile> -source <sourcedir>",
 		Short:     "Creates a DAT file for the specified input directory and saves it to the -out filename.",
@@ -194,15 +179,15 @@ structure. Saves this DAT file in specified output filename.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[4].Flag.String("out", "", "output filename")
-	cmd.Subcommands[4].Flag.String("source", "", "source directory")
-	cmd.Subcommands[4].Flag.String("name", "", "name value in DAT header")
-	cmd.Subcommands[4].Flag.String("description", "", "description value in DAT header")
-	cmd.Subcommands[4].Flag.String("category", "", "category value in DAT header")
-	cmd.Subcommands[4].Flag.String("version", "", "vesrion value in DAT header")
-	cmd.Subcommands[4].Flag.String("author", "", "author value in DAT header")
+	cmd.Subcommands[3].Flag.String("out", "", "output filename")
+	cmd.Subcommands[3].Flag.String("source", "", "source directory")
+	cmd.Subcommands[3].Flag.String("name", "", "name value in DAT header")
+	cmd.Subcommands[3].Flag.String("description", "", "description value in DAT header")
+	cmd.Subcommands[3].Flag.String("category", "", "category value in DAT header")
+	cmd.Subcommands[3].Flag.String("version", "", "vesrion value in DAT header")
+	cmd.Subcommands[3].Flag.String("author", "", "author value in DAT header")
 
-	cmd.Subcommands[5] = &commander.Command{
+	cmd.Subcommands[4] = &commander.Command{
 		Run:       runCmd,
 		UsageLine: "diffdat -old <datfile> -new <datfile> -out <outputfile>",
 		Short:     "Creates a DAT file with those entries that are in -new DAT.",
@@ -214,11 +199,11 @@ in -old DAT file. Ignores those entries in -old that are not in -new.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[5].Flag.String("out", "", "output filename")
-	cmd.Subcommands[5].Flag.String("old", "", "old DAT file")
-	cmd.Subcommands[5].Flag.String("new", "", "new DAT file")
+	cmd.Subcommands[4].Flag.String("out", "", "output filename")
+	cmd.Subcommands[4].Flag.String("old", "", "old DAT file")
+	cmd.Subcommands[4].Flag.String("new", "", "new DAT file")
 
-	cmd.Subcommands[6] = &commander.Command{
+	cmd.Subcommands[5] = &commander.Command{
 		Run:       runCmd,
 		UsageLine: "fixdat -out <outputdir> <list of DAT files or folders with DAT files>",
 		Short:     "For each specified DAT file it creates a fix DAT.",
@@ -231,9 +216,9 @@ particular DAT.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[6].Flag.String("out", "", "output dir")
+	cmd.Subcommands[5].Flag.String("out", "", "output dir")
 
-	cmd.Subcommands[7] = &commander.Command{
+	cmd.Subcommands[6] = &commander.Command{
 		Run:       rs.build,
 		UsageLine: "build -out <outputdir> <list of DAT files or folders with DAT files>",
 		Short:     "For each specified DAT file it creates the torrentzip files.",
@@ -246,9 +231,9 @@ structure according to the original DAT master directory tree structure.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[7].Flag.String("out", "", "output dir")
+	cmd.Subcommands[6].Flag.String("out", "", "output dir")
 
-	cmd.Subcommands[8] = &commander.Command{
+	cmd.Subcommands[7] = &commander.Command{
 		Run:       rs.lookup,
 		UsageLine: "lookup <list of hashes>",
 		Short:     "For each specified hash it looks up any available information.",
@@ -259,7 +244,7 @@ For each specified hash it looks up any available information (dat or rom).`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[9] = &commander.Command{
+	cmd.Subcommands[8] = &commander.Command{
 		Run:       rs.progress,
 		UsageLine: "progress",
 		Short:     "Shows progress of the currently running command.",
@@ -270,7 +255,7 @@ Shows progress of the currently running command.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[10] = &commander.Command{
+	cmd.Subcommands[9] = &commander.Command{
 		Run:       rs.shutdown,
 		UsageLine: "shutdown",
 		Short:     "Gracefully shuts down server.",
@@ -281,7 +266,7 @@ Gracefully shuts down server saving all the cached data.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[11] = &commander.Command{
+	cmd.Subcommands[10] = &commander.Command{
 		Run:       rs.memstats,
 		UsageLine: "memstats",
 		Short:     "Prints memory stats.",
@@ -292,7 +277,7 @@ Print memory stats.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[12] = &commander.Command{
+	cmd.Subcommands[11] = &commander.Command{
 		Run:       rs.dbstats,
 		UsageLine: "dbstats",
 		Short:     "Prints db stats.",
@@ -303,7 +288,7 @@ Print db stats.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[13] = &commander.Command{
+	cmd.Subcommands[12] = &commander.Command{
 		Run:       rs.cancel,
 		UsageLine: "cancel",
 		Short:     "Cancels current long-running job",
