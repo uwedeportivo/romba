@@ -85,6 +85,10 @@ func (pm *purgeMaster) Accept(path string) bool {
 	return filepath.Ext(path) == gzipSuffix
 }
 
+func (pm *purgeMaster) CalculateWork() bool {
+	return false
+}
+
 func (pm *purgeMaster) NewWorker(workerIndex int) worker.Worker {
 	return &purgeWorker{
 		depot: pm.depot,
@@ -140,7 +144,9 @@ func (w *purgeWorker) Process(inpath string, size int64) error {
 
 		if realDat != nil && realDat.Path != "" {
 			commonRoot := worker.CommonRoot(w.pm.backupDir, realDat.Path)
-			destPath = path.Join(w.pm.backupDir, strings.TrimPrefix(realDat.Path, commonRoot), filepath.Base(inpath))
+			destPath = path.Join(w.pm.backupDir,
+				strings.TrimSuffix(strings.TrimPrefix(realDat.Path, commonRoot), filepath.Ext(realDat.Path)),
+				filepath.Base(inpath))
 		}
 		glog.V(2).Infof("purging %s, moving to %s", inpath, destPath)
 		err = worker.Mv(inpath, destPath)

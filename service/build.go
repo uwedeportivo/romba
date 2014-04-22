@@ -112,6 +112,10 @@ type buildMaster struct {
 	outpath        string
 }
 
+func (pm *buildMaster) CalculateWork() bool {
+	return true
+}
+
 func (pm *buildMaster) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".dat" || ext == ".xml"

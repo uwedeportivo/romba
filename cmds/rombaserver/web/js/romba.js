@@ -53,10 +53,19 @@ jQuery(document).ready(function($) {
 
 	 	if (msg["Running"]) {
 		 	$('#progress').show();
-	 		$('#progressbarBytes').progressbar({ max: msg.TotalBytes });
-			$('#progressbarFiles').progressbar({ max: msg.TotalFiles });
-		 	$('#progressbarFiles').progressbar("value", msg.FilesSoFar);
-		    $('#progressbarBytes').progressbar("value", msg.BytesSoFar);
+		 	if (msg["KnowTotal"]) {
+	 		   $('#progressbarBytes').progressbar({ max: msg.TotalBytes });
+			   $('#progressbarFiles').progressbar({ max: msg.TotalFiles });
+		 	   $('#progressbarFiles').progressbar("value", msg.FilesSoFar);
+		       $('#progressbarBytes').progressbar("value", msg.BytesSoFar);
+		       $('#progressTextFiles').text("" + msg.FilesSoFar + " of " + msg.TotalFiles);
+		 	   $('#progressTextBytes').text("" + niceBytes(msg.BytesSoFar) + " of " + niceBytes(msg.TotalBytes));
+		    } else {
+		   	   $('#progressbarFiles').progressbar("value", false);
+		       $('#progressbarBytes').progressbar("value", false);
+		       $('#progressTextFiles').text("" + msg.FilesSoFar);
+		 	   $('#progressTextBytes').text("" + niceBytes(msg.BytesSoFar));
+		    }
 
 		 	$('#progressTextFiles').text("" + msg.FilesSoFar + " of " + msg.TotalFiles);
 		 	$('#progressTextBytes').text("" + niceBytes(msg.BytesSoFar) + " of " + niceBytes(msg.TotalBytes));

@@ -67,6 +67,7 @@ type ProgressNessage struct {
 	Starting        bool
 	Stopping        bool
 	TerminalMessage string
+	KnowTotal       bool
 }
 
 type RombaService struct {
@@ -143,6 +144,7 @@ func (rs *RombaService) broadCastProgress(t time.Time, starting bool, stopping b
 		pmsg.TotalBytes = p.TotalBytes
 		pmsg.BytesSoFar = p.BytesSoFar
 		pmsg.FilesSoFar = p.FilesSoFar
+		pmsg.KnowTotal = p.KnowTotal()
 		pmsg.JobName = jn
 		pmsg.Running = true
 	} else {

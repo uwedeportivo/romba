@@ -197,6 +197,10 @@ type refreshMaster struct {
 	pt         worker.ProgressTracker
 }
 
+func (pm *refreshMaster) CalculateWork() bool {
+	return true
+}
+
 func (pm *refreshMaster) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".dat" || ext == ".xml"

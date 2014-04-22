@@ -173,6 +173,7 @@ type Master interface {
 	FinishUp() error
 	Start() error
 	Scanned(numFiles int, numBytes int64, commonRootPath string)
+	CalculateWork() bool
 }
 
 type workUnit struct {
@@ -275,35 +276,39 @@ func Work(workname string, paths []string, master Master) (string, error) {
 		return "", err
 	}
 
-	cv := new(countVisitor)
-	cv.master = master
+	var cv *countVisitor
 
-	for k, name := range paths {
-		if !filepath.IsAbs(name) {
-			absname, err := filepath.Abs(name)
+	if master.CalculateWork() {
+		cv = new(countVisitor)
+		cv.master = master
+
+		for k, name := range paths {
+			if !filepath.IsAbs(name) {
+				absname, err := filepath.Abs(name)
+				if err != nil {
+					return "", err
+				}
+				paths[k] = absname
+			}
+		}
+
+		for _, name := range paths {
+			glog.Infof("initial scan of %s to determine amount of work\n", name)
+
+			err := filepath.Walk(name, cv.visit)
 			if err != nil {
+				glog.Errorf("failed to count in dir %s: %v\n", name, err)
 				return "", err
 			}
-			paths[k] = absname
 		}
+
+		glog.Infof("found %d files and %s to do. starting work...\n", cv.numFiles, humanize.Bytes(uint64(cv.numBytes)))
+
+		master.Scanned(cv.numFiles, cv.numBytes, cv.commonRootPath)
+
+		pt.SetTotalBytes(cv.numBytes)
+		pt.SetTotalFiles(int32(cv.numFiles))
 	}
-
-	for _, name := range paths {
-		glog.Infof("initial scan of %s to determine amount of work\n", name)
-
-		err := filepath.Walk(name, cv.visit)
-		if err != nil {
-			glog.Errorf("failed to count in dir %s: %v\n", name, err)
-			return "", err
-		}
-	}
-
-	glog.Infof("found %d files and %s to do. starting work...\n", cv.numFiles, humanize.Bytes(uint64(cv.numBytes)))
-
-	master.Scanned(cv.numFiles, cv.numBytes, cv.commonRootPath)
-
-	pt.SetTotalBytes(cv.numBytes)
-	pt.SetTotalFiles(int32(cv.numFiles))
 
 	inwork := make(chan *workUnit)
 
@@ -388,17 +393,22 @@ func Work(workname string, paths []string, master Master) (string, error) {
 	pgr := pt.GetProgress()
 
 	endMsg.WriteString(fmt.Sprintf("finished %s\n", workname))
-	endMsg.WriteString(fmt.Sprintf("total number of files: %d\n", cv.numFiles))
-	endMsg.WriteString(fmt.Sprintf("number of files processed: %d\n", pgr.TotalFiles))
+	if cv != nil {
+		endMsg.WriteString(fmt.Sprintf("total number of files: %d\n", cv.numFiles))
+	}
+	endMsg.WriteString(fmt.Sprintf("number of files processed: %d\n", pgr.FilesSoFar))
 	endMsg.WriteString(fmt.Sprintf("number of files with errors: %d\n", pgr.ErrorFiles))
 
-	endMsg.WriteString(fmt.Sprintf("total number of bytes: %s\n", humanize.Bytes(uint64(cv.numBytes))))
-	endMsg.WriteString(fmt.Sprintf("number of bytes processed: %s\n", humanize.Bytes(uint64(pgr.TotalBytes))))
+	if cv != nil {
+		endMsg.WriteString(fmt.Sprintf("total number of bytes: %s\n", humanize.Bytes(uint64(cv.numBytes))))
+	}
+	endMsg.WriteString(fmt.Sprintf("number of bytes processed: %s\n", humanize.Bytes(uint64(pgr.BytesSoFar))))
 	endMsg.WriteString(fmt.Sprintf("elapsed time: %s\n", formatDuration(elapsed)))
 
-	ts := uint64(float64(cv.numBytes) / float64(elapsed.Seconds()))
-
-	endMsg.WriteString(fmt.Sprintf("throughput: %s/s \n", humanize.Bytes(ts)))
+	if cv != nil {
+		ts := uint64(float64(cv.numBytes) / float64(elapsed.Seconds()))
+		endMsg.WriteString(fmt.Sprintf("throughput: %s/s \n", humanize.Bytes(ts)))
+	}
 
 	endS := endMsg.String()
 

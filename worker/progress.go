@@ -41,6 +41,7 @@ type ProgressTracker interface {
 	GetProgress() *Progress
 	Stop(wc chan bool)
 	Stopped() bool
+	KnowTotal() bool
 }
 
 type Progress struct {
@@ -50,6 +51,7 @@ type Progress struct {
 	BytesSoFar int64
 	FilesSoFar int32
 	stopped    bool
+	knowTotal  bool
 	m          *sync.Mutex
 	wc         chan bool
 }
@@ -60,12 +62,18 @@ func NewProgressTracker() ProgressTracker {
 	return pt
 }
 
+func (pt *Progress) KnowTotal() bool {
+	return pt.knowTotal
+}
+
 func (pt *Progress) SetTotalBytes(value int64) {
 	pt.TotalBytes = value
+	pt.knowTotal = true
 }
 
 func (pt *Progress) SetTotalFiles(value int32) {
 	pt.TotalFiles = value
+	pt.knowTotal = true
 }
 
 func (pt *Progress) AddBytesFromFile(value int64, erred bool) {
@@ -114,6 +122,7 @@ func (pt *Progress) Reset() {
 	pt.FilesSoFar = 0
 	pt.ErrorFiles = 0
 	pt.stopped = false
+	pt.knowTotal = false
 	pt.wc = nil
 }
 
@@ -127,5 +136,6 @@ func (pt *Progress) GetProgress() *Progress {
 	p.ErrorFiles = pt.ErrorFiles
 	p.BytesSoFar = pt.BytesSoFar
 	p.FilesSoFar = pt.FilesSoFar
+	p.knowTotal = pt.knowTotal
 	return p
 }

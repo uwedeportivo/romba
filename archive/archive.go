@@ -205,6 +205,10 @@ func (pm *archiveMaster) NewWorker(workerIndex int) worker.Worker {
 	}
 }
 
+func (pm *archiveMaster) CalculateWork() bool {
+	return true
+}
+
 func (pm *archiveMaster) NumWorkers() int {
 	return pm.numWorkers
 }
