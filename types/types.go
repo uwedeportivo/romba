@@ -67,6 +67,12 @@ type Rom struct {
 
 type RomSlice []*Rom
 
+func (ar *Rom) HashesMatch(br *Rom) bool {
+	return (ar.Crc != nil && bytes.Equal(ar.Crc, br.Crc)) ||
+		(ar.Md5 != nil && bytes.Equal(ar.Md5, br.Md5)) ||
+		(ar.Sha1 != nil && bytes.Equal(ar.Sha1, br.Sha1))
+}
+
 func (ar *Rom) Equals(br *Rom) bool {
 	if ar.Name != br.Name {
 		return false
@@ -178,4 +184,34 @@ func (d *Dat) Normalize() {
 		}
 		sort.Sort(g.Roms)
 	}
+}
+
+func (d *Dat) NarrowToRom(rom *Rom) *Dat {
+	dc := new(Dat)
+	dc.Name = d.Name
+	dc.Path = d.Path
+	dc.Description = d.Description
+
+	addedGame := false
+	for _, g := range d.Games {
+		gc := new(Game)
+		gc.Name = g.Name
+		gc.Description = g.Description
+		addedRom := false
+		for _, r := range g.Roms {
+			if r.HashesMatch(rom) {
+				gc.Roms = append(gc.Roms, r)
+				addedRom = true
+			}
+		}
+		if addedRom {
+			dc.Games = append(dc.Games, gc)
+			addedGame = true
+		}
+	}
+
+	if addedGame {
+		return dc
+	}
+	return nil
 }

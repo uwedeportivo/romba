@@ -207,6 +207,18 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 			return err
 		}
 
+		r := new(types.Rom)
+		switch len(hash) {
+		case md5.Size:
+			r.Md5 = hash
+		case crc32.Size:
+			r.Crc = hash
+		case sha1.Size:
+			r.Sha1 = hash
+		default:
+			return fmt.Errorf("found unknown hash size: %d", len(hash))
+		}
+
 		if len(hash) == sha1.Size {
 			dat, err := rs.romDB.GetDat(hash)
 			if err != nil {
@@ -218,7 +230,7 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 				fmt.Fprintf(cmd.Stdout, "dat with sha1 %s = %s\n", arg, types.PrintShortDat(dat))
 			}
 
-			inDepot, err := rs.depot.SHA1InDepot(arg)
+			inDepot, hh, err := rs.depot.SHA1InDepot(arg)
 			if err != nil {
 				return err
 			}
@@ -226,19 +238,11 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 			if inDepot {
 				fmt.Fprintf(cmd.Stdout, "-----------------\n")
 				fmt.Fprintf(cmd.Stdout, "rom file %s.gz in depot\n", arg)
+				fmt.Fprintf(cmd.Stdout, "crc = %s\n", hex.EncodeToString(hh.Crc))
+				fmt.Fprintf(cmd.Stdout, "md5 = %s\n", hex.EncodeToString(hh.Md5))
+				r.Crc = hh.Crc
+				r.Md5 = hh.Md5
 			}
-		}
-
-		r := new(types.Rom)
-		switch len(hash) {
-		case md5.Size:
-			r.Md5 = hash
-		case crc32.Size:
-			r.Crc = hash
-		case sha1.Size:
-			r.Sha1 = hash
-		default:
-			return fmt.Errorf("found unknown hash size: %d", len(hash))
 		}
 
 		err = rs.romDB.CompleteRom(r)
@@ -253,7 +257,13 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 
 		if len(dats) > 0 {
 			fmt.Fprintf(cmd.Stdout, "-----------------\n")
-			fmt.Fprintf(cmd.Stdout, "rom found in:\n %s\n", types.PrintRomInDats(dats))
+			fmt.Fprintf(cmd.Stdout, "rom found in:\n")
+			for _, dat := range dats {
+				dn := dat.NarrowToRom(r)
+				if dn != nil {
+					fmt.Fprintf(cmd.Stdout, "%s\n", types.PrintDat(dn))
+				}
+			}
 
 			used := false
 			var realDat *types.Dat
@@ -266,8 +276,9 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 				}
 			}
 
+			fmt.Fprintf(cmd.Stdout, "-----------------\n")
 			if used {
-				fmt.Fprintf(cmd.Stdout, "rom used in at least %s\n", types.PrintShortDat(realDat))
+				fmt.Fprintf(cmd.Stdout, "rom used in at least %s\n", realDat.Path)
 			} else {
 				fmt.Fprintf(cmd.Stdout, "rom not used\n")
 			}

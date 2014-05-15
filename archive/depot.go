@@ -32,16 +32,18 @@ package archive
 
 import (
 	"bytes"
+	"crypto/md5"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"os"
 	"sync"
 
-	"github.com/golang/glog"
-
 	"github.com/dustin/go-humanize"
+	"github.com/golang/glog"
+	"github.com/uwedeportivo/torrentzip/cgzip"
 
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/types"
@@ -90,19 +92,56 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	return depot, nil
 }
 
-func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, error) {
+func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, error) {
 	for _, root := range depot.roots {
 		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 
 		if exists {
-			return true, nil
+			hh := new(Hashes)
+			sha1Bytes, err := hex.DecodeString(sha1Hex)
+			if err != nil {
+				return false, nil, err
+			}
+			hh.Sha1 = sha1Bytes
+
+			romGZ, err := os.Open(rompath)
+			if err != nil {
+				return false, nil, err
+			}
+			defer romGZ.Close()
+
+			gzr, err := cgzip.NewReader(romGZ)
+			if err != nil {
+				return false, nil, err
+			}
+			defer gzr.Close()
+
+			md5crcBuffer := make([]byte, md5.Size+crc32.Size)
+			err = gzr.RequestExtraHeader(md5crcBuffer)
+			if err != nil {
+				return false, nil, err
+			}
+
+			gzbuf := make([]byte, 1024)
+			gzr.Read(gzbuf)
+
+			md5crcBuffer = gzr.GetExtraHeader()
+
+			if len(md5crcBuffer) == md5.Size+crc32.Size {
+				hh.Md5 = make([]byte, md5.Size)
+				copy(hh.Md5, md5crcBuffer[:md5.Size])
+				hh.Crc = make([]byte, crc32.Size)
+				copy(hh.Crc, md5crcBuffer[md5.Size:])
+			}
+
+			return true, hh, nil
 		}
 	}
-	return false, nil
+	return false, nil, nil
 }
 
 func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
