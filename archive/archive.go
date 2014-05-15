@@ -327,7 +327,7 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64) 
 		needed := false
 
 		for _, dat := range dats {
-			if !dat.Artificial {
+			if !dat.Artificial && dat.Generation == w.depot.romDB.Generation() {
 				needed = true
 				break
 			}
