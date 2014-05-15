@@ -74,7 +74,9 @@ func (rs *RombaService) startRefreshDats(cmd *commander.Command, args []string) 
 			}
 		}()
 
-		endMsg, err := db.Refresh(rs.romDB, rs.dats, rs.numWorkers, rs.pt)
+		numWorkers := cmd.Flag.Lookup("workers").Value.Get().(int)
+
+		endMsg, err := db.Refresh(rs.romDB, rs.dats, numWorkers, rs.pt)
 		if err != nil {
 			glog.Errorf("error refreshing dats: %v", err)
 		}

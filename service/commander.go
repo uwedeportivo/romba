@@ -38,6 +38,7 @@ import (
 
 	"github.com/gonuts/flag"
 	"github.com/uwedeportivo/commander"
+	"github.com/uwedeportivo/romba/config"
 )
 
 type splitState struct {
@@ -129,6 +130,9 @@ contents of any changed dats.`,
 		Stderr: writer,
 	}
 
+	cmd.Subcommands[0].Flag.Int("workers", config.GlobalConfig.General.Workers,
+		"how many workers to launch for the job")
+
 	cmd.Subcommands[1] = &commander.Command{
 		Run:       rs.startArchive,
 		UsageLine: "archive [-only-needed] [-include-zips] [-resume resumelog] <space-separated list of directories of ROM files>",
@@ -149,6 +153,8 @@ have a current entry in the DAT index.`,
 	cmd.Subcommands[1].Flag.Bool("only-needed", false, "only archive ROM files actually referenced by DAT files from the DAT index")
 	cmd.Subcommands[1].Flag.String("resume", "", "resume a previously interrupted archive operation from the specified path")
 	cmd.Subcommands[1].Flag.Bool("include-zips", false, "add zip files themselves into the depot in addition to their contents")
+	cmd.Subcommands[1].Flag.Int("workers", config.GlobalConfig.General.Workers,
+		"how many workers to launch for the job")
 
 	cmd.Subcommands[2] = &commander.Command{
 		Run:       rs.purge,
@@ -166,6 +172,8 @@ structure. It also deletes the specified DATs from the DAT index.`,
 	}
 
 	cmd.Subcommands[2].Flag.String("backup", "", "backup directory where backup files are moved to")
+	cmd.Subcommands[2].Flag.Int("workers", config.GlobalConfig.General.Workers,
+		"how many workers to launch for the job")
 
 	cmd.Subcommands[3] = &commander.Command{
 		Run:       rs.dir2dat,
