@@ -32,9 +32,10 @@ package parser
 
 import (
 	"fmt"
-	"github.com/uwedeportivo/romba/types"
 	"strings"
 	"testing"
+
+	"github.com/uwedeportivo/romba/types"
 )
 
 func TestParserDatGoesThrough(t *testing.T) {
@@ -74,7 +75,7 @@ game (
 game (
 	name "Afterburner (1989)(Sega)(Side A)[cr NEC]"
 	description "Afterburner (1989)(Sega)(Side A)[cr NEC]"
-	rom ( name "Afterburner (1989)(Sega)(Side A)[cr NEC].g64" size 333744 crc 175a3f26 md5 36ecf1371d3391c06c16f751431c932b sha1 80353cb168dc5d7cc1dce57971f4ea2640a50ac4 )
+	rom ( name "Afterburner (1989)(Sega)(Side A)[cr NEC].g64" size 333744 crc 0x175a3f26 md5 36ecf1371d3391c06c16f751431c932b sha1 80353cb168dc5d7cc1dce57971f4ea2640a50ac4 )
 )
 `
 

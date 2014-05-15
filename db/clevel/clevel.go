@@ -32,6 +32,7 @@ package clevel
 
 import (
 	"fmt"
+
 	"github.com/jmhodges/levigo"
 	"github.com/uwedeportivo/romba/db"
 )
@@ -104,7 +105,9 @@ func (s *store) Exists(key []byte) (bool, error) {
 
 func (s *store) BeginRefresh() error { return nil }
 func (s *store) EndRefresh() error   { return nil }
-func (s *store) PrintStats() string  { return "" }
+func (s *store) PrintStats() string {
+	return s.dbn.PropertyValue("leveldb.stats")
+}
 
 func (s *store) Flush() {}
 

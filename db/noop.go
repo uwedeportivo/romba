@@ -84,3 +84,7 @@ func (noop *NoOpBatch) IndexDat(dat *types.Dat, sha1 []byte) error {
 func (noop *NoOpBatch) Size() int64 {
 	return 0
 }
+
+func (noop *NoOpBatch) DebugGet(key []byte) string {
+	return ""
+}

@@ -133,6 +133,7 @@ func (w *purgeWorker) Process(inpath string, size int64) error {
 	for _, dat := range dats {
 		if !dat.Artificial && dat.Generation == w.pm.depot.romDB.Generation() {
 			used = true
+			break
 		}
 		if !dat.Artificial {
 			realDat = dat

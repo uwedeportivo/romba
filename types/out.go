@@ -64,6 +64,10 @@ game (
 ){{end}}{{end}}
 `
 
+const romTemplate = `
+rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}} )
+`
+
 const datShortTemplate = `
 dat (
 	name "{{.Name}}"
@@ -115,6 +119,7 @@ var dt = template.Must(template.New("datout").Funcs(ff).Parse(datTemplate))
 var cdt = template.Must(template.New("compliantdatout").Funcs(ff).Parse(compliantDatTemplate))
 var sdt = template.Must(template.New("datshortout").Funcs(ff).Parse(datShortTemplate))
 var dts = template.Must(template.New("datsout").Funcs(ff).Parse(datsTemplate))
+var rt = template.Must(template.New("romout").Funcs(ff).Parse(romTemplate))
 
 func PrintDat(d *Dat) []byte {
 	buf := new(bytes.Buffer)
@@ -161,6 +166,17 @@ func PrintRomInDats(dats []*Dat) []byte {
 	buf := new(bytes.Buffer)
 
 	err := dts.Execute(buf, dats)
+	if err != nil {
+		panic(err)
+	}
+
+	return buf.Bytes()
+}
+
+func PrintRom(rom *Rom) []byte {
+	buf := new(bytes.Buffer)
+
+	err := rt.Execute(buf, rom)
 	if err != nil {
 		panic(err)
 	}

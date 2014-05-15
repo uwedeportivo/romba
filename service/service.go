@@ -195,6 +195,13 @@ func runCmd(cmd *commander.Command, args []string) error {
 
 func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 	for _, arg := range args {
+		fmt.Fprintf(cmd.Stdout, "----------------------------------------\n")
+		fmt.Fprintf(cmd.Stdout, "key: %s\n", arg)
+
+		if strings.HasPrefix(arg, "0x") {
+			arg = arg[2:]
+		}
+
 		hash, err := hex.DecodeString(arg)
 		if err != nil {
 			return err
@@ -207,7 +214,18 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 			}
 
 			if dat != nil {
+				fmt.Fprintf(cmd.Stdout, "-----------------\n")
 				fmt.Fprintf(cmd.Stdout, "dat with sha1 %s = %s\n", arg, types.PrintShortDat(dat))
+			}
+
+			inDepot, err := rs.depot.SHA1InDepot(arg)
+			if err != nil {
+				return err
+			}
+
+			if inDepot {
+				fmt.Fprintf(cmd.Stdout, "-----------------\n")
+				fmt.Fprintf(cmd.Stdout, "rom file %s.gz in depot\n", arg)
 			}
 		}
 
@@ -223,19 +241,40 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 			return fmt.Errorf("found unknown hash size: %d", len(hash))
 		}
 
-		dats, err := rs.romDB.DatsForRom(r)
-		if err != nil {
-			return err
-		}
-
 		err = rs.romDB.CompleteRom(r)
 		if err != nil {
 			return err
 		}
 
-		if len(dats) > 0 {
-			fmt.Fprintf(cmd.Stdout, "rom in %s\n", types.PrintRomInDats(dats))
+		dats, err := rs.romDB.DatsForRom(r)
+		if err != nil {
+			return err
 		}
+
+		if len(dats) > 0 {
+			fmt.Fprintf(cmd.Stdout, "-----------------\n")
+			fmt.Fprintf(cmd.Stdout, "rom found in:\n %s\n", types.PrintRomInDats(dats))
+
+			used := false
+			var realDat *types.Dat
+
+			for _, dat := range dats {
+				if !dat.Artificial && dat.Generation == rs.romDB.Generation() {
+					used = true
+					realDat = dat
+					break
+				}
+			}
+
+			if used {
+				fmt.Fprintf(cmd.Stdout, "rom used in at least %s\n", types.PrintShortDat(realDat))
+			} else {
+				fmt.Fprintf(cmd.Stdout, "rom not used\n")
+			}
+		}
+
+		fmt.Fprintf(cmd.Stdout, "-----------------\n")
+		fmt.Fprintf(cmd.Stdout, "DebugGet:\n%s\n", rs.romDB.DebugGet(hash))
 	}
 
 	return nil

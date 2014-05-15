@@ -36,13 +36,15 @@ import (
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
-	"github.com/uwedeportivo/romba/types"
 	"hash"
 	"io"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/golang/glog"
+	"github.com/uwedeportivo/romba/types"
 )
 
 const (
@@ -82,6 +84,10 @@ func stringValue2Bytes(input string, expectedLength int) ([]byte, error) {
 	}
 
 	input = strings.TrimSpace(input)
+
+	if strings.HasPrefix(input, "0x") {
+		input = input[2:]
+	}
 
 	if len(input) < expectedLength {
 		input = strings.Repeat("0", expectedLength-len(input)) + input
@@ -216,16 +222,19 @@ func (p *parser) romStmt() (*types.Rom, error) {
 		case i.typ == itemMd5:
 			r.Md5, err = p.consumeHexBytes(32)
 			if err != nil {
+				glog.Errorf("failed to decode md5 for rom %s in file %s: %v", r.Name, p.ll.name, err)
 				return nil, nil
 			}
 		case i.typ == itemCrc:
 			r.Crc, err = p.consumeHexBytes(8)
 			if err != nil {
+				glog.Errorf("failed to decode crc for rom %s in file %s: %v", r.Name, p.ll.name, err)
 				return nil, nil
 			}
 		case i.typ == itemSha1:
 			r.Sha1, err = p.consumeHexBytes(40)
 			if err != nil {
+				glog.Errorf("failed to decode sha1 for rom %s in file %s: %v", r.Name, p.ll.name, err)
 				return nil, nil
 			}
 		}
@@ -280,7 +289,7 @@ func ParseDat(r io.Reader, path string) (*types.Dat, []byte, error) {
 	}
 
 	p := &parser{
-		ll: lex("dat", hr),
+		ll: lex("dat - "+path, hr),
 		d:  &types.Dat{},
 	}
 
