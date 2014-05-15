@@ -31,6 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package archive
 
 import (
+	"encoding/hex"
 	"errors"
 	"os"
 	"path"
@@ -121,6 +122,14 @@ func (w *purgeWorker) Process(inpath string, size int64) error {
 	if err != nil {
 		return err
 	}
+
+	inDepot, hh, err := w.pm.depot.SHA1InDepot(hex.EncodeToString(rom.Sha1))
+	if err != nil {
+		return err
+	}
+
+	rom.Md5 = hh.Md5
+	rom.Crc = hh.Crc
 
 	dats, err := w.pm.depot.romDB.DatsForRom(rom)
 	if err != nil {
