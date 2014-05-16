@@ -241,6 +241,12 @@ structure according to the original DAT master directory tree structure.`,
 
 	cmd.Subcommands[6].Flag.String("out", "", "output dir")
 
+	cmd.Subcommands[6].Flag.Int("workers", config.GlobalConfig.General.Workers,
+		"how many workers to launch for the job")
+
+	cmd.Subcommands[6].Flag.Int("subworkers", config.GlobalConfig.General.Workers,
+		"how many subworkers to launch for each worker")
+
 	cmd.Subcommands[7] = &commander.Command{
 		Run:       rs.lookup,
 		UsageLine: "lookup <list of hashes>",

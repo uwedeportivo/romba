@@ -88,7 +88,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		}
 	}
 
-	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.NumWorkers())
+	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers)
 	if err != nil {
 		return err
 	}
@@ -107,6 +107,7 @@ func (pw *buildWorker) Close() error {
 type buildMaster struct {
 	rs             *RombaService
 	numWorkers     int
+	numSubWorkers  int
 	pt             worker.ProgressTracker
 	commonRootPath string
 	outpath        string
@@ -174,6 +175,9 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 		return nil
 	}
 
+	numWorkers := cmd.Flag.Lookup("workers").Value.Get().(int)
+	numSubWorkers := cmd.Flag.Lookup("subworkers").Value.Get().(int)
+
 	if !filepath.IsAbs(outpath) {
 		absoutpath, err := filepath.Abs(outpath)
 		if err != nil {
@@ -209,10 +213,11 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 		}()
 
 		pm := &buildMaster{
-			outpath:    outpath,
-			rs:         rs,
-			numWorkers: rs.numWorkers,
-			pt:         rs.pt,
+			outpath:       outpath,
+			rs:            rs,
+			numWorkers:    numWorkers,
+			numSubWorkers: numSubWorkers,
+			pt:            rs.pt,
 		}
 
 		endMsg, err := worker.Work("building dats", args, pm)
