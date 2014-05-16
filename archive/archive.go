@@ -76,6 +76,7 @@ type archiveMaster struct {
 	resumeLogFile   *os.File
 	resumeLogWriter *bufio.Writer
 	includezips     bool
+	includegzips    bool
 	onlyneeded      bool
 }
 
@@ -152,7 +153,8 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 	return lines[0], nil
 }
 
-func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, onlyneeded bool, numWorkers int,
+func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, includegzips bool,
+	onlyneeded bool, numWorkers int,
 	logDir string, pt worker.ProgressTracker) (string, error) {
 
 	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
@@ -181,6 +183,7 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips bool,
 	pm.resumeLogWriter = resumeLogWriter
 	pm.resumeLogFile = resumeLogFile
 	pm.includezips = includezips
+	pm.includegzips = includegzips
 	pm.onlyneeded = onlyneeded
 
 	go pm.loopObserver()
@@ -264,7 +267,7 @@ func (w *archiveWorker) Process(path string, size int64) error {
 	if pathext == zipSuffix {
 		_, err = w.archiveZip(path, size, w.pm.includezips)
 	} else if pathext == gzipSuffix {
-		_, err = w.archiveGzip(path, size, w.pm.includezips)
+		_, err = w.archiveGzip(path, size, w.pm.includegzips)
 	} else {
 		_, err = w.archiveRom(path, size)
 	}
@@ -456,13 +459,23 @@ func openGzipReadCloser(inpath string) (io.ReadCloser, error) {
 	}, nil
 }
 
-func (w *archiveWorker) archiveGzip(inpath string, size int64, addZipItself bool) (int64, error) {
-	if addZipItself {
-		return w.archiveRom(inpath, size)
+func (w *archiveWorker) archiveGzip(inpath string, size int64, addGZipItself bool) (int64, error) {
+	var total int64
+	if addGZipItself {
+		n, err := w.archiveRom(inpath, size)
+		if err != nil {
+			return 0, err
+		}
+		total += n
 	}
 
-	return w.archive(func() (io.ReadCloser, error) { return openGzipReadCloser(inpath) },
+	n, err := w.archive(func() (io.ReadCloser, error) { return openGzipReadCloser(inpath) },
 		filepath.Base(inpath), stripExt(inpath), size)
+	if err != nil {
+		return 0, err
+	}
+	total += n
+	return total, nil
 }
 
 func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
