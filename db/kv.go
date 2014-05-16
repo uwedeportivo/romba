@@ -281,10 +281,6 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
 		}
 		if len(dBytes) >= sha1.Size {
 			rom.Sha1 = dBytes[:sha1.Size]
-		} else {
-			if glog.V(4) {
-				glog.Warningf("no mapping from MD5 %s to SHA1", hex.EncodeToString(rom.Md5))
-			}
 		}
 		return nil
 	}
@@ -296,10 +292,6 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
 		}
 		if len(dBytes) >= sha1.Size {
 			rom.Sha1 = dBytes[:sha1.Size]
-		} else {
-			if glog.V(4) {
-				glog.Warningf("no mapping from CRC %s to SHA1", hex.EncodeToString(rom.Crc))
-			}
 		}
 	}
 	return nil

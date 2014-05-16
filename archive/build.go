@@ -51,14 +51,17 @@ type gameBuilder struct {
 	mutex   *sync.Mutex
 	wc      chan *types.Game
 	erc     chan error
+	index   int
 }
 
 func (gb *gameBuilder) work() {
+	glog.V(4).Infof("starting subworker %d", gb.index)
 	for game := range gb.wc {
 		gamePath := filepath.Join(gb.datPath, game.Name+zipSuffix)
 		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath)
 		if err != nil {
 			gb.erc <- err
+			glog.V(4).Infof("exiting subworker %d", gb.index)
 			return
 		}
 		if fixGame != nil {
@@ -70,10 +73,12 @@ func (gb *gameBuilder) work() {
 			err := os.Remove(gamePath)
 			if err != nil {
 				gb.erc <- err
+				glog.V(4).Infof("exiting subworker %d", gb.index)
 				return
 			}
 		}
 	}
+	glog.V(4).Infof("exiting subworker %d", gb.index)
 }
 
 func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int) (bool, error) {
@@ -101,6 +106,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int) 
 		gb.mutex = mutex
 		gb.datPath = datPath
 		gb.fixDat = fixDat
+		gb.index = i
 
 		go gb.work()
 	}
@@ -160,8 +166,6 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string) (*types.Game, b
 		}
 
 		if rom.Sha1 == nil {
-			glog.V(4).Infof("game %s has rom with missing SHA1 %s", game.Name, rom.Name)
-
 			if fixGame == nil {
 				fixGame = new(types.Game)
 				fixGame.Name = game.Name
