@@ -36,6 +36,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/golang/glog"
 	"github.com/uwedeportivo/romba/types"
@@ -43,7 +44,39 @@ import (
 	"github.com/uwedeportivo/torrentzip/cgzip"
 )
 
-func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
+type gameBuilder struct {
+	depot   *Depot
+	datPath string
+	fixDat  *types.Dat
+	mutex   *sync.Mutex
+	wc      chan *types.Game
+	erc     chan error
+}
+
+func (gb *gameBuilder) work() {
+	for game := range gb.wc {
+		gamePath := filepath.Join(gb.datPath, game.Name+zipSuffix)
+		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath)
+		if err != nil {
+			gb.erc <- err
+			return
+		}
+		if fixGame != nil {
+			gb.mutex.Lock()
+			gb.fixDat.Games = append(gb.fixDat.Games, fixGame)
+			gb.mutex.Unlock()
+		}
+		if !foundRom {
+			err := os.Remove(gamePath)
+			if err != nil {
+				gb.erc <- err
+				return
+			}
+		}
+	}
+}
+
+func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int) (bool, error) {
 	datPath := filepath.Join(outpath, dat.Name)
 
 	err := os.Mkdir(datPath, 0777)
@@ -51,32 +84,38 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
 		return false, err
 	}
 
-	var fixDat *types.Dat
+	fixDat := new(types.Dat)
+	fixDat.Name = dat.Name
+	fixDat.Description = dat.Description
+	fixDat.Path = dat.Path
 
-	for _, game := range dat.Games {
-		gamePath := filepath.Join(datPath, game.Name+zipSuffix)
-		fixGame, foundRom, err := depot.buildGame(game, gamePath)
-		if err != nil {
-			return false, err
-		}
-		if fixGame != nil {
-			if fixDat == nil {
-				fixDat = new(types.Dat)
-				fixDat.Name = dat.Name
-				fixDat.Description = dat.Description
-				fixDat.Path = dat.Path
-			}
-			fixDat.Games = append(fixDat.Games, fixGame)
-		}
-		if !foundRom {
-			err = os.Remove(gamePath)
-			if err != nil {
-				return false, err
-			}
-		}
+	wc := make(chan *types.Game)
+	erc := make(chan error)
+	mutex := new(sync.Mutex)
+
+	for i := 0; i < numSubworkers; i++ {
+		gb := new(gameBuilder)
+		gb.depot = depot
+		gb.wc = wc
+		gb.erc = erc
+		gb.mutex = mutex
+		gb.datPath = datPath
+		gb.fixDat = fixDat
+
+		go gb.work()
 	}
 
-	if fixDat != nil {
+	for _, game := range dat.Games {
+		select {
+		case wc <- game:
+		case err := <-erc:
+			close(wc)
+			return false, err
+		}
+	}
+	close(wc)
+
+	if len(fixDat.Games) > 0 {
 		fixDatPath := filepath.Join(outpath, fixPrefix+dat.Name+datSuffix)
 
 		fixFile, err := os.Create(fixDatPath)
@@ -94,7 +133,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string) (bool, error) {
 		}
 	}
 
-	return fixDat == nil, nil
+	return len(fixDat.Games) > 0, nil
 }
 
 func (depot *Depot) buildGame(game *types.Game, gamePath string) (*types.Game, bool, error) {
@@ -115,10 +154,14 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string) (*types.Game, b
 	foundRom := false
 
 	for _, rom := range game.Roms {
+		err = depot.romDB.CompleteRom(rom)
+		if err != nil {
+			return nil, false, err
+		}
+
 		if rom.Sha1 == nil {
-			if glog.V(2) {
-				glog.Warningf("game %s has rom with missing SHA1 %s", game.Name, rom.Name)
-			}
+			glog.V(4).Infof("game %s has rom with missing SHA1 %s", game.Name, rom.Name)
+
 			if fixGame == nil {
 				fixGame = new(types.Game)
 				fixGame.Name = game.Name

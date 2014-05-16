@@ -88,7 +88,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		}
 	}
 
-	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir)
+	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.NumWorkers())
 	if err != nil {
 		return err
 	}
