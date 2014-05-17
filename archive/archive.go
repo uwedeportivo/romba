@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -50,6 +51,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
+	"github.com/uwedeportivo/sevenzip"
 	"github.com/uwedeportivo/torrentzip/cgzip"
 	"github.com/uwedeportivo/torrentzip/czip"
 )
@@ -77,6 +79,7 @@ type archiveMaster struct {
 	resumeLogWriter *bufio.Writer
 	includezips     bool
 	includegzips    bool
+	include7zips    bool
 	onlyneeded      bool
 }
 
@@ -153,7 +156,7 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 	return lines[0], nil
 }
 
-func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, includegzips bool,
+func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, includegzips bool, include7zips bool,
 	onlyneeded bool, numWorkers int,
 	logDir string, pt worker.ProgressTracker) (string, error) {
 
@@ -184,6 +187,7 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips bool,
 	pm.resumeLogFile = resumeLogFile
 	pm.includezips = includezips
 	pm.includegzips = includegzips
+	pm.include7zips = include7zips
 	pm.onlyneeded = onlyneeded
 
 	go pm.loopObserver()
@@ -268,6 +272,8 @@ func (w *archiveWorker) Process(path string, size int64) error {
 		_, err = w.archiveZip(path, size, w.pm.includezips)
 	} else if pathext == gzipSuffix {
 		_, err = w.archiveGzip(path, size, w.pm.includegzips)
+	} else if pathext == sevenzipSuffix {
+		_, err = w.archive7Zip(path, size, w.pm.include7zips)
 	} else {
 		_, err = w.archiveRom(path, size)
 	}
@@ -397,6 +403,45 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 		}
 		cs, err := w.archive(func() (io.ReadCloser, error) { return zf.Open() },
 			zf.FileInfo().Name(), filepath.Join(inpath, zf.FileInfo().Name()), zf.FileInfo().Size())
+		if err != nil {
+			glog.Errorf("zip error %s: %v", inpath, err)
+			return 0, err
+		}
+		compressedSize += cs
+	}
+
+	if addZipItself {
+		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, filepath.Base(inpath), inpath, size)
+		if err != nil {
+			return 0, err
+		}
+		compressedSize += cs
+	}
+	return compressedSize, nil
+}
+
+func (w *archiveWorker) archive7Zip(inpath string, size int64, addZipItself bool) (int64, error) {
+	if glog.V(2) {
+		glog.Infof("archiving zip %s ", inpath)
+	}
+	zr, err := sevenzip.Open(inpath)
+	if err != nil {
+		return 0, err
+	}
+	defer zr.Close()
+
+	var compressedSize int64
+
+	for _, zf := range zr.File {
+		if glog.V(2) {
+			glog.Infof("archiving zip %s: file %s ", inpath, zf.Name)
+		}
+
+		cs, err := w.archive(func() (io.ReadCloser, error) {
+			bb, err := zf.OpenUnsafe()
+			return ioutil.NopCloser(bb), err
+		}, zf.Name, filepath.Join(inpath, zf.Name), int64(zf.FileHeader.Size))
+
 		if err != nil {
 			glog.Errorf("zip error %s: %v", inpath, err)
 			return 0, err

@@ -46,10 +46,11 @@ import (
 )
 
 const (
-	zipSuffix  = ".zip"
-	gzipSuffix = ".gz"
-	datSuffix  = ".dat"
-	fixPrefix  = "fix-"
+	zipSuffix      = ".zip"
+	gzipSuffix     = ".gz"
+	sevenzipSuffix = ".7z"
+	datSuffix      = ".dat"
+	fixPrefix      = "fix-"
 )
 
 type Hashes struct {

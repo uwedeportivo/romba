@@ -156,6 +156,7 @@ have a current entry in the DAT index.`,
 	cmd.Subcommands[1].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
 	cmd.Subcommands[1].Flag.Bool("include-gzips", false, "add gzip files themselves into the depot in addition to their contents")
+	cmd.Subcommands[1].Flag.Bool("include-7zips", false, "add 7zip files themselves into the depot in addition to their contents")
 
 	cmd.Subcommands[2] = &commander.Command{
 		Run:       rs.purge,
