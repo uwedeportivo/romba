@@ -31,13 +31,45 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package service
 
 import (
+	"errors"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
 	"github.com/uwedeportivo/commander"
 )
+
+func findLatestResumeLog(logDir string) (string, error) {
+	lfs, err := ioutil.ReadDir(logDir)
+	if err != nil {
+		return "", err
+	}
+
+	latestTs, _ := time.Parse("2006-01-02-15_04_05", "2010-01-02-15_04_05")
+	latestFile := ""
+
+	for _, lf := range lfs {
+		//archive-resume-2014-05-17-15_48_50.log
+		name := lf.Name()
+		if strings.HasPrefix(name, "archive-resume-") && strings.HasSuffix(name, ".log") {
+			dateStr := name[15 : len(name)-4]
+			tstamp, err := time.Parse("2006-01-02-15_04_05", dateStr)
+			if err != nil {
+				return "", err
+			}
+			if tstamp.After(latestTs) {
+				latestTs = tstamp
+				latestFile = filepath.Join(logDir, name)
+			}
+		}
+	}
+
+	return latestFile, nil
+}
 
 func (rs *RombaService) startArchive(cmd *commander.Command, args []string) error {
 	rs.jobMutex.Lock()
@@ -59,6 +91,20 @@ func (rs *RombaService) startArchive(cmd *commander.Command, args []string) erro
 	rs.busy = true
 	rs.jobName = "archive"
 
+	resume := cmd.Flag.Lookup("resume").Value.Get().(string)
+	if resume == "latest" {
+		latestResume, err := findLatestResumeLog(rs.logDir)
+		if err != nil {
+			glog.Errorf("error finding the latest resume point: %v", err)
+			return err
+		}
+		resume = latestResume
+		if len(resume) == 0 {
+			glog.Errorf("no resume file found")
+			return errors.New("no resume file found")
+		}
+	}
+
 	go func() {
 		glog.Infof("service starting archive")
 		rs.broadCastProgress(time.Now(), true, false, "")
@@ -77,14 +123,14 @@ func (rs *RombaService) startArchive(cmd *commander.Command, args []string) erro
 			}
 		}()
 
-		resume := cmd.Flag.Lookup("resume").Value.Get().(string)
 		includezips := cmd.Flag.Lookup("include-zips").Value.Get().(bool)
 		includegzips := cmd.Flag.Lookup("include-gzips").Value.Get().(bool)
 		include7zips := cmd.Flag.Lookup("include-7zips").Value.Get().(bool)
 		onlyneeded := cmd.Flag.Lookup("only-needed").Value.Get().(bool)
 		numWorkers := cmd.Flag.Lookup("workers").Value.Get().(int)
 
-		endMsg, err := rs.depot.Archive(args, resume, includezips, includegzips, include7zips, onlyneeded, numWorkers, rs.logDir, rs.pt)
+		endMsg, err := rs.depot.Archive(args, resume, includezips, includegzips, include7zips,
+			onlyneeded, numWorkers, rs.logDir, rs.pt)
 		if err != nil {
 			glog.Errorf("error archiving: %v", err)
 		}
