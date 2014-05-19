@@ -56,8 +56,9 @@ import (
 	"github.com/uwedeportivo/romba/service"
 
 	_ "expvar"
-	_ "github.com/uwedeportivo/romba/db/clevel"
 	_ "net/http/pprof"
+
+	_ "github.com/uwedeportivo/romba/db/clevel"
 )
 
 func signalCatcher(rs *service.RombaService) {
@@ -158,7 +159,7 @@ func main() {
 
 	config.GlobalConfig = cfg
 
-	runtime.GOMAXPROCS(cfg.General.Workers)
+	runtime.GOMAXPROCS(cfg.General.Cores)
 
 	flag.Set("log_dir", cfg.General.LogDir)
 	flag.Set("alsologtostderr", "true")

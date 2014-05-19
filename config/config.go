@@ -38,6 +38,7 @@ type Config struct {
 		BadDir    string
 		Workers   int
 		Verbosity int
+		Cores     int
 	}
 
 	Depot struct {
