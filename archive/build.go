@@ -51,6 +51,7 @@ type gameBuilder struct {
 	mutex      *sync.Mutex
 	wc         chan *types.Game
 	erc        chan error
+	closeC     chan bool
 	index      int
 	fixdatOnly bool
 }
@@ -61,9 +62,9 @@ func (gb *gameBuilder) work() {
 		gamePath := filepath.Join(gb.datPath, game.Name+zipSuffix)
 		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath, gb.fixdatOnly, gb.fixDat.UnzipGames)
 		if err != nil {
+			glog.Errorf("error processing %s", gamePath)
 			gb.erc <- err
-			glog.V(4).Infof("exiting subworker %d", gb.index)
-			return
+			break
 		}
 		if fixGame != nil {
 			gb.mutex.Lock()
@@ -74,21 +75,23 @@ func (gb *gameBuilder) work() {
 			if gb.fixDat.UnzipGames {
 				err := os.RemoveAll(gamePath)
 				if err != nil {
+					glog.Errorf("error processing %s", gamePath)
 					gb.erc <- err
-					glog.V(4).Infof("exiting subworker %d", gb.index)
-					return
+					break
 				}
 			} else {
 				err := os.Remove(gamePath)
 				if err != nil {
+					glog.Errorf("error processing %s", gamePath)
 					gb.erc <- err
-					glog.V(4).Infof("exiting subworker %d", gb.index)
-					return
+					break
 				}
 			}
 		}
 	}
+	gb.closeC <- true
 	glog.V(4).Infof("exiting subworker %d", gb.index)
+	return
 }
 
 func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, fixdatOnly bool) (bool, error) {
@@ -102,6 +105,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, 
 	}
 
 	fixDat := new(types.Dat)
+	fixDat.FixDat = true
 	fixDat.Name = dat.Name
 	fixDat.Description = dat.Description
 	fixDat.Path = dat.Path
@@ -109,6 +113,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, 
 
 	wc := make(chan *types.Game)
 	erc := make(chan error)
+	closeC := make(chan bool)
 	mutex := new(sync.Mutex)
 
 	for i := 0; i < numSubworkers; i++ {
@@ -121,19 +126,30 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, 
 		gb.fixDat = fixDat
 		gb.index = i
 		gb.fixdatOnly = fixdatOnly
+		gb.closeC = closeC
 
 		go gb.work()
 	}
+
+	var minionErr error
 
 	for _, game := range dat.Games {
 		select {
 		case wc <- game:
 		case err := <-erc:
-			close(wc)
-			return false, err
+			minionErr = err
+			break
 		}
 	}
 	close(wc)
+
+	for i := 0; i < numSubworkers; i++ {
+		<-closeC
+	}
+
+	if minionErr != nil {
+		return false, minionErr
+	}
 
 	if len(fixDat.Games) > 0 {
 		fixDatPath := filepath.Join(outpath, fixPrefix+dat.Name+datSuffix)

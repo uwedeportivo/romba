@@ -49,6 +49,7 @@ type Dat struct {
 	Path        string
 	Software    GameSlice `xml:"software"`
 	UnzipGames  bool
+	FixDat      bool
 }
 
 type Game struct {

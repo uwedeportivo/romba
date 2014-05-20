@@ -41,6 +41,7 @@ const datTemplate = `
 dat (
 	name "{{.Name}}"
 	description "{{.Description}}"
+	{{if .FixDat}}category "FIXDATFILE"{{end}}
 	path "{{.Path}}"
 	{{if .UnzipGames}}forcezipping "no"{{end}}
 )
@@ -56,6 +57,7 @@ game (
 const compliantDatTemplate = `clrmamepro (
 	name "{{.Name}}"
 	description "{{.Description}}"
+	{{if .FixDat}}category "FIXDATFILE"{{end}}
 	{{if .UnzipGames}}forcezipping "no"{{end}}
 ){{with .Games}}{{range .}}
 game (
@@ -74,6 +76,7 @@ const datShortTemplate = `
 dat (
 	name "{{.Name}}"
 	description "{{.Description}}"
+	{{if .FixDat}}category "FIXDATFILE"{{end}}
 	path "{{.Path}}"
 	{{if .UnzipGames}}forcezipping "no"{{end}}
 )
@@ -88,6 +91,7 @@ const datsTemplate = `
 dat (
 	name "{{.Name}}"
 	description "{{.Description}}"
+	{{if .FixDat}}category "FIXDATFILE"{{end}}
 	path "{{.Path}}"
 	{{if .UnzipGames}}forcezipping "no"{{end}}
 )
