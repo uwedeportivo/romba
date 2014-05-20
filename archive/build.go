@@ -45,20 +45,21 @@ import (
 )
 
 type gameBuilder struct {
-	depot   *Depot
-	datPath string
-	fixDat  *types.Dat
-	mutex   *sync.Mutex
-	wc      chan *types.Game
-	erc     chan error
-	index   int
+	depot      *Depot
+	datPath    string
+	fixDat     *types.Dat
+	mutex      *sync.Mutex
+	wc         chan *types.Game
+	erc        chan error
+	index      int
+	fixdatOnly bool
 }
 
 func (gb *gameBuilder) work() {
 	glog.V(4).Infof("starting subworker %d", gb.index)
 	for game := range gb.wc {
 		gamePath := filepath.Join(gb.datPath, game.Name+zipSuffix)
-		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath)
+		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath, gb.fixdatOnly, gb.fixDat.UnzipGames)
 		if err != nil {
 			gb.erc <- err
 			glog.V(4).Infof("exiting subworker %d", gb.index)
@@ -69,30 +70,42 @@ func (gb *gameBuilder) work() {
 			gb.fixDat.Games = append(gb.fixDat.Games, fixGame)
 			gb.mutex.Unlock()
 		}
-		if !foundRom {
-			err := os.Remove(gamePath)
-			if err != nil {
-				gb.erc <- err
-				glog.V(4).Infof("exiting subworker %d", gb.index)
-				return
+		if !foundRom && !gb.fixdatOnly {
+			if gb.fixDat.UnzipGames {
+				err := os.RemoveAll(gamePath)
+				if err != nil {
+					gb.erc <- err
+					glog.V(4).Infof("exiting subworker %d", gb.index)
+					return
+				}
+			} else {
+				err := os.Remove(gamePath)
+				if err != nil {
+					gb.erc <- err
+					glog.V(4).Infof("exiting subworker %d", gb.index)
+					return
+				}
 			}
 		}
 	}
 	glog.V(4).Infof("exiting subworker %d", gb.index)
 }
 
-func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int) (bool, error) {
+func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, fixdatOnly bool) (bool, error) {
 	datPath := filepath.Join(outpath, dat.Name)
 
-	err := os.Mkdir(datPath, 0777)
-	if err != nil {
-		return false, err
+	if !fixdatOnly {
+		err := os.Mkdir(datPath, 0777)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	fixDat := new(types.Dat)
 	fixDat.Name = dat.Name
 	fixDat.Description = dat.Description
 	fixDat.Path = dat.Path
+	fixDat.UnzipGames = dat.UnzipGames
 
 	wc := make(chan *types.Game)
 	erc := make(chan error)
@@ -107,6 +120,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int) 
 		gb.datPath = datPath
 		gb.fixDat = fixDat
 		gb.index = i
+		gb.fixdatOnly = fixdatOnly
 
 		go gb.work()
 	}
@@ -142,18 +156,36 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int) 
 	return len(fixDat.Games) > 0, nil
 }
 
-func (depot *Depot) buildGame(game *types.Game, gamePath string) (*types.Game, bool, error) {
-	gameFile, err := os.Create(gamePath)
-	if err != nil {
-		return nil, false, err
-	}
-	defer gameFile.Close()
+type nopWriterCloser struct {
+	io.Writer
+}
 
-	gameTorrent, err := torrentzip.NewWriter(gameFile)
-	if err != nil {
-		return nil, false, err
+func (nopWriterCloser) Close() error { return nil }
+
+func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool, unzipGame bool) (*types.Game, bool, error) {
+	var gameTorrent *torrentzip.Writer
+	var err error
+
+	if !fixdatOnly {
+		if unzipGame {
+			err := os.Mkdir(gamePath, 0777)
+			if err != nil {
+				return nil, false, err
+			}
+		} else {
+			gameFile, err := os.Create(gamePath)
+			if err != nil {
+				return nil, false, err
+			}
+			defer gameFile.Close()
+
+			gameTorrent, err = torrentzip.NewWriter(gameFile)
+			if err != nil {
+				return nil, false, err
+			}
+			defer gameTorrent.Close()
+		}
 	}
-	defer gameTorrent.Close()
 
 	var fixGame *types.Game
 
@@ -196,22 +228,37 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string) (*types.Game, b
 		}
 
 		foundRom = true
-		src, err := cgzip.NewReader(romGZ)
-		if err != nil {
-			return nil, false, err
+
+		if !fixdatOnly {
+			src, err := cgzip.NewReader(romGZ)
+			if err != nil {
+				return nil, false, err
+			}
+
+			var dstWriter io.WriteCloser
+
+			if unzipGame {
+				dst, err := os.Create(filepath.Join(gamePath, rom.Name))
+				if err != nil {
+					return nil, false, err
+				}
+				dstWriter = dst
+			} else {
+				dst, err := gameTorrent.Create(rom.Name)
+				if err != nil {
+					return nil, false, err
+				}
+				dstWriter = nopWriterCloser{dst}
+			}
+			_, err = io.Copy(dstWriter, src)
+			if err != nil {
+				return nil, false, err
+			}
+
+			src.Close()
+			dstWriter.Close()
 		}
 
-		dst, err := gameTorrent.Create(rom.Name)
-		if err != nil {
-			return nil, false, err
-		}
-
-		_, err = io.Copy(dst, src)
-		if err != nil {
-			return nil, false, err
-		}
-
-		src.Close()
 		romGZ.Close()
 	}
 	return fixGame, foundRom, nil

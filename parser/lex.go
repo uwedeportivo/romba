@@ -59,6 +59,7 @@ const (
 	itemVersion
 	itemAuthor
 	itemClrMamePro
+	itemForceZipping
 )
 
 var itemTypePrettyPrint = map[itemType]string{
@@ -98,18 +99,19 @@ func (i item) String() string {
 }
 
 var key = map[string]itemType{
-	"game":        itemGame,
-	"name":        itemName,
-	"description": itemDescription,
-	"rom":         itemRom,
-	"size":        itemSize,
-	"crc":         itemCrc,
-	"md5":         itemMd5,
-	"sha1":        itemSha1,
-	"category":    itemCategory,
-	"version":     itemVersion,
-	"author":      itemAuthor,
-	"clrmamepro":  itemClrMamePro,
+	"game":         itemGame,
+	"name":         itemName,
+	"description":  itemDescription,
+	"rom":          itemRom,
+	"size":         itemSize,
+	"crc":          itemCrc,
+	"md5":          itemMd5,
+	"sha1":         itemSha1,
+	"category":     itemCategory,
+	"version":      itemVersion,
+	"author":       itemAuthor,
+	"clrmamepro":   itemClrMamePro,
+	"forcezipping": itemForceZipping,
 }
 
 // isSpace reports whether r is a space character.

@@ -39,22 +39,17 @@ import (
 )
 
 func TestParserDatGoesThrough(t *testing.T) {
-	dat, _, err := Parse("testdata/example.dat")
+	_, _, err := Parse("testdata/example.dat")
 	if err != nil {
 		t.Fatalf("error parsing test data: %v", err)
 	}
-
-	fmt.Printf("dat: %s\n", string(types.PrintDat(dat)))
-
 }
 
 func TestParserXmlGoesThrough(t *testing.T) {
-	dat, _, err := Parse("testdata/example.xml")
+	_, _, err := Parse("testdata/example.xml")
 	if err != nil {
 		t.Fatalf("error parsing test data: %v", err)
 	}
-
-	fmt.Printf("dat: %s\n", string(types.PrintDat(dat)))
 }
 
 const datText = `
@@ -281,6 +276,82 @@ func TestParseXml(t *testing.T) {
 				},
 			},
 		},
+	}
+
+	datGolden.Normalize()
+
+	if !datGolden.Equals(dat) {
+		fmt.Printf("datGolden=%s\n", string(types.PrintDat(datGolden)))
+		fmt.Printf("dat=%s\n", string(types.PrintDat(dat)))
+		t.Fatalf("parsed dat differs from golden dat")
+	}
+}
+
+const datForceZipText = `
+clrmamepro (
+	name "Acorn Archimedes - Applications"
+	description "Acorn Archimedes - Applications (TOSEC-v2008-10-11)"
+	category "Acorn Archimedes - Applications"
+	version 2008-10-11
+	author "C0llector - Cassiel"
+	forcezipping "no"
+)
+`
+
+func TestParseForceZipDat(t *testing.T) {
+	dat, _, err := ParseDat(strings.NewReader(datForceZipText), "testing/dat")
+
+	if err != nil {
+		t.Fatalf("error parsing test data: %v", err)
+	}
+
+	datGolden := &types.Dat{
+		Name:        "Acorn Archimedes - Applications",
+		Description: "Acorn Archimedes - Applications (TOSEC-v2008-10-11)",
+		UnzipGames:  true,
+	}
+
+	datGolden.Normalize()
+
+	if !datGolden.Equals(dat) {
+		fmt.Printf("datGolden=%s\n", string(types.PrintDat(datGolden)))
+		fmt.Printf("dat=%s\n", string(types.PrintDat(dat)))
+		t.Fatalf("parsed dat differs from golden dat")
+	}
+}
+
+const xmlForceZipText = `
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.logiqx.com/Dats/datafile.dtd">
+
+<datafile>
+	<header>
+		<name>AgeMame Artwork</name>
+		<description>AgeMame Artwork</description>
+		<category>Standard DatFile</category>
+		<version>0.134</version>
+		<date>Sep 16 2009</date>
+		<author>-insert author-</author>
+		<email>-insert email-</email>
+		<homepage>AGEMAME HQ</homepage>
+		<url>http://agemame.mameworld.info/</url>
+		<comment>-insert comment-</comment>
+		<clrmamepro forcepacking="unzip"/>
+	</header>
+</datafile>
+`
+
+func TestParseForceZipXml(t *testing.T) {
+	dat, _, err := ParseXml(strings.NewReader(xmlForceZipText), "testing/xml")
+
+	if err != nil {
+		t.Fatalf("error parsing test data: %v", err)
+	}
+
+	datGolden := &types.Dat{
+		Name:        "AgeMame Artwork",
+		Description: "AgeMame Artwork",
+		UnzipGames:  true,
 	}
 
 	datGolden.Normalize()

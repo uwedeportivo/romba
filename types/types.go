@@ -35,14 +35,20 @@ import (
 	"sort"
 )
 
+type Clrmamepro struct {
+	ForcePacking string `xml:"forcepacking,attr"`
+}
+
 type Dat struct {
-	Name        string    `xml:"header>name"`
-	Description string    `xml:"header>description"`
-	Games       GameSlice `xml:"game"`
+	Name        string      `xml:"header>name"`
+	Description string      `xml:"header>description"`
+	Clr         *Clrmamepro `xml:"header>clrmamepro"`
+	Games       GameSlice   `xml:"game"`
 	Generation  int64
 	Artificial  bool
 	Path        string
 	Software    GameSlice `xml:"software"`
+	UnzipGames  bool
 }
 
 type Game struct {
@@ -82,15 +88,7 @@ func (ar *Rom) Equals(br *Rom) bool {
 		return false
 	}
 
-	if !bytes.Equal(ar.Crc, br.Crc) {
-		return false
-	}
-
-	if !bytes.Equal(ar.Md5, br.Md5) {
-		return false
-	}
-
-	if !bytes.Equal(ar.Sha1, br.Sha1) {
+	if !ar.HashesMatch(br) {
 		return false
 	}
 	return true
@@ -159,10 +157,17 @@ func (ad *Dat) Equals(bd *Dat) bool {
 	if !ad.Games.Equals(bd.Games) {
 		return false
 	}
+
+	if ad.UnzipGames != bd.UnzipGames {
+		return false
+	}
 	return true
 }
 
 func (d *Dat) Normalize() {
+	if d.Clr != nil && d.Clr.ForcePacking == "unzip" {
+		d.UnzipGames = true
+	}
 	if d.Software != nil {
 		d.Games = append(d.Games, d.Software...)
 		d.Software = nil

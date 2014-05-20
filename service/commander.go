@@ -198,7 +198,7 @@ structure. Saves this DAT file in specified output filename.`,
 	cmd.Subcommands[3].Flag.String("author", "", "author value in DAT header")
 
 	cmd.Subcommands[4] = &commander.Command{
-		Run:       runCmd,
+		Run:       rs.diffdat,
 		UsageLine: "diffdat -old <datfile> -new <datfile> -out <outputfile>",
 		Short:     "Creates a DAT file with those entries that are in -new DAT.",
 		Long: `
@@ -214,7 +214,7 @@ in -old DAT file. Ignores those entries in -old that are not in -new.`,
 	cmd.Subcommands[4].Flag.String("new", "", "new DAT file")
 
 	cmd.Subcommands[5] = &commander.Command{
-		Run:       runCmd,
+		Run:       rs.build,
 		UsageLine: "fixdat -out <outputdir> <list of DAT files or folders with DAT files>",
 		Short:     "For each specified DAT file it creates a fix DAT.",
 		Long: `
@@ -227,6 +227,12 @@ particular DAT.`,
 	}
 
 	cmd.Subcommands[5].Flag.String("out", "", "output dir")
+	cmd.Subcommands[5].Flag.Bool("fixdatOnly", true, "only fix dats and don't generate torrentzips")
+	cmd.Subcommands[5].Flag.Int("workers", config.GlobalConfig.General.Workers,
+		"how many workers to launch for the job")
+
+	cmd.Subcommands[5].Flag.Int("subworkers", config.GlobalConfig.General.Workers,
+		"how many subworkers to launch for each worker")
 
 	cmd.Subcommands[6] = &commander.Command{
 		Run:       rs.build,
@@ -242,6 +248,7 @@ structure according to the original DAT master directory tree structure.`,
 	}
 
 	cmd.Subcommands[6].Flag.String("out", "", "output dir")
+	cmd.Subcommands[6].Flag.Bool("fixdatOnly", false, "only fix dats and don't generate torrentzips")
 
 	cmd.Subcommands[6].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")

@@ -42,6 +42,7 @@ dat (
 	name "{{.Name}}"
 	description "{{.Description}}"
 	path "{{.Path}}"
+	{{if .UnzipGames}}forcezipping "no"{{end}}
 )
 {{with .Games}}{{range .}}
 game (
@@ -55,6 +56,7 @@ game (
 const compliantDatTemplate = `clrmamepro (
 	name "{{.Name}}"
 	description "{{.Description}}"
+	{{if .UnzipGames}}forcezipping "no"{{end}}
 ){{with .Games}}{{range .}}
 game (
 	name "{{.Name}}"
@@ -73,6 +75,7 @@ dat (
 	name "{{.Name}}"
 	description "{{.Description}}"
 	path "{{.Path}}"
+	{{if .UnzipGames}}forcezipping "no"{{end}}
 )
 {{with .Games}}{{range .}}
 game (
@@ -86,6 +89,7 @@ dat (
 	name "{{.Name}}"
 	description "{{.Description}}"
 	path "{{.Path}}"
+	{{if .UnzipGames}}forcezipping "no"{{end}}
 )
 {{end}}
 `

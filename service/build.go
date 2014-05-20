@@ -88,7 +88,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		}
 	}
 
-	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers)
+	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.fixdatOnly)
 	if err != nil {
 		return err
 	}
@@ -111,6 +111,7 @@ type buildMaster struct {
 	pt             worker.ProgressTracker
 	commonRootPath string
 	outpath        string
+	fixdatOnly     bool
 }
 
 func (pm *buildMaster) CalculateWork() bool {
@@ -175,6 +176,8 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 		return nil
 	}
 
+	fixdatOnly := cmd.Flag.Lookup("fixdatOnly").Value.Get().(bool)
+
 	numWorkers := cmd.Flag.Lookup("workers").Value.Get().(int)
 	numSubWorkers := cmd.Flag.Lookup("subworkers").Value.Get().(int)
 
@@ -218,6 +221,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 			numWorkers:    numWorkers,
 			numSubWorkers: numSubWorkers,
 			pt:            rs.pt,
+			fixdatOnly:    fixdatOnly,
 		}
 
 		endMsg, err := worker.Work("building dats", args, pm)
