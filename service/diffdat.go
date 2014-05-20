@@ -33,4 +33,5 @@ package service
 import "github.com/uwedeportivo/commander"
 
 func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
+	return nil
 }
