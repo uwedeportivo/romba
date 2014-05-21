@@ -106,7 +106,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, 
 
 	fixDat := new(types.Dat)
 	fixDat.FixDat = true
-	fixDat.Name = dat.Name
+	fixDat.Name = "fix_" + dat.Name
 	fixDat.Description = dat.Description
 	fixDat.Path = dat.Path
 	fixDat.UnzipGames = dat.UnzipGames
