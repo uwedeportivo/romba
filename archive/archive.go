@@ -190,7 +190,7 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips bool,
 	pm.include7zips = include7zips
 	pm.onlyneeded = onlyneeded
 
-	go pm.loopObserver()
+	go loopObserver(pm.numWorkers, pm.soFar, pm.depot, pm.resumeLogWriter)
 
 	return worker.Work("archive roms", paths, pm)
 }
@@ -527,7 +527,7 @@ func (w *archiveWorker) archiveRom(inpath string, size int64) (int64, error) {
 	return w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) }, filepath.Base(inpath), inpath, size)
 }
 
-func (pm *archiveMaster) writeResumeLogEntry(comps []string) {
+func writeResumeLogEntry(comps []string, depot *Depot, resumeLogWriter *bufio.Writer) {
 	nonEmptyComps := []string{}
 
 	for _, comp := range comps {
@@ -539,25 +539,26 @@ func (pm *archiveMaster) writeResumeLogEntry(comps []string) {
 	sort.Strings(nonEmptyComps)
 
 	for _, ncomp := range nonEmptyComps {
-		fmt.Fprintf(pm.resumeLogWriter, "%s\n", ncomp)
+		fmt.Fprintf(resumeLogWriter, "%s\n", ncomp)
 	}
-	pm.depot.writeSizes()
+	depot.writeSizes()
 }
 
-func (pm *archiveMaster) loopObserver() {
+func loopObserver(numWorkers int, soFar chan *completed,
+	depot *Depot, resumeLogWriter *bufio.Writer) {
 	ticker := time.NewTicker(time.Minute)
-	comps := make([]string, pm.numWorkers)
+	comps := make([]string, numWorkers)
 
 	for {
 		select {
-		case comp := <-pm.soFar:
+		case comp := <-soFar:
 			if comp.workerIndex == -1 {
-				pm.writeResumeLogEntry(comps)
+				writeResumeLogEntry(comps, depot, resumeLogWriter)
 				break
 			}
 			comps[comp.workerIndex] = comp.path
 		case <-ticker.C:
-			pm.writeResumeLogEntry(comps)
+			writeResumeLogEntry(comps, depot, resumeLogWriter)
 		}
 	}
 

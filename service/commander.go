@@ -111,7 +111,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommand(writer io.Writer, rs *RombaService) *commander.Command {
 	cmd := new(commander.Command)
 	cmd.UsageLine = "Romba"
-	cmd.Subcommands = make([]*commander.Command, 13)
+	cmd.Subcommands = make([]*commander.Command, 14)
 	cmd.Flag = *flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -321,6 +321,22 @@ Cancels current long-running job.`,
 		Stdout: writer,
 		Stderr: writer,
 	}
+
+	cmd.Subcommands[13] = &commander.Command{
+		Run:       rs.startMerge,
+		UsageLine: "merge",
+		Short:     "Merges depot",
+		Long: `
+Merges specified depot into current depot.`,
+		Flag:   *flag.NewFlagSet("romba-merge", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
+	}
+
+	cmd.Subcommands[13].Flag.Bool("only-needed", false, "only merge ROM files actually referenced by DAT files from the DAT index")
+	cmd.Subcommands[13].Flag.String("resume", "", "resume a previously interrupted merge operation from the specified path")
+	cmd.Subcommands[13].Flag.Int("workers", config.GlobalConfig.General.Workers,
+		"how many workers to launch for the job")
 
 	return cmd
 }
