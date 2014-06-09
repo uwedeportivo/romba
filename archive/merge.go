@@ -175,13 +175,18 @@ func (w *mergeWorker) mergeGzip(path string, size int64) error {
 	}
 
 	sha1Hex := hex.EncodeToString(rom.Sha1)
-	exists, hh, err := w.pm.depot.SHA1InDepot(sha1Hex)
+	exists, _, err := w.pm.depot.SHA1InDepot(sha1Hex)
 	if err != nil {
 		return err
 	}
 
 	if exists {
 		return nil
+	}
+
+	hh, err := HashesFromGZHeader(path)
+	if err != nil {
+		return err
 	}
 
 	rom.Md5 = hh.Md5

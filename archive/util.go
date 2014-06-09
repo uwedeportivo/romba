@@ -136,6 +136,42 @@ func HashesForFile(inpath string) (*Hashes, error) {
 	return hashesForReader(file)
 }
 
+func HashesFromGZHeader(inpath string) (*Hashes, error) {
+	romGZ, err := os.Open(inpath)
+	if err != nil {
+		return nil, err
+	}
+	defer romGZ.Close()
+
+	gzr, err := cgzip.NewReader(romGZ)
+	if err != nil {
+		return nil, err
+	}
+	defer gzr.Close()
+
+	md5crcBuffer := make([]byte, md5.Size+crc32.Size)
+	err = gzr.RequestExtraHeader(md5crcBuffer)
+	if err != nil {
+		return nil, err
+	}
+
+	gzbuf := make([]byte, 1024)
+	gzr.Read(gzbuf)
+
+	md5crcBuffer = gzr.GetExtraHeader()
+
+	var hh *Hashes
+
+	if len(md5crcBuffer) == md5.Size+crc32.Size {
+		hh = new(Hashes)
+		hh.Md5 = make([]byte, md5.Size)
+		copy(hh.Md5, md5crcBuffer[:md5.Size])
+		hh.Crc = make([]byte, crc32.Size)
+		copy(hh.Crc, md5crcBuffer[md5.Size:])
+	}
+	return hh, nil
+}
+
 func hashesForReader(in io.Reader) (*Hashes, error) {
 	hSha1 := sha1.New()
 	hMd5 := md5.New()
