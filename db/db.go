@@ -173,7 +173,7 @@ type refreshWorker struct {
 
 func (pw *refreshWorker) Process(path string, size int64) error {
 	if pw.romBatch.Size() >= MaxBatchSize {
-		glog.Infof("flushing batch of size %d", pw.romBatch.Size())
+		glog.V(3).Infof("flushing batch of size %d", pw.romBatch.Size())
 		err := pw.romBatch.Flush()
 		if err != nil {
 			return fmt.Errorf("failed to flush: %v", err)

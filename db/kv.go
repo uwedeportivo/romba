@@ -464,7 +464,7 @@ func (kvb *kvBatch) IndexRom(rom *types.Rom) error {
 			kvb.size += int64(sha1.Size)
 		}
 	} else {
-		glog.Warningf("indexing rom %s with missing SHA1", rom.Name)
+		glog.V(4).Infof("indexing rom %s with missing SHA1", rom.Name)
 	}
 
 	dats, err := kvb.db.DatsForRom(rom)
@@ -537,7 +537,7 @@ func (kvb *kvBatch) IndexRom(rom *types.Rom) error {
 }
 
 func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
-	glog.Infof("indexing dat %s", dat.Name)
+	glog.V(4).Infof("indexing dat %s", dat.Name)
 
 	if sha1Bytes == nil {
 		return fmt.Errorf("sha1 is nil for %s", dat.Path)
@@ -571,7 +571,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 
 	if !exists {
 		for _, g := range dat.Games {
-			glog.Infof("indexing game %s", g.Name)
+			glog.V(4).Infof("indexing game %s", g.Name)
 			for _, r := range g.Roms {
 				if r.Sha1 != nil {
 					err = kvb.sha1Batch.Append(r.Sha1, sha1Bytes)
@@ -589,9 +589,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 					kvb.size += int64(sha1.Size)
 
 					if r.Sha1 != nil {
-						if glog.V(4) {
-							glog.Infof("declaring md5 %s -> sha1 %s mapping", hex.EncodeToString(r.Md5), hex.EncodeToString(r.Sha1))
-						}
+						glog.V(4).Infof("declaring md5 %s -> sha1 %s mapping", hex.EncodeToString(r.Md5), hex.EncodeToString(r.Sha1))
 						err = kvb.md5sha1Batch.Append(r.Md5, r.Sha1)
 						if err != nil {
 							return err
@@ -608,9 +606,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 					kvb.size += int64(sha1.Size)
 
 					if r.Sha1 != nil {
-						if glog.V(4) {
-							glog.Infof("declaring crc %s -> sha1 %s mapping", hex.EncodeToString(r.Crc), hex.EncodeToString(r.Sha1))
-						}
+						glog.V(4).Infof("declaring crc %s -> sha1 %s mapping", hex.EncodeToString(r.Crc), hex.EncodeToString(r.Sha1))
 						err = kvb.crcsha1Batch.Append(r.Crc, r.Sha1)
 						if err != nil {
 							return err
