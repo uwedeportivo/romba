@@ -310,7 +310,7 @@ func Work(workname string, paths []string, master Master) (string, error) {
 		pt.SetTotalFiles(int32(cv.numFiles))
 	}
 
-	inwork := make(chan *workUnit)
+	inwork := make(chan *workUnit, master.NumWorkers())
 
 	sv := &scanVisitor{
 		inwork: inwork,

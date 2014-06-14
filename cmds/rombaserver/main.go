@@ -165,6 +165,8 @@ func main() {
 	flag.Set("alsologtostderr", "true")
 	flag.Set("v", strconv.Itoa(cfg.General.Verbosity))
 
+	flag.Parse()
+
 	romDB, err := db.New(cfg.Index.Db)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "opening db failed: %v\n", err)
