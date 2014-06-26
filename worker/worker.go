@@ -302,7 +302,7 @@ func Work(workname string, paths []string, master Master) (string, error) {
 			}
 		}
 
-		glog.Infof("found %d files and %s to do. starting work...\n", cv.numFiles, humanize.Bytes(uint64(cv.numBytes)))
+		glog.Infof("found %d files and %s to do. starting work...\n", cv.numFiles, humanize.IBytes(uint64(cv.numBytes)))
 
 		master.Scanned(cv.numFiles, cv.numBytes, cv.commonRootPath)
 
@@ -400,14 +400,14 @@ func Work(workname string, paths []string, master Master) (string, error) {
 	endMsg.WriteString(fmt.Sprintf("number of files with errors: %d\n", pgr.ErrorFiles))
 
 	if cv != nil {
-		endMsg.WriteString(fmt.Sprintf("total number of bytes: %s\n", humanize.Bytes(uint64(cv.numBytes))))
+		endMsg.WriteString(fmt.Sprintf("total number of bytes: %s\n", humanize.IBytes(uint64(cv.numBytes))))
 	}
-	endMsg.WriteString(fmt.Sprintf("number of bytes processed: %s\n", humanize.Bytes(uint64(pgr.BytesSoFar))))
+	endMsg.WriteString(fmt.Sprintf("number of bytes processed: %s\n", humanize.IBytes(uint64(pgr.BytesSoFar))))
 	endMsg.WriteString(fmt.Sprintf("elapsed time: %s\n", formatDuration(elapsed)))
 
 	if cv != nil {
 		ts := uint64(float64(cv.numBytes) / float64(elapsed.Seconds()))
-		endMsg.WriteString(fmt.Sprintf("throughput: %s/s \n", humanize.Bytes(ts)))
+		endMsg.WriteString(fmt.Sprintf("throughput: %s/s \n", humanize.IBytes(ts)))
 	}
 
 	endS := endMsg.String()

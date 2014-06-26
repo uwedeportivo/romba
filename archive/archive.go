@@ -257,7 +257,7 @@ func (depot *Depot) reserveRoot(size int64) (int, error) {
 	glog.Error("Depot with the following roots ran out of disk space")
 	for k, root := range depot.roots {
 		glog.Errorf("root = %s, maxSize = %s, size = %s", root,
-			humanize.Bytes(uint64(depot.maxSizes[k])), humanize.Bytes(uint64(depot.sizes[k])))
+			humanize.IBytes(uint64(depot.maxSizes[k])), humanize.IBytes(uint64(depot.sizes[k])))
 	}
 
 	return -1, fmt.Errorf("depot ran out of disk space")

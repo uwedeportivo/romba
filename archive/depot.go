@@ -83,7 +83,7 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 
 	for k, root := range depot.roots {
 		glog.Infof("root = %s, maxSize = %s, size = %s", root,
-			humanize.Bytes(uint64(depot.maxSizes[k])), humanize.Bytes(uint64(depot.sizes[k])))
+			humanize.IBytes(uint64(depot.maxSizes[k])), humanize.IBytes(uint64(depot.sizes[k])))
 	}
 
 	depot.romDB = romDB

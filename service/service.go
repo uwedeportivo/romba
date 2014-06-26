@@ -299,7 +299,7 @@ func (rs *RombaService) progress(cmd *commander.Command, args []string) error {
 		p := rs.pt.GetProgress()
 
 		fmt.Fprintf(cmd.Stdout, "running %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
-			p.FilesSoFar, p.TotalFiles, humanize.Bytes(uint64(p.BytesSoFar)), humanize.Bytes(uint64(p.TotalBytes)))
+			p.FilesSoFar, p.TotalFiles, humanize.IBytes(uint64(p.BytesSoFar)), humanize.IBytes(uint64(p.TotalBytes)))
 		return nil
 	} else {
 		fmt.Fprintf(cmd.Stdout, "nothing currently running")
