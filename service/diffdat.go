@@ -46,6 +46,7 @@ import (
 func diffRoms(og, ng *types.Game) *types.Game {
 	diffGame := new(types.Game)
 	diffGame.Name = ng.Name
+	diffGame.Description = ng.Description
 
 	ko, kn := 0, 0
 
@@ -112,8 +113,7 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 	}
 
 	diffDat := new(types.Dat)
-	diffDat.FixDat = true
-	diffDat.Name = "fix_" + newDat.Name
+	diffDat.Name = newDat.Name
 	diffDat.Description = newDat.Description
 	diffDat.Path = newDat.Path
 	diffDat.UnzipGames = newDat.UnzipGames
