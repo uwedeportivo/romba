@@ -212,6 +212,8 @@ in -old DAT file. Ignores those entries in -old that are not in -new.`,
 	cmd.Subcommands[4].Flag.String("out", "", "output filename")
 	cmd.Subcommands[4].Flag.String("old", "", "old DAT file")
 	cmd.Subcommands[4].Flag.String("new", "", "new DAT file")
+	cmd.Subcommands[4].Flag.String("name", "", "name for out DAT file")
+	cmd.Subcommands[4].Flag.String("description", "", "description for out DAT file")
 
 	cmd.Subcommands[5] = &commander.Command{
 		Run:       rs.build,

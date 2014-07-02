@@ -35,6 +35,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/golang/glog"
 
@@ -86,6 +88,8 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 	oldDatPath := cmd.Flag.Lookup("old").Value.Get().(string)
 	newDatPath := cmd.Flag.Lookup("new").Value.Get().(string)
 	outPath := cmd.Flag.Lookup("out").Value.Get().(string)
+	givenName := cmd.Flag.Lookup("name").Value.Get().(string)
+	givenDescription := cmd.Flag.Lookup("description").Value.Get().(string)
 
 	if oldDatPath == "" {
 		fmt.Fprintf(cmd.Stdout, "-old argument required")
@@ -112,9 +116,17 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		return err
 	}
 
+	if givenName == "" {
+		givenName = strings.TrimSuffix(filepath.Base(outPath), filepath.Ext(outPath))
+	}
+
+	if givenDescription == "" {
+		givenDescription = givenName
+	}
+
 	diffDat := new(types.Dat)
-	diffDat.Name = newDat.Name
-	diffDat.Description = newDat.Description
+	diffDat.Name = givenName
+	diffDat.Description = givenDescription
 	diffDat.Path = newDat.Path
 	diffDat.UnzipGames = newDat.UnzipGames
 
