@@ -45,7 +45,7 @@ import (
 	"github.com/uwedeportivo/romba/types"
 )
 
-func diffRoms(og, ng *types.Game) *types.Game {
+func diffRoms(oldCrcs, oldMd5s, oldSha1s map[string]bool, og, ng *types.Game) *types.Game {
 	diffGame := new(types.Game)
 	diffGame.Name = ng.Name
 	diffGame.Description = ng.Description
@@ -61,7 +61,9 @@ func diffRoms(og, ng *types.Game) *types.Game {
 		} else if or.Name > nr.Name {
 			// new rom not in old, import wholesale
 			glog.V(2).Infof("rom %s in new game and not in old game", nr.Name)
-			diffGame.Roms = append(diffGame.Roms, nr)
+			if filterRom(oldCrcs, oldMd5s, oldSha1s, nr) {
+				diffGame.Roms = append(diffGame.Roms, nr)
+			}
 			kn++
 		} else {
 			// rom in both
@@ -82,6 +84,40 @@ func diffRoms(og, ng *types.Game) *types.Game {
 		return diffGame
 	}
 	return nil
+}
+
+func filterRom(oldCrcs, oldMd5s, oldSha1s map[string]bool, r *types.Rom) bool {
+	if r.Size > 0 && len(r.Crc) == 0 && len(r.Md5) == 0 && len(r.Sha1) == 0 {
+		return false
+	}
+
+	if len(r.Crc) > 0 && oldCrcs[string(r.Crc)] {
+		return false
+	}
+
+	if len(r.Md5) > 0 && oldMd5s[string(r.Md5)] {
+		return false
+	}
+
+	if len(r.Sha1) > 0 && oldSha1s[string(r.Sha1)] {
+		return false
+	}
+
+	return true
+}
+
+func filterGame(oldCrcs, oldMd5s, oldSha1s map[string]bool, g *types.Game) *types.Game {
+	filteredGame := new(types.Game)
+	filteredGame.Name = g.Name
+	filteredGame.Description = g.Description
+
+	for _, r := range g.Roms {
+		if filterRom(oldCrcs, oldMd5s, oldSha1s, r) {
+			filteredGame.Roms = append(filteredGame.Roms, r)
+		}
+	}
+
+	return filteredGame
 }
 
 func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
@@ -130,6 +166,29 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 	diffDat.Path = newDat.Path
 	diffDat.UnzipGames = newDat.UnzipGames
 
+	oldCrcs := make(map[string]bool)
+	oldMd5s := make(map[string]bool)
+	oldSha1s := make(map[string]bool)
+
+	var key string
+
+	for _, og := range oldDat.Games {
+		for _, or := range og.Roms {
+			if len(or.Crc) > 0 {
+				key = string(or.Crc)
+				oldCrcs[key] = true
+			}
+			if len(or.Md5) > 0 {
+				key = string(or.Md5)
+				oldMd5s[key] = true
+			}
+			if len(or.Sha1) > 0 {
+				key = string(or.Sha1)
+				oldSha1s[key] = true
+			}
+		}
+	}
+
 	ko, kn := 0, 0
 
 	for ko < len(oldDat.Games) && kn < len(newDat.Games) {
@@ -140,12 +199,16 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 			ko++
 		} else if og.Name > ng.Name {
 			glog.V(2).Infof("game %s in new dat and not in old dat", ng.Name)
-			// new game not in old, import wholesale
-			diffDat.Games = append(diffDat.Games, ng)
+
+			filteredGame := filterGame(oldCrcs, oldMd5s, oldSha1s, ng)
+
+			if len(filteredGame.Roms) > 0 {
+				diffDat.Games = append(diffDat.Games, ng)
+			}
 			kn++
 		} else {
 			// game in both, diff it, keeping only new roms
-			diffRom := diffRoms(og, ng)
+			diffRom := diffRoms(oldCrcs, oldMd5s, oldSha1s, og, ng)
 			if diffRom != nil {
 				diffDat.Games = append(diffDat.Games, diffRom)
 			}
