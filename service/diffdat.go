@@ -86,7 +86,11 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		givenDescription = givenName
 	}
 
-	dd := dedup.NewMemoryDeduper()
+	dd, err := dedup.NewLevelDBDeduper()
+	if err != nil {
+		return err
+	}
+	defer dd.Close()
 
 	err = dedup.Declare(oldDat, dd)
 	if err != nil {
