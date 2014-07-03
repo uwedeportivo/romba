@@ -152,6 +152,8 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, 
 	}
 
 	if len(fixDat.Games) > 0 {
+		fixDat = fixDat.Narrow()
+
 		fixDatPath := filepath.Join(outpath, fixPrefix+dat.Name+datSuffix)
 
 		fixFile, err := os.Create(fixDatPath)
