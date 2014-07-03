@@ -475,9 +475,6 @@ func ParseXml(r io.Reader, path string) (*types.Dat, []byte, error) {
 		for _, rom := range g.Roms {
 			fixHashes(rom)
 		}
-		for _, rom := range g.Disks {
-			fixHashes(rom)
-		}
 		for _, rom := range g.Parts {
 			fixHashes(rom)
 		}
@@ -488,9 +485,6 @@ func ParseXml(r io.Reader, path string) (*types.Dat, []byte, error) {
 
 	for _, g := range d.Software {
 		for _, rom := range g.Roms {
-			fixHashes(rom)
-		}
-		for _, rom := range g.Disks {
 			fixHashes(rom)
 		}
 		for _, rom := range g.Parts {

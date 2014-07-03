@@ -56,7 +56,6 @@ type Game struct {
 	Name        string   `xml:"name,attr"`
 	Description string   `xml:"description"`
 	Roms        RomSlice `xml:"rom"`
-	Disks       RomSlice `xml:"disk"`
 	Parts       RomSlice `xml:"part>dataarea>rom"`
 	Regions     RomSlice `xml:"region>rom"`
 }
@@ -176,10 +175,6 @@ func (d *Dat) Normalize() {
 	sort.Sort(d.Games)
 
 	for _, g := range d.Games {
-		if g.Disks != nil {
-			g.Roms = append(g.Roms, g.Disks...)
-			g.Disks = nil
-		}
 		if g.Parts != nil {
 			g.Roms = append(g.Roms, g.Parts...)
 			g.Parts = nil
