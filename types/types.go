@@ -217,55 +217,21 @@ func (d *Dat) NarrowToRom(rom *Rom) *Dat {
 	return nil
 }
 
-func (d *Dat) Narrow() *Dat {
-	dc := new(Dat)
-	dc.Name = d.Name
-	dc.Path = d.Path
-	dc.Description = d.Description
-	dc.Artificial = d.Artificial
-	dc.FixDat = d.FixDat
-	dc.Generation = d.Generation
-	dc.UnzipGames = d.UnzipGames
+func (d *Dat) CopyHeader(src *Dat) {
+	d.Name = src.Name
+	d.Path = src.Path
+	d.Description = src.Description
+	d.Artificial = src.Artificial
+	d.FixDat = src.FixDat
+	d.Generation = src.Generation
+	d.UnzipGames = src.UnzipGames
+}
 
-	seenCrcs := make(map[string]bool)
-	seenMd5s := make(map[string]bool)
-	seenSha1s := make(map[string]bool)
+func (g *Game) CopyHeader(src *Game) {
+	g.Name = src.Name
+	g.Description = src.Description
+}
 
-	for _, g := range d.Games {
-		gc := new(Game)
-		gc.Name = g.Name
-		gc.Description = g.Description
-		for _, r := range g.Roms {
-			if len(r.Sha1) > 0 {
-				if seenSha1s[string(r.Sha1)] {
-					continue
-				} else {
-					seenSha1s[string(r.Sha1)] = true
-				}
-			}
-			if len(r.Md5) > 0 {
-				if seenMd5s[string(r.Md5)] {
-					continue
-				} else {
-					seenMd5s[string(r.Md5)] = true
-				}
-			}
-			if len(r.Crc) > 0 {
-				if seenCrcs[string(r.Crc)] {
-					continue
-				} else {
-					seenCrcs[string(r.Crc)] = true
-				}
-			}
-			gc.Roms = append(gc.Roms, r)
-		}
-		if len(gc.Roms) > 0 {
-			dc.Games = append(dc.Games, gc)
-		}
-	}
-
-	if len(dc.Games) > 0 {
-		return dc
-	}
-	return nil
+func (r *Rom) Valid() bool {
+	return !(r.Size > 0 && len(r.Crc) == 0 && len(r.Md5) == 0 && len(r.Sha1) == 0)
 }

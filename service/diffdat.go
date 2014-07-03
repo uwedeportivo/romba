@@ -41,86 +41,10 @@ import (
 	"github.com/golang/glog"
 
 	"github.com/uwedeportivo/commander"
+	"github.com/uwedeportivo/romba/dedup"
 	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/types"
 )
-
-func diffRoms(oldCrcs, oldMd5s, oldSha1s map[string]bool, og, ng *types.Game) *types.Game {
-	diffGame := new(types.Game)
-	diffGame.Name = ng.Name
-	diffGame.Description = ng.Description
-
-	ko, kn := 0, 0
-
-	for ko < len(og.Roms) && kn < len(ng.Roms) {
-		or, nr := og.Roms[ko], ng.Roms[kn]
-
-		if or.Name < nr.Name {
-			// old rom not in new, ignore
-			ko++
-		} else if or.Name > nr.Name {
-			// new rom not in old, import wholesale
-			glog.V(2).Infof("rom %s in new game and not in old game", nr.Name)
-			if filterRom(oldCrcs, oldMd5s, oldSha1s, nr) {
-				diffGame.Roms = append(diffGame.Roms, nr)
-			}
-			kn++
-		} else {
-			// rom in both
-			kn++
-			ko++
-		}
-	}
-
-	for kn < len(ng.Roms) {
-		nr := ng.Roms[kn]
-
-		glog.V(2).Infof("rom %s in new game and not in old game", nr.Name)
-		if filterRom(oldCrcs, oldMd5s, oldSha1s, nr) {
-			diffGame.Roms = append(diffGame.Roms, nr)
-		}
-		kn++
-	}
-
-	if len(diffGame.Roms) > 0 {
-		return diffGame
-	}
-	return nil
-}
-
-func filterRom(oldCrcs, oldMd5s, oldSha1s map[string]bool, r *types.Rom) bool {
-	if r.Size > 0 && len(r.Crc) == 0 && len(r.Md5) == 0 && len(r.Sha1) == 0 {
-		return false
-	}
-
-	if len(r.Crc) > 0 && oldCrcs[string(r.Crc)] {
-		return false
-	}
-
-	if len(r.Md5) > 0 && oldMd5s[string(r.Md5)] {
-		return false
-	}
-
-	if len(r.Sha1) > 0 && oldSha1s[string(r.Sha1)] {
-		return false
-	}
-
-	return true
-}
-
-func filterGame(oldCrcs, oldMd5s, oldSha1s map[string]bool, g *types.Game) *types.Game {
-	filteredGame := new(types.Game)
-	filteredGame.Name = g.Name
-	filteredGame.Description = g.Description
-
-	for _, r := range g.Roms {
-		if filterRom(oldCrcs, oldMd5s, oldSha1s, r) {
-			filteredGame.Roms = append(filteredGame.Roms, r)
-		}
-	}
-
-	return filteredGame
-}
 
 func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 	oldDatPath := cmd.Flag.Lookup("old").Value.Get().(string)
@@ -154,8 +78,6 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		return err
 	}
 
-	newDat = newDat.Narrow()
-
 	if givenName == "" {
 		givenName = strings.TrimSuffix(filepath.Base(outPath), filepath.Ext(outPath))
 	}
@@ -164,75 +86,23 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		givenDescription = givenName
 	}
 
-	diffDat := new(types.Dat)
-	diffDat.Name = givenName
-	diffDat.Description = givenDescription
-	diffDat.Path = newDat.Path
-	diffDat.UnzipGames = newDat.UnzipGames
+	dd := dedup.NewMemoryDeduper()
 
-	oldCrcs := make(map[string]bool)
-	oldMd5s := make(map[string]bool)
-	oldSha1s := make(map[string]bool)
-
-	var key string
-
-	for _, og := range oldDat.Games {
-		for _, or := range og.Roms {
-			if len(or.Crc) > 0 {
-				key = string(or.Crc)
-				oldCrcs[key] = true
-			}
-			if len(or.Md5) > 0 {
-				key = string(or.Md5)
-				oldMd5s[key] = true
-			}
-			if len(or.Sha1) > 0 {
-				key = string(or.Sha1)
-				oldSha1s[key] = true
-			}
-		}
+	err = dedup.Declare(oldDat, dd)
+	if err != nil {
+		return err
 	}
 
-	ko, kn := 0, 0
-
-	for ko < len(oldDat.Games) && kn < len(newDat.Games) {
-		og, ng := oldDat.Games[ko], newDat.Games[kn]
-
-		if og.Name < ng.Name {
-			// old game not in new, ignore
-			ko++
-		} else if og.Name > ng.Name {
-			glog.V(2).Infof("game %s in new dat and not in old dat", ng.Name)
-			filteredGame := filterGame(oldCrcs, oldMd5s, oldSha1s, ng)
-			if len(filteredGame.Roms) > 0 {
-				diffDat.Games = append(diffDat.Games, filteredGame)
-			}
-			kn++
-		} else {
-			// game in both, diff it, keeping only new roms
-			diffRom := diffRoms(oldCrcs, oldMd5s, oldSha1s, og, ng)
-			if diffRom != nil {
-				diffDat.Games = append(diffDat.Games, diffRom)
-			}
-			kn++
-			ko++
-		}
+	diffDat, err := dedup.Dedup(newDat, dd)
+	if err != nil {
+		return err
 	}
 
-	for kn < len(newDat.Games) {
-		ng := newDat.Games[kn]
+	if diffDat != nil {
+		diffDat.Name = givenName
+		diffDat.Description = givenDescription
+		diffDat.Path = outPath
 
-		glog.V(2).Infof("game %s in new dat and not in old dat", ng.Name)
-		filteredGame := filterGame(oldCrcs, oldMd5s, oldSha1s, ng)
-		if len(filteredGame.Roms) > 0 {
-			diffDat.Games = append(diffDat.Games, filteredGame)
-		}
-		kn++
-	}
-
-	if len(diffDat.Games) > 0 {
-		glog.Infof("diffdat finished, %d games with diffs found, writing diffdat file %s",
-			len(diffDat.Games), outPath)
 		diffFile, err := os.Create(outPath)
 		if err != nil {
 			return err
@@ -246,8 +116,13 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+		glog.Infof("diffdat finished, %d games with diffs found, written diffdat file %s",
+			len(diffDat.Games), outPath)
+		fmt.Fprintf(cmd.Stdout, "diffdat finished, %d games with diffs found, written diffdat file %s",
+			len(diffDat.Games), outPath)
 	} else {
 		glog.Infof("diffdat finished, no diffs found, no diffdat file written")
+		fmt.Fprintf(cmd.Stdout, "diffdat finished, no diffs found, no diffdat file written")
 	}
 
 	return nil
