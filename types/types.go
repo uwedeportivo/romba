@@ -197,26 +197,79 @@ func (d *Dat) NarrowToRom(rom *Rom) *Dat {
 	dc.Name = d.Name
 	dc.Path = d.Path
 	dc.Description = d.Description
+	dc.Artificial = d.Artificial
+	dc.FixDat = d.FixDat
+	dc.Generation = d.Generation
+	dc.UnzipGames = d.UnzipGames
 
-	addedGame := false
 	for _, g := range d.Games {
 		gc := new(Game)
 		gc.Name = g.Name
 		gc.Description = g.Description
-		addedRom := false
 		for _, r := range g.Roms {
 			if r.HashesMatch(rom) {
 				gc.Roms = append(gc.Roms, r)
-				addedRom = true
 			}
 		}
-		if addedRom {
+		if len(gc.Roms) > 0 {
 			dc.Games = append(dc.Games, gc)
-			addedGame = true
 		}
 	}
 
-	if addedGame {
+	if len(dc.Games) > 0 {
+		return dc
+	}
+	return nil
+}
+
+func (d *Dat) Narrow() *Dat {
+	dc := new(Dat)
+	dc.Name = d.Name
+	dc.Path = d.Path
+	dc.Description = d.Description
+	dc.Artificial = d.Artificial
+	dc.FixDat = d.FixDat
+	dc.Generation = d.Generation
+	dc.UnzipGames = d.UnzipGames
+
+	seenCrcs := make(map[string]bool)
+	seenMd5s := make(map[string]bool)
+	seenSha1s := make(map[string]bool)
+
+	for _, g := range d.Games {
+		gc := new(Game)
+		gc.Name = g.Name
+		gc.Description = g.Description
+		for _, r := range g.Roms {
+			if len(r.Sha1) > 0 {
+				if seenSha1s[string(r.Sha1)] {
+					continue
+				} else {
+					seenSha1s[string(r.Sha1)] = true
+				}
+			}
+			if len(r.Md5) > 0 {
+				if seenMd5s[string(r.Md5)] {
+					continue
+				} else {
+					seenMd5s[string(r.Md5)] = true
+				}
+			}
+			if len(r.Crc) > 0 {
+				if seenCrcs[string(r.Crc)] {
+					continue
+				} else {
+					seenCrcs[string(r.Crc)] = true
+				}
+			}
+			gc.Roms = append(gc.Roms, r)
+		}
+		if len(gc.Roms) > 0 {
+			dc.Games = append(dc.Games, gc)
+		}
+	}
+
+	if len(dc.Games) > 0 {
 		return dc
 	}
 	return nil

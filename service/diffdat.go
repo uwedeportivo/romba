@@ -154,6 +154,8 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		return err
 	}
 
+	newDat = newDat.Narrow()
+
 	if givenName == "" {
 		givenName = strings.TrimSuffix(filepath.Base(outPath), filepath.Ext(outPath))
 	}
@@ -201,11 +203,9 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 			ko++
 		} else if og.Name > ng.Name {
 			glog.V(2).Infof("game %s in new dat and not in old dat", ng.Name)
-
 			filteredGame := filterGame(oldCrcs, oldMd5s, oldSha1s, ng)
-
 			if len(filteredGame.Roms) > 0 {
-				diffDat.Games = append(diffDat.Games, ng)
+				diffDat.Games = append(diffDat.Games, filteredGame)
 			}
 			kn++
 		} else {
@@ -225,7 +225,7 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		glog.V(2).Infof("game %s in new dat and not in old dat", ng.Name)
 		filteredGame := filterGame(oldCrcs, oldMd5s, oldSha1s, ng)
 		if len(filteredGame.Roms) > 0 {
-			diffDat.Games = append(diffDat.Games, ng)
+			diffDat.Games = append(diffDat.Games, filteredGame)
 		}
 		kn++
 	}

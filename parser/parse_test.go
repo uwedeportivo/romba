@@ -362,3 +362,42 @@ func TestParseForceZipXml(t *testing.T) {
 		t.Fatalf("parsed dat differs from golden dat")
 	}
 }
+
+const xmlRomNoHash = `
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.logiqx.com/Dats/datafile.dtd">
+
+<datafile>
+	<header>
+		<name>AgeMame Artwork</name>
+		<description>AgeMame Artwork</description>
+		<category>Standard DatFile</category>
+		<version>0.134</version>
+		<date>Sep 16 2009</date>
+		<author>-insert author-</author>
+		<email>-insert email-</email>
+		<homepage>AGEMAME HQ</homepage>
+		<url>http://agemame.mameworld.info/</url>
+		<comment>-insert comment-</comment>
+		<clrmamepro forcepacking="unzip"/>
+	</header>
+	<game name="blackblt2" sourcefile="by6803.c" ismechanical="yes" cloneof="blackblt" romof="blackblt">
+		<description>Black Belt (Squawk and Talk)</description>
+		<rom name="blb_u5.snd" size="4096" status="nodump" region="cpu2" offset="f000"/>
+	</game>
+</datafile>
+`
+
+func TestParseRomNoHashXml(t *testing.T) {
+	dat, _, err := ParseXml(strings.NewReader(xmlRomNoHash), "testing/xml")
+
+	if err != nil {
+		t.Fatalf("error parsing test data: %v", err)
+	}
+
+	r := dat.Games[0].Roms[0]
+
+	if !(r.Size > 0 && len(r.Crc) == 0 && len(r.Md5) == 0 && len(r.Sha1) == 0) {
+		t.Fatalf("parsed rom hashes not nil")
+	}
+}
