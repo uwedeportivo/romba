@@ -76,7 +76,9 @@ func diffRoms(oldCrcs, oldMd5s, oldSha1s map[string]bool, og, ng *types.Game) *t
 		nr := ng.Roms[kn]
 
 		glog.V(2).Infof("rom %s in new game and not in old game", nr.Name)
-		diffGame.Roms = append(diffGame.Roms, nr)
+		if filterRom(oldCrcs, oldMd5s, oldSha1s, nr) {
+			diffGame.Roms = append(diffGame.Roms, nr)
+		}
 		kn++
 	}
 
@@ -221,8 +223,10 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		ng := newDat.Games[kn]
 
 		glog.V(2).Infof("game %s in new dat and not in old dat", ng.Name)
-		// new game not in old, import wholesale
-		diffDat.Games = append(diffDat.Games, ng)
+		filteredGame := filterGame(oldCrcs, oldMd5s, oldSha1s, ng)
+		if len(filteredGame.Roms) > 0 {
+			diffDat.Games = append(diffDat.Games, ng)
+		}
 		kn++
 	}
 
