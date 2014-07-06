@@ -28,55 +28,48 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package dedup
+package util
 
-import "github.com/uwedeportivo/romba/types"
+func Uint64ToBytes(value uint64, buffer []byte) {
+	mask := uint64(0xff)
 
-type memoryDeduper struct {
-	crcs  map[string]bool
-	md5s  map[string]bool
-	sha1s map[string]bool
-}
-
-func NewMemoryDeduper() Deduper {
-	return &memoryDeduper{
-		crcs:  make(map[string]bool),
-		md5s:  make(map[string]bool),
-		sha1s: make(map[string]bool),
+	var b byte
+	v := value
+	for i := 0; i < 8; i++ {
+		b = byte(v & mask)
+		buffer[i] = b
+		v = v >> 8
 	}
 }
 
-func (md *memoryDeduper) Declare(r *types.Rom) error {
-	if len(r.Crc) > 0 {
-		md.crcs[string(r.CrcWithSizeKey())] = true
-	}
+func BytesToUint64(buffer []byte) uint64 {
+	var v uint64
 
-	if len(r.Md5) > 0 {
-		md.md5s[string(r.Md5WithSizeKey())] = true
+	v = uint64(buffer[7])
+	for i := 6; i >= 0; i-- {
+		v = v<<8 + uint64(buffer[i])
 	}
-
-	if len(r.Sha1) > 0 {
-		md.sha1s[string(r.Sha1)] = true
-	}
-	return nil
+	return v
 }
 
-func (md *memoryDeduper) Seen(r *types.Rom) (bool, error) {
-	if len(r.Sha1) > 0 && md.sha1s[string(r.Sha1)] {
-		return true, nil
-	}
+func Int64ToBytes(value int64, buffer []byte) {
+	mask := int64(0xff)
 
-	if len(r.Md5) > 0 && md.md5s[string(r.Md5WithSizeKey())] {
-		return true, nil
+	var b byte
+	v := value
+	for i := 0; i < 8; i++ {
+		b = byte(v & mask)
+		buffer[i] = b
+		v = v >> 8
 	}
-
-	if len(r.Crc) > 0 && md.crcs[string(r.CrcWithSizeKey())] {
-		return true, nil
-	}
-
-	return false, nil
 }
 
-func (md *memoryDeduper) Close() error {
-	return nil
+func BytesToInt64(buffer []byte) int64 {
+	var v int64
+
+	v = int64(buffer[7])
+	for i := 6; i >= 0; i-- {
+		v = v<<8 + int64(buffer[i])
+	}
+	return v
 }

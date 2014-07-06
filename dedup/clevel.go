@@ -104,14 +104,14 @@ func NewLevelDBDeduper() (Deduper, error) {
 
 func (dbd *dbDeduper) Declare(r *types.Rom) error {
 	if len(r.Crc) > 0 {
-		err := dbd.crcDB.Put(wo, r.Crc, trueVal)
+		err := dbd.crcDB.Put(wo, r.CrcWithSizeKey(), trueVal)
 		if err != nil {
 			return err
 		}
 	}
 
 	if len(r.Md5) > 0 {
-		err := dbd.md5DB.Put(wo, r.Md5, trueVal)
+		err := dbd.md5DB.Put(wo, r.Md5WithSizeKey(), trueVal)
 		if err != nil {
 			return err
 		}
@@ -137,7 +137,7 @@ func (dbd *dbDeduper) Seen(r *types.Rom) (bool, error) {
 	}
 
 	if len(r.Md5) > 0 {
-		val, err := dbd.md5DB.Get(ro, r.Md5)
+		val, err := dbd.md5DB.Get(ro, r.Md5WithSizeKey())
 		if err != nil {
 			return false, err
 		}
@@ -146,7 +146,7 @@ func (dbd *dbDeduper) Seen(r *types.Rom) (bool, error) {
 	}
 
 	if len(r.Crc) > 0 {
-		val, err := dbd.crcDB.Get(ro, r.Crc)
+		val, err := dbd.crcDB.Get(ro, r.CrcWithSizeKey())
 		if err != nil {
 			return false, err
 		}

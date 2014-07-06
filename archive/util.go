@@ -42,6 +42,7 @@ import (
 	"strings"
 
 	"github.com/uwedeportivo/romba/types"
+	"github.com/uwedeportivo/romba/util"
 	"github.com/uwedeportivo/torrentzip/cgzip"
 )
 
@@ -136,23 +137,22 @@ func HashesForFile(inpath string) (*Hashes, error) {
 	return hashesForReader(file)
 }
 
-func HashesFromGZHeader(inpath string) (*Hashes, error) {
+func HashesFromGZHeader(inpath string, md5crcBuffer []byte) (*Hashes, int64, error) {
 	romGZ, err := os.Open(inpath)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer romGZ.Close()
 
 	gzr, err := cgzip.NewReader(romGZ)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer gzr.Close()
 
-	md5crcBuffer := make([]byte, md5.Size+crc32.Size)
 	err = gzr.RequestExtraHeader(md5crcBuffer)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	gzbuf := make([]byte, 1024)
@@ -161,15 +161,17 @@ func HashesFromGZHeader(inpath string) (*Hashes, error) {
 	md5crcBuffer = gzr.GetExtraHeader()
 
 	var hh *Hashes
+	var size int64
 
-	if len(md5crcBuffer) == md5.Size+crc32.Size {
+	if len(md5crcBuffer) == md5.Size+crc32.Size+8 {
 		hh = new(Hashes)
 		hh.Md5 = make([]byte, md5.Size)
 		copy(hh.Md5, md5crcBuffer[:md5.Size])
 		hh.Crc = make([]byte, crc32.Size)
-		copy(hh.Crc, md5crcBuffer[md5.Size:])
+		copy(hh.Crc, md5crcBuffer[md5.Size:md5.Size+crc32.Size])
+		size = util.BytesToInt64(md5crcBuffer[md5.Size+crc32.Size:])
 	}
-	return hh, nil
+	return hh, size, nil
 }
 
 func hashesForReader(in io.Reader) (*Hashes, error) {

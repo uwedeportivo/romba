@@ -50,6 +50,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
 	"github.com/uwedeportivo/romba/types"
+	"github.com/uwedeportivo/romba/util"
 	"github.com/uwedeportivo/romba/worker"
 	"github.com/uwedeportivo/sevenzip"
 	"github.com/uwedeportivo/torrentzip/cgzip"
@@ -206,7 +207,7 @@ func (pm *archiveMaster) NewWorker(workerIndex int) worker.Worker {
 	return &archiveWorker{
 		depot:        pm.depot,
 		hh:           newHashes(),
-		md5crcBuffer: make([]byte, md5.Size+crc32.Size),
+		md5crcBuffer: make([]byte, md5.Size+crc32.Size+8),
 		index:        workerIndex,
 		pm:           pm,
 	}
@@ -314,7 +315,8 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64) 
 	}
 
 	copy(w.md5crcBuffer[0:md5.Size], w.hh.Md5)
-	copy(w.md5crcBuffer[md5.Size:], w.hh.Crc)
+	copy(w.md5crcBuffer[md5.Size:md5.Size+crc32.Size], w.hh.Crc)
+	util.Int64ToBytes(size, w.md5crcBuffer[md5.Size+crc32.Size:])
 
 	rom := new(types.Rom)
 	rom.Crc = make([]byte, crc32.Size)

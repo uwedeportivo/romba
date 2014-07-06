@@ -33,6 +33,8 @@ package types
 import (
 	"bytes"
 	"sort"
+
+	"github.com/uwedeportivo/romba/util"
 )
 
 type Clrmamepro struct {
@@ -74,8 +76,8 @@ type Rom struct {
 type RomSlice []*Rom
 
 func (ar *Rom) HashesMatch(br *Rom) bool {
-	return (ar.Crc != nil && bytes.Equal(ar.Crc, br.Crc)) ||
-		(ar.Md5 != nil && bytes.Equal(ar.Md5, br.Md5)) ||
+	return (ar.Crc != nil && bytes.Equal(ar.Crc, br.Crc) && ar.Size == br.Size) ||
+		(ar.Md5 != nil && bytes.Equal(ar.Md5, br.Md5) && ar.Size == br.Size) ||
 		(ar.Sha1 != nil && bytes.Equal(ar.Sha1, br.Sha1))
 }
 
@@ -92,6 +94,30 @@ func (ar *Rom) Equals(br *Rom) bool {
 		return false
 	}
 	return true
+}
+
+func (ar *Rom) CrcWithSizeKey() []byte {
+	if ar.Crc == nil {
+		return nil
+	}
+
+	n := len(ar.Crc)
+	key := make([]byte, n+8)
+	copy(key[:n], ar.Crc)
+	util.Int64ToBytes(ar.Size, key[n:])
+	return key
+}
+
+func (ar *Rom) Md5WithSizeKey() []byte {
+	if ar.Md5 == nil {
+		return nil
+	}
+
+	n := len(ar.Md5)
+	key := make([]byte, n+8)
+	copy(key[:n], ar.Md5)
+	util.Int64ToBytes(ar.Size, key[n:])
+	return key
 }
 
 func (s GameSlice) Len() int           { return len(s) }

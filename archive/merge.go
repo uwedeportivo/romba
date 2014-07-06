@@ -114,7 +114,7 @@ func (pm *mergeMaster) NewWorker(workerIndex int) worker.Worker {
 	return &mergeWorker{
 		depot:        pm.depot,
 		hh:           newHashes(),
-		md5crcBuffer: make([]byte, md5.Size+crc32.Size),
+		md5crcBuffer: make([]byte, md5.Size+crc32.Size+8),
 		index:        workerIndex,
 		pm:           pm,
 	}
@@ -184,7 +184,7 @@ func (w *mergeWorker) mergeGzip(path string, size int64) error {
 		return nil
 	}
 
-	hh, err := HashesFromGZHeader(path)
+	hh, rSize, err := HashesFromGZHeader(path, w.md5crcBuffer)
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func (w *mergeWorker) mergeGzip(path string, size int64) error {
 	rom.Md5 = hh.Md5
 	rom.Crc = hh.Crc
 
-	rom.Size = size
+	rom.Size = rSize
 	rom.Path = path
 
 	if w.pm.onlyneeded {

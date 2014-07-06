@@ -28,55 +28,61 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package dedup
+package util
 
-import "github.com/uwedeportivo/romba/types"
+import (
+	"math"
+	"math/rand"
+	"testing"
+)
 
-type memoryDeduper struct {
-	crcs  map[string]bool
-	md5s  map[string]bool
-	sha1s map[string]bool
-}
+func checkUint64ToBytes(t *testing.T, v uint64) {
+	buffer := make([]byte, 8)
 
-func NewMemoryDeduper() Deduper {
-	return &memoryDeduper{
-		crcs:  make(map[string]bool),
-		md5s:  make(map[string]bool),
-		sha1s: make(map[string]bool),
+	Uint64ToBytes(v, buffer)
+	ov := BytesToUint64(buffer)
+
+	if v != ov {
+		t.Fatalf("expected %d, got %d", v, ov)
 	}
 }
 
-func (md *memoryDeduper) Declare(r *types.Rom) error {
-	if len(r.Crc) > 0 {
-		md.crcs[string(r.CrcWithSizeKey())] = true
-	}
+func TestUint64ToBytes(t *testing.T) {
+	v := uint64(math.MaxUint64)
+	checkUint64ToBytes(t, v)
 
-	if len(r.Md5) > 0 {
-		md.md5s[string(r.Md5WithSizeKey())] = true
-	}
+	checkUint64ToBytes(t, 23423525)
+	checkUint64ToBytes(t, 235463656547)
+	checkUint64ToBytes(t, 46235645645665456)
 
-	if len(r.Sha1) > 0 {
-		md.sha1s[string(r.Sha1)] = true
+	for a := 0; a < 1000; a++ {
+		v = uint64(rand.Uint32())<<32 + uint64(rand.Uint32())
+		checkUint64ToBytes(t, v)
 	}
-	return nil
 }
 
-func (md *memoryDeduper) Seen(r *types.Rom) (bool, error) {
-	if len(r.Sha1) > 0 && md.sha1s[string(r.Sha1)] {
-		return true, nil
-	}
+func checkInt64ToBytes(t *testing.T, v int64) {
+	buffer := make([]byte, 8)
 
-	if len(r.Md5) > 0 && md.md5s[string(r.Md5WithSizeKey())] {
-		return true, nil
-	}
+	Int64ToBytes(v, buffer)
+	ov := BytesToInt64(buffer)
 
-	if len(r.Crc) > 0 && md.crcs[string(r.CrcWithSizeKey())] {
-		return true, nil
+	if v != ov {
+		t.Fatalf("expected %d, got %d", v, ov)
 	}
-
-	return false, nil
 }
 
-func (md *memoryDeduper) Close() error {
-	return nil
+func TestInt64ToBytes(t *testing.T) {
+	v := int64(math.MaxInt64)
+	checkInt64ToBytes(t, v)
+
+	checkInt64ToBytes(t, 23423525)
+	checkInt64ToBytes(t, -235463656547)
+	checkInt64ToBytes(t, 46235645645665456)
+
+	for a := 0; a < 1000; a++ {
+		v = rand.Int63()
+		checkInt64ToBytes(t, v)
+		checkInt64ToBytes(t, -v)
+	}
 }
