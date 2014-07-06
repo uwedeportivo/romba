@@ -45,6 +45,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -387,29 +388,111 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64) 
 	return compressedSize, nil
 }
 
-func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
-	if glog.V(2) {
-		glog.Infof("archiving zip %s ", inpath)
+type zipWorkResult struct {
+	compressedSize int64
+	err            error
+}
+
+type zipWorker struct {
+	index  int
+	inpath string
+	in     chan *czip.File
+	out    chan zipWorkResult
+	w      *archiveWorker
+	wg     *sync.WaitGroup
+}
+
+func (zw *zipWorker) Work() {
+	defer zw.wg.Done()
+	glog.V(2).Infof("started subworker %d for zip %s", zw.index, zw.inpath)
+
+	var compressedSize int64
+	var perr error
+
+	for zf := range zw.in {
+		glog.V(2).Infof("subworker %d: archiving zip %s: file %s", zw.index, zw.inpath, zf.Name)
+
+		cs, err := zw.w.archive(func() (io.ReadCloser, error) { return zf.Open() },
+			zf.FileInfo().Name(), filepath.Join(zw.inpath, zf.FileInfo().Name()), zf.FileInfo().Size())
+		if err != nil {
+			glog.Errorf("zip error %s: %v", zw.inpath, err)
+			perr = err
+			break
+		}
+		compressedSize += cs
+		glog.V(2).Infof("subworker %d: done archiving zip %s: file %s", zw.index, zw.inpath, zf.Name)
 	}
+
+	zw.out <- zipWorkResult{compressedSize, perr}
+	glog.V(2).Infof("stopped subworker %d for zip %s", zw.index, zw.inpath)
+}
+
+func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
+	glog.V(2).Infof("archiving zip %s ", inpath)
+
 	zr, err := czip.OpenReader(inpath)
 	if err != nil {
 		return 0, err
 	}
 	defer zr.Close()
 
+	in := make(chan *czip.File)
+	out := make(chan zipWorkResult, w.pm.NumWorkers())
+	wg := new(sync.WaitGroup)
+
+	for i := 0; i < w.pm.NumWorkers(); i++ {
+		wg.Add(1)
+		zw := &zipWorker{
+			index:  i,
+			inpath: inpath,
+			w:      w,
+			in:     in,
+			out:    out,
+			wg:     wg,
+		}
+		go zw.Work()
+	}
+
 	var compressedSize int64
+	var perr error
 
 	for _, zf := range zr.File {
-		if glog.V(2) {
-			glog.Infof("archiving zip %s: file %s ", inpath, zf.Name)
+		select {
+		case in <- zf:
+			glog.V(2).Infof("scheduled %s from zip %s", zf.Name, inpath)
+		case zr := <-out:
+			if zr.err != nil {
+				perr = zr.err
+				break
+			}
+			compressedSize += zr.compressedSize
 		}
-		cs, err := w.archive(func() (io.ReadCloser, error) { return zf.Open() },
-			zf.FileInfo().Name(), filepath.Join(inpath, zf.FileInfo().Name()), zf.FileInfo().Size())
-		if err != nil {
-			glog.Errorf("zip error %s: %v", inpath, err)
-			return 0, err
+	}
+
+	close(in)
+	wg.Wait()
+
+	if perr != nil {
+		glog.Errorf("zip error %s: %v", inpath, perr)
+		return 0, perr
+	}
+
+	glog.V(2).Infof("reading results from zip %s", inpath)
+
+	for i := 0; i < len(out); i++ {
+		zr := <-out
+		if zr.err != nil {
+			perr = err
+			break
 		}
-		compressedSize += cs
+		compressedSize += zr.compressedSize
+	}
+
+	glog.V(2).Infof("finished archiving contents of zip %s", inpath)
+
+	if perr != nil {
+		glog.Errorf("zip error %s: %v", inpath, perr)
+		return 0, perr
 	}
 
 	if addZipItself {
@@ -423,9 +506,8 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 }
 
 func (w *archiveWorker) archive7Zip(inpath string, size int64, addZipItself bool) (int64, error) {
-	if glog.V(2) {
-		glog.Infof("archiving zip %s ", inpath)
-	}
+	glog.V(4).Infof("archiving 7zip %s ", inpath)
+
 	zr, err := sevenzip.Open(inpath)
 	if err != nil {
 		return 0, err
@@ -435,9 +517,7 @@ func (w *archiveWorker) archive7Zip(inpath string, size int64, addZipItself bool
 	var compressedSize int64
 
 	for _, zf := range zr.File {
-		if glog.V(2) {
-			glog.Infof("archiving zip %s: file %s ", inpath, zf.Name)
-		}
+		glog.V(4).Infof("archiving 7zip %s: file %s ", inpath, zf.Name)
 
 		cs, err := w.archive(func() (io.ReadCloser, error) {
 			bb, err := zf.OpenUnsafe()
@@ -445,7 +525,7 @@ func (w *archiveWorker) archive7Zip(inpath string, size int64, addZipItself bool
 		}, zf.Name, filepath.Join(inpath, zf.Name), int64(zf.FileHeader.Size))
 
 		if err != nil {
-			glog.Errorf("zip error %s: %v", inpath, err)
+			glog.Errorf("7zip error %s: %v", inpath, err)
 			return 0, err
 		}
 		compressedSize += cs
