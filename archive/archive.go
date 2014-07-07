@@ -462,6 +462,7 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 		case in <- zf:
 			glog.V(2).Infof("scheduled %s from zip %s", zf.Name, inpath)
 		case zr := <-out:
+			glog.Warningf("breaking out of the zip loop before all files are scheduled: %s", inpath)
 			if zr.err != nil {
 				perr = zr.err
 				break
