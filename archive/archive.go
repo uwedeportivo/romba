@@ -31,6 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package archive
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"container/ring"
@@ -55,7 +56,7 @@ import (
 	"github.com/uwedeportivo/romba/worker"
 	"github.com/uwedeportivo/sevenzip"
 	"github.com/uwedeportivo/torrentzip/cgzip"
-	"github.com/uwedeportivo/torrentzip/czip"
+	//"github.com/uwedeportivo/torrentzip/czip"
 )
 
 type completed struct {
@@ -396,7 +397,7 @@ type zipWorkResult struct {
 type zipWorker struct {
 	index  int
 	inpath string
-	in     chan *czip.File
+	in     chan *zip.File
 	out    chan zipWorkResult
 	w      *archiveWorker
 	wg     *sync.WaitGroup
@@ -430,13 +431,13 @@ func (zw *zipWorker) Work() {
 func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
 	glog.V(2).Infof("archiving zip %s ", inpath)
 
-	zr, err := czip.OpenReader(inpath)
+	zr, err := zip.OpenReader(inpath)
 	if err != nil {
 		return 0, err
 	}
 	defer zr.Close()
 
-	in := make(chan *czip.File)
+	in := make(chan *zip.File)
 	out := make(chan zipWorkResult, w.pm.NumWorkers())
 	wg := new(sync.WaitGroup)
 
