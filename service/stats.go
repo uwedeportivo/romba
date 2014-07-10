@@ -39,6 +39,11 @@ import (
 	"github.com/uwedeportivo/commander"
 )
 
+func (rs *RombaService) printVersion(cmd *commander.Command, args []string) error {
+	fmt.Fprintf(cmd.Stdout, "romba version %s", Version)
+	return nil
+}
+
 func (rs *RombaService) memstats(cmd *commander.Command, args []string) error {
 	rs.jobMutex.Lock()
 	defer rs.jobMutex.Unlock()

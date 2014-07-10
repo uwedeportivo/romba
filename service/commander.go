@@ -111,7 +111,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommand(writer io.Writer, rs *RombaService) *commander.Command {
 	cmd := new(commander.Command)
 	cmd.UsageLine = "Romba"
-	cmd.Subcommands = make([]*commander.Command, 14)
+	cmd.Subcommands = make([]*commander.Command, 15)
 	cmd.Flag = *flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -339,6 +339,17 @@ Merges specified depot into current depot.`,
 	cmd.Subcommands[13].Flag.String("resume", "", "resume a previously interrupted merge operation from the specified path")
 	cmd.Subcommands[13].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
+
+	cmd.Subcommands[14] = &commander.Command{
+		Run:       rs.printVersion,
+		UsageLine: "version",
+		Short:     "Prints version",
+		Long: `
+Prints version.`,
+		Flag:   *flag.NewFlagSet("romba-version", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
+	}
 
 	return cmd
 }
