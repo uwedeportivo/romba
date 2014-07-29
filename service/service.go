@@ -293,7 +293,7 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 		}
 
 		fmt.Fprintf(cmd.Stdout, "-----------------\n")
-		fmt.Fprintf(cmd.Stdout, "DebugGet:\n%s\n", rs.romDB.DebugGet(hash))
+		fmt.Fprintf(cmd.Stdout, "DebugGet:\n%s\n", rs.romDB.DebugGet(hash, size))
 	}
 
 	return nil

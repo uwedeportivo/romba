@@ -42,6 +42,7 @@ import (
 	"path/filepath"
 
 	"github.com/uwedeportivo/romba/types"
+	"github.com/uwedeportivo/romba/util"
 
 	"github.com/golang/glog"
 )
@@ -642,11 +643,14 @@ func printSha1s(vBytes []byte) string {
 	return buf.String()
 }
 
-func (kvdb *kvStore) DebugGet(key []byte) string {
+func (kvdb *kvStore) DebugGet(key []byte, size int64) string {
 	var buf bytes.Buffer
 
 	switch len(key) {
 	case md5.Size:
+		sizeBytes := make([]byte, 8)
+		util.Int64ToBytes(size, sizeBytes)
+		key = append(key, sizeBytes...)
 		sha1s, err := kvdb.md5DB.Get(key)
 		if err != nil {
 			glog.Errorf("error getting from md5DB: %v", err)
@@ -661,6 +665,10 @@ func (kvdb *kvStore) DebugGet(key []byte) string {
 			buf.WriteString(fmt.Sprintf("md5sha1DB -> %s\n", printSha1s(sha1s)))
 		}
 	case crc32.Size:
+		sizeBytes := make([]byte, 8)
+		util.Int64ToBytes(size, sizeBytes)
+		key = append(key, sizeBytes...)
+
 		sha1s, err := kvdb.crcDB.Get(key)
 		if err != nil {
 			glog.Errorf("error getting from crcDB: %v", err)

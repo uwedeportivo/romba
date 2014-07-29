@@ -85,6 +85,6 @@ func (noop *NoOpBatch) Size() int64 {
 	return 0
 }
 
-func (noop *NoOpBatch) DebugGet(key []byte) string {
+func (noop *NoOpBatch) DebugGet(key []byte, size int64) string {
 	return ""
 }
