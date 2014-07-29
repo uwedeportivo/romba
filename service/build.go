@@ -40,6 +40,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/uwedeportivo/commander"
 	"github.com/uwedeportivo/romba/archive"
+	"github.com/uwedeportivo/romba/dedup"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
 )
@@ -88,7 +89,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		}
 	}
 
-	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.fixdatOnly)
+	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.fixdatOnly, pw.pm.deduper)
 	if err != nil {
 		return err
 	}
@@ -112,6 +113,7 @@ type buildMaster struct {
 	commonRootPath string
 	outpath        string
 	fixdatOnly     bool
+	deduper        dedup.Deduper
 }
 
 func (pm *buildMaster) CalculateWork() bool {
@@ -138,7 +140,7 @@ func (pm *buildMaster) ProgressTracker() worker.ProgressTracker {
 }
 
 func (pm *buildMaster) FinishUp() error {
-	return nil
+	return pm.deduper.Close()
 }
 
 func (pm *buildMaster) Start() error {
@@ -193,6 +195,11 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 		return err
 	}
 
+	deduper, err := dedup.NewLevelDBDeduper()
+	if err != nil {
+		return err
+	}
+
 	rs.pt.Reset()
 	rs.busy = true
 	rs.jobName = "build"
@@ -222,6 +229,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 			numSubWorkers: numSubWorkers,
 			pt:            rs.pt,
 			fixdatOnly:    fixdatOnly,
+			deduper:       deduper,
 		}
 
 		endMsg, err := worker.Work("building dats", args, pm)

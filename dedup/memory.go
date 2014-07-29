@@ -30,12 +30,18 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dedup
 
-import "github.com/uwedeportivo/romba/types"
+import (
+	"sync"
+
+	"github.com/uwedeportivo/romba/types"
+)
 
 type memoryDeduper struct {
 	crcs  map[string]bool
 	md5s  map[string]bool
 	sha1s map[string]bool
+
+	mutex sync.Mutex
 }
 
 func NewMemoryDeduper() Deduper {
@@ -47,6 +53,9 @@ func NewMemoryDeduper() Deduper {
 }
 
 func (md *memoryDeduper) Declare(r *types.Rom) error {
+	md.mutex.Lock()
+	defer md.mutex.Unlock()
+
 	if len(r.Crc) > 0 {
 		md.crcs[string(r.CrcWithSizeKey())] = true
 	}
@@ -62,6 +71,9 @@ func (md *memoryDeduper) Declare(r *types.Rom) error {
 }
 
 func (md *memoryDeduper) Seen(r *types.Rom) (bool, error) {
+	md.mutex.Lock()
+	defer md.mutex.Unlock()
+
 	if len(r.Sha1) > 0 && md.sha1s[string(r.Sha1)] {
 		return true, nil
 	}

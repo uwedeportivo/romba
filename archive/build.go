@@ -39,6 +39,7 @@ import (
 	"sync"
 
 	"github.com/golang/glog"
+	"github.com/uwedeportivo/romba/dedup"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/torrentzip"
 	"github.com/uwedeportivo/torrentzip/cgzip"
@@ -54,13 +55,14 @@ type gameBuilder struct {
 	closeC     chan bool
 	index      int
 	fixdatOnly bool
+	deduper    dedup.Deduper
 }
 
 func (gb *gameBuilder) work() {
 	glog.V(4).Infof("starting subworker %d", gb.index)
 	for game := range gb.wc {
 		gamePath := filepath.Join(gb.datPath, game.Name+zipSuffix)
-		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath, gb.fixdatOnly, gb.fixDat.UnzipGames)
+		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath, gb.fixdatOnly, gb.fixDat.UnzipGames, gb.deduper)
 		if err != nil {
 			glog.Errorf("error processing %s", gamePath)
 			gb.erc <- err
@@ -94,7 +96,9 @@ func (gb *gameBuilder) work() {
 	return
 }
 
-func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, fixdatOnly bool) (bool, error) {
+func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int,
+	fixdatOnly bool, deduper dedup.Deduper) (bool, error) {
+
 	datPath := filepath.Join(outpath, dat.Name)
 
 	if !fixdatOnly {
@@ -126,6 +130,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, 
 		gb.fixDat = fixDat
 		gb.index = i
 		gb.fixdatOnly = fixdatOnly
+		gb.deduper = deduper
 		gb.closeC = closeC
 
 		go gb.work()
@@ -178,7 +183,9 @@ type nopWriterCloser struct {
 
 func (nopWriterCloser) Close() error { return nil }
 
-func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool, unzipGame bool) (*types.Game, bool, error) {
+func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool,
+	unzipGame bool, deduper dedup.Deduper) (*types.Game, bool, error) {
+
 	var gameTorrent *torrentzip.Writer
 	var err error
 
@@ -233,13 +240,26 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool
 			if glog.V(2) {
 				glog.Warningf("game %s has missing rom %s (sha1 %s)", game.Name, rom.Name, hex.EncodeToString(rom.Sha1))
 			}
-			if fixGame == nil {
-				fixGame = new(types.Game)
-				fixGame.Name = game.Name
-				fixGame.Description = game.Description
+
+			seenRom, err := deduper.Seen(rom)
+			if err != nil {
+				return nil, false, err
 			}
 
-			fixGame.Roms = append(fixGame.Roms, rom)
+			if !seenRom {
+				err = deduper.Declare(rom)
+				if err != nil {
+					return nil, false, err
+				}
+
+				if fixGame == nil {
+					fixGame = new(types.Game)
+					fixGame.Name = game.Name
+					fixGame.Description = game.Description
+				}
+
+				fixGame.Roms = append(fixGame.Roms, rom)
+			}
 			continue
 		}
 
