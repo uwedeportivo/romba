@@ -196,6 +196,8 @@ func runCmd(cmd *commander.Command, args []string) error {
 }
 
 func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
+	size := cmd.Flag.Lookup("size").Value.Get().(int64)
+
 	for _, arg := range args {
 		fmt.Fprintf(cmd.Stdout, "----------------------------------------\n")
 		fmt.Fprintf(cmd.Stdout, "key: %s\n", arg)
@@ -210,6 +212,10 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 		}
 
 		r := new(types.Rom)
+		if size != -1 {
+			r.Size = size
+		}
+
 		switch len(hash) {
 		case md5.Size:
 			r.Md5 = hash
