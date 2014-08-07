@@ -97,6 +97,29 @@ func stringValue2Bool(input string) (bool, error) {
 	return val, nil
 }
 
+func stringValue2Forcezipping(input string) (bool, error) {
+	if input == "-" {
+		return false, nil
+	}
+	val, err := strconv.ParseBool(input)
+	if err != nil {
+		input = strings.ToLower(input)
+		switch input {
+		case "yes":
+			return true, nil
+		case "no":
+			return false, nil
+		case "zip":
+			return true, nil
+		case "unzip":
+			return false, nil
+		default:
+			return false, err
+		}
+	}
+	return val, nil
+}
+
 func stringValue2Bytes(input string, expectedLength int) ([]byte, error) {
 	if input == "-" || input == "" {
 		return nil, nil
@@ -148,6 +171,17 @@ func (p *parser) consumeBoolValue() (bool, error) {
 	return false, fmt.Errorf("expected value, got %v", i)
 }
 
+func (p *parser) consumeForceZipping() (bool, error) {
+	i := p.ll.nextItem()
+	if i.typ == itemValue {
+		return stringValue2Forcezipping(i.val)
+	}
+	if i.typ == itemQuotedString {
+		return stringValue2Forcezipping(i.val[1 : len(i.val)-1])
+	}
+	return false, fmt.Errorf("expected value, got %v", i)
+}
+
 func (p *parser) datStmt() error {
 	i := p.ll.nextItem()
 	err := p.match(i, itemOpenBrace)
@@ -170,8 +204,8 @@ func (p *parser) datStmt() error {
 			if err != nil {
 				return err
 			}
-		case i.typ == itemForceZipping:
-			bv, err := p.consumeBoolValue()
+		case i.typ == itemForceZipping || i.typ == itemForcePacking:
+			bv, err := p.consumeForceZipping()
 			if err != nil {
 				return err
 			}

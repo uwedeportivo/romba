@@ -60,6 +60,7 @@ const (
 	itemAuthor
 	itemClrMamePro
 	itemForceZipping
+	itemForcePacking
 )
 
 var itemTypePrettyPrint = map[itemType]string{
@@ -112,6 +113,7 @@ var key = map[string]itemType{
 	"author":       itemAuthor,
 	"clrmamepro":   itemClrMamePro,
 	"forcezipping": itemForceZipping,
+	"forcepacking": itemForcePacking,
 }
 
 // isSpace reports whether r is a space character.

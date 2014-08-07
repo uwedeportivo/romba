@@ -39,6 +39,7 @@ import (
 
 type Clrmamepro struct {
 	ForcePacking string `xml:"forcepacking,attr"`
+	ForceZipping string `xml:"forcezipping,attr"`
 }
 
 type Dat struct {
@@ -191,7 +192,8 @@ func (ad *Dat) Equals(bd *Dat) bool {
 }
 
 func (d *Dat) Normalize() {
-	if d.Clr != nil && d.Clr.ForcePacking == "unzip" {
+	if d.Clr != nil && (d.Clr.ForcePacking == "unzip" || d.Clr.ForcePacking == "false" || d.Clr.ForcePacking == "no" ||
+		d.Clr.ForceZipping == "unzip" || d.Clr.ForceZipping == "false" || d.Clr.ForceZipping == "no") {
 		d.UnzipGames = true
 	}
 	if d.Software != nil {
