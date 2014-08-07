@@ -83,6 +83,7 @@ type archiveMaster struct {
 	includegzips    bool
 	include7zips    bool
 	onlyneeded      bool
+	skipInitialScan bool
 }
 
 func extractResumePoint(resumePath string, numWorkers int) (string, error) {
@@ -160,7 +161,7 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 
 func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, includegzips bool, include7zips bool,
 	onlyneeded bool, numWorkers int,
-	logDir string, pt worker.ProgressTracker) (string, error) {
+	logDir string, pt worker.ProgressTracker, skipInitialScan bool) (string, error) {
 
 	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
 	resumeLogFile, err := os.Create(resumeLogPath)
@@ -191,6 +192,7 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips bool,
 	pm.includegzips = includegzips
 	pm.include7zips = include7zips
 	pm.onlyneeded = onlyneeded
+	pm.skipInitialScan = skipInitialScan
 
 	go loopObserver(pm.numWorkers, pm.soFar, pm.depot, pm.resumeLogWriter)
 
@@ -215,7 +217,7 @@ func (pm *archiveMaster) NewWorker(workerIndex int) worker.Worker {
 }
 
 func (pm *archiveMaster) CalculateWork() bool {
-	return true
+	return !pm.skipInitialScan
 }
 
 func (pm *archiveMaster) NumWorkers() int {
