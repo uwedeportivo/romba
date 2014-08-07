@@ -107,8 +107,10 @@ func (pt *Progress) Finished() {
 	pt.m.Lock()
 	defer pt.m.Unlock()
 
-	pt.BytesSoFar = pt.TotalBytes
-	pt.FilesSoFar = pt.TotalFiles
+	if pt.knowTotal {
+		pt.BytesSoFar = pt.TotalBytes
+		pt.FilesSoFar = pt.TotalFiles
+	}
 	if pt.wc != nil {
 		pt.wc <- true
 		pt.wc = nil

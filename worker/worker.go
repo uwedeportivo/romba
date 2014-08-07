@@ -405,10 +405,8 @@ func Work(workname string, paths []string, master Master) (string, error) {
 	endMsg.WriteString(fmt.Sprintf("number of bytes processed: %s\n", humanize.IBytes(uint64(pgr.BytesSoFar))))
 	endMsg.WriteString(fmt.Sprintf("elapsed time: %s\n", formatDuration(elapsed)))
 
-	if cv != nil {
-		ts := uint64(float64(cv.numBytes) / float64(elapsed.Seconds()))
-		endMsg.WriteString(fmt.Sprintf("throughput: %s/s \n", humanize.IBytes(ts)))
-	}
+	ts := uint64(float64(pgr.BytesSoFar) / float64(elapsed.Seconds()))
+	endMsg.WriteString(fmt.Sprintf("throughput: %s/s \n", humanize.IBytes(ts)))
 
 	endS := endMsg.String()
 
