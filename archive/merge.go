@@ -123,7 +123,7 @@ func (pm *mergeMaster) NewWorker(workerIndex int) worker.Worker {
 }
 
 func (pm *mergeMaster) CalculateWork() bool {
-	return pm.skipInitialScan
+	return !pm.skipInitialScan
 }
 
 func (pm *mergeMaster) NumWorkers() int {
