@@ -342,6 +342,7 @@ Merges specified depot into current depot.`,
 	cmd.Subcommands[13].Flag.String("resume", "", "resume a previously interrupted merge operation from the specified path")
 	cmd.Subcommands[13].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
+	cmd.Subcommands[13].Flag.Bool("skip-initial-scan", false, "skip the initial scan of the files to determine amount of work")
 
 	cmd.Subcommands[14] = &commander.Command{
 		Run:       rs.printVersion,

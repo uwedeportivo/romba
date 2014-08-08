@@ -61,10 +61,11 @@ type mergeMaster struct {
 	resumeLogFile   *os.File
 	resumeLogWriter *bufio.Writer
 	onlyneeded      bool
+	skipInitialScan bool
 }
 
 func (depot *Depot) Merge(paths []string, resumePath string, onlyneeded bool, numWorkers int,
-	logDir string, pt worker.ProgressTracker) (string, error) {
+	logDir string, pt worker.ProgressTracker, skipInitialScan bool) (string, error) {
 
 	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("merge-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
 	resumeLogFile, err := os.Create(resumeLogPath)
@@ -92,6 +93,7 @@ func (depot *Depot) Merge(paths []string, resumePath string, onlyneeded bool, nu
 	pm.resumeLogWriter = resumeLogWriter
 	pm.resumeLogFile = resumeLogFile
 	pm.onlyneeded = onlyneeded
+	pm.skipInitialScan = skipInitialScan
 
 	go loopObserver(pm.numWorkers, pm.soFar, pm.depot, pm.resumeLogWriter)
 
@@ -121,7 +123,7 @@ func (pm *mergeMaster) NewWorker(workerIndex int) worker.Worker {
 }
 
 func (pm *mergeMaster) CalculateWork() bool {
-	return true
+	return pm.skipInitialScan
 }
 
 func (pm *mergeMaster) NumWorkers() int {

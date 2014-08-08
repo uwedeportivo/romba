@@ -94,8 +94,9 @@ func (rs *RombaService) startMerge(cmd *commander.Command, args []string) error 
 
 		onlyneeded := cmd.Flag.Lookup("only-needed").Value.Get().(bool)
 		numWorkers := cmd.Flag.Lookup("workers").Value.Get().(int)
+		skipInitialScan := cmd.Flag.Lookup("skip-initial-scan").Value.Get().(bool)
 
-		endMsg, err := rs.depot.Merge(args, resume, onlyneeded, numWorkers, rs.logDir, rs.pt)
+		endMsg, err := rs.depot.Merge(args, resume, onlyneeded, numWorkers, rs.logDir, rs.pt, skipInitialScan)
 		if err != nil {
 			glog.Errorf("error merging: %v", err)
 		}
