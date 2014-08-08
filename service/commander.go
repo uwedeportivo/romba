@@ -158,6 +158,7 @@ have a current entry in the DAT index.`,
 	cmd.Subcommands[1].Flag.Bool("include-gzips", false, "add gzip files themselves into the depot in addition to their contents")
 	cmd.Subcommands[1].Flag.Bool("include-7zips", false, "add 7zip files themselves into the depot in addition to their contents")
 	cmd.Subcommands[1].Flag.Bool("skip-initial-scan", false, "skip the initial scan of the files to determine amount of work")
+	cmd.Subcommands[1].Flag.Bool("use-golang-zip", false, "use go zip implementation instead of zlib")
 
 	cmd.Subcommands[2] = &commander.Command{
 		Run:       rs.purge,

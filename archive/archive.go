@@ -55,7 +55,7 @@ import (
 	"github.com/uwedeportivo/romba/worker"
 	"github.com/uwedeportivo/sevenzip"
 	"github.com/uwedeportivo/torrentzip/cgzip"
-	//"github.com/uwedeportivo/torrentzip/czip"
+	"github.com/uwedeportivo/torrentzip/czip"
 )
 
 type completed struct {
@@ -84,6 +84,7 @@ type archiveMaster struct {
 	include7zips    bool
 	onlyneeded      bool
 	skipInitialScan bool
+	useGoZip        bool
 }
 
 func extractResumePoint(resumePath string, numWorkers int) (string, error) {
@@ -161,7 +162,7 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 
 func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, includegzips bool, include7zips bool,
 	onlyneeded bool, numWorkers int,
-	logDir string, pt worker.ProgressTracker, skipInitialScan bool) (string, error) {
+	logDir string, pt worker.ProgressTracker, skipInitialScan bool, useGoZip bool) (string, error) {
 
 	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
 	resumeLogFile, err := os.Create(resumeLogPath)
@@ -193,6 +194,7 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips bool,
 	pm.include7zips = include7zips
 	pm.onlyneeded = onlyneeded
 	pm.skipInitialScan = skipInitialScan
+	pm.useGoZip = useGoZip
 
 	go loopObserver(pm.numWorkers, pm.soFar, pm.depot, pm.resumeLogWriter)
 
@@ -397,10 +399,15 @@ type zipWorkResult struct {
 	nrProcessed    int
 }
 
+type zipF interface {
+	Open() (io.ReadCloser, error)
+	FileInfo() os.FileInfo
+}
+
 type zipWorker struct {
 	index        int
 	inpath       string
-	in           chan *zip.File
+	in           chan zipF
 	out          chan zipWorkResult
 	w            *archiveWorker
 	hh           *Hashes
@@ -415,7 +422,7 @@ func (zw *zipWorker) Work() {
 	var nrProcessed int
 
 	for zf := range zw.in {
-		glog.V(4).Infof("subworker %d: archiving zip %s: file %s", zw.index, zw.inpath, zf.Name)
+		glog.V(4).Infof("subworker %d: archiving zip %s: file %s", zw.index, zw.inpath, zf.FileInfo().Name())
 
 		cs, err := zw.w.archive(func() (io.ReadCloser, error) { return zf.Open() },
 			zf.FileInfo().Name(), filepath.Join(zw.inpath, zf.FileInfo().Name()), zf.FileInfo().Size(),
@@ -427,7 +434,7 @@ func (zw *zipWorker) Work() {
 		}
 		compressedSize += cs
 		nrProcessed++
-		glog.V(4).Infof("subworker %d: done archiving zip %s: file %s", zw.index, zw.inpath, zf.Name)
+		glog.V(4).Infof("subworker %d: done archiving zip %s: file %s", zw.index, zw.inpath, zf.FileInfo().Name())
 	}
 
 	glog.V(4).Infof("stopped subworker %d for zip %s", zw.index, zw.inpath, nrProcessed)
@@ -437,15 +444,35 @@ func (zw *zipWorker) Work() {
 func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
 	glog.V(4).Infof("archiving zip %s ", inpath)
 
-	zr, err := zip.OpenReader(inpath)
-	if err != nil {
-		return 0, err
+	var zfs []zipF
+
+	if w.pm.useGoZip {
+		zr, err := zip.OpenReader(inpath)
+		if err != nil {
+			return 0, err
+		}
+		defer zr.Close()
+
+		zfs = make([]zipF, len(zr.File))
+		for i, zf := range zr.File {
+			zfs[i] = zipF(zf)
+		}
+	} else {
+		zr, err := czip.OpenReader(inpath)
+		if err != nil {
+			return 0, err
+		}
+		defer zr.Close()
+
+		zfs = make([]zipF, len(zr.File))
+		for i, zf := range zr.File {
+			zfs[i] = zipF(zf)
+		}
 	}
-	defer zr.Close()
 
-	glog.V(4).Infof("zip entries %d: %s", len(zr.File), inpath)
+	glog.V(4).Infof("zip entries %d: %s", len(zfs), inpath)
 
-	in := make(chan *zip.File)
+	in := make(chan zipF)
 	out := make(chan zipWorkResult)
 
 	numWorkers := w.pm.NumWorkers()
@@ -470,20 +497,20 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 
 	expectedResults := numWorkers
 
-	for _, zf := range zr.File {
+	for _, zf := range zfs {
 		select {
 		case in <- zf:
-			glog.V(4).Infof("scheduled %s from zip %s", zf.Name, inpath)
+			glog.V(4).Infof("scheduled %s from zip %s", zf.FileInfo().Name(), inpath)
 			nrScheduled++
-		case zr := <-out:
+		case zwr := <-out:
 			expectedResults--
 			glog.Warningf("breaking out of the zip loop before all files are scheduled: %s", inpath)
-			if zr.err != nil {
-				perr = zr.err
+			if zwr.err != nil {
+				perr = zwr.err
 				break
 			}
-			compressedSize += zr.compressedSize
-			nrProcessed += zr.nrProcessed
+			compressedSize += zwr.compressedSize
+			nrProcessed += zwr.nrProcessed
 		}
 	}
 
@@ -497,21 +524,21 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 	glog.V(4).Infof("reading results from zip %s", inpath)
 
 	for i := 0; i < expectedResults; i++ {
-		zr := <-out
-		if zr.err != nil {
-			perr = err
+		zwr := <-out
+		if zwr.err != nil {
+			perr = zwr.err
 			break
 		}
-		compressedSize += zr.compressedSize
-		nrProcessed += zr.nrProcessed
+		compressedSize += zwr.compressedSize
+		nrProcessed += zwr.nrProcessed
 	}
 
-	if nrProcessed != len(zr.File) || nrScheduled != len(zr.File) {
+	if nrProcessed != len(zfs) || nrScheduled != len(zfs) {
 		glog.Warningf("scheduled/processed fewer zip entries: scheduled %d, processed %d, expected %d: %s",
-			nrScheduled, nrProcessed, len(zr.File), inpath)
+			nrScheduled, nrProcessed, len(zfs), inpath)
 	}
 
-	glog.V(4).Infof("scheduled %d, processed %d, expected %d: %s", nrScheduled, nrProcessed, len(zr.File), inpath)
+	glog.V(4).Infof("scheduled %d, processed %d, expected %d: %s", nrScheduled, nrProcessed, len(zfs), inpath)
 	glog.V(4).Infof("finished archiving contents of zip %s", inpath)
 
 	if perr != nil {

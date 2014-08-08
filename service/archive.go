@@ -129,9 +129,10 @@ func (rs *RombaService) startArchive(cmd *commander.Command, args []string) erro
 		onlyneeded := cmd.Flag.Lookup("only-needed").Value.Get().(bool)
 		numWorkers := cmd.Flag.Lookup("workers").Value.Get().(int)
 		skipInitialScan := cmd.Flag.Lookup("skip-initial-scan").Value.Get().(bool)
+		useGoZip := cmd.Flag.Lookup("use-golang-zip").Value.Get().(bool)
 
 		endMsg, err := rs.depot.Archive(args, resume, includezips, includegzips, include7zips,
-			onlyneeded, numWorkers, rs.logDir, rs.pt, skipInitialScan)
+			onlyneeded, numWorkers, rs.logDir, rs.pt, skipInitialScan, useGoZip)
 		if err != nil {
 			glog.Errorf("error archiving: %v", err)
 		}
