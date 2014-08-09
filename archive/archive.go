@@ -85,6 +85,7 @@ type archiveMaster struct {
 	onlyneeded      bool
 	skipInitialScan bool
 	useGoZip        bool
+	noDB            bool
 }
 
 func extractResumePoint(resumePath string, numWorkers int) (string, error) {
@@ -162,7 +163,7 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 
 func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, includegzips bool, include7zips bool,
 	onlyneeded bool, numWorkers int,
-	logDir string, pt worker.ProgressTracker, skipInitialScan bool, useGoZip bool) (string, error) {
+	logDir string, pt worker.ProgressTracker, skipInitialScan bool, useGoZip bool, noDB bool) (string, error) {
 
 	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
 	resumeLogFile, err := os.Create(resumeLogPath)
@@ -195,6 +196,7 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips bool,
 	pm.onlyneeded = onlyneeded
 	pm.skipInitialScan = skipInitialScan
 	pm.useGoZip = useGoZip
+	pm.noDB = noDB
 
 	go loopObserver(pm.numWorkers, pm.soFar, pm.depot, pm.resumeLogWriter)
 
@@ -334,28 +336,30 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 	rom.Size = size
 	rom.Path = path
 
-	if w.pm.onlyneeded {
-		dats, err := w.depot.romDB.DatsForRom(rom)
+	if !w.pm.noDB {
+		if w.pm.onlyneeded {
+			dats, err := w.depot.romDB.DatsForRom(rom)
+			if err != nil {
+				return 0, err
+			}
+
+			needed := false
+
+			for _, dat := range dats {
+				if !dat.Artificial && dat.Generation == w.depot.romDB.Generation() {
+					needed = true
+					break
+				}
+			}
+			if !needed {
+				return 0, nil
+			}
+		}
+
+		err = w.depot.romDB.IndexRom(rom)
 		if err != nil {
 			return 0, err
 		}
-
-		needed := false
-
-		for _, dat := range dats {
-			if !dat.Artificial && dat.Generation == w.depot.romDB.Generation() {
-				needed = true
-				break
-			}
-		}
-		if !needed {
-			return 0, nil
-		}
-	}
-
-	err = w.depot.romDB.IndexRom(rom)
-	if err != nil {
-		return 0, err
 	}
 
 	sha1Hex := hex.EncodeToString(hh.Sha1)
