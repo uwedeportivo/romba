@@ -43,6 +43,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spacemonkeygo/errors"
+
 	"github.com/golang/glog"
 	"github.com/uwedeportivo/romba/types"
 )
@@ -55,6 +57,38 @@ const (
 type parser struct {
 	ll *lexer
 	d  *types.Dat
+}
+
+var (
+	ParseError    = errors.NewClass("DAT Parse Error")
+	XMLParseError = errors.NewClass("XML DAT Parse Error")
+
+	lineNumberErrorKey = errors.GenSym()
+	filePathErrorKey   = errors.GenSym()
+)
+
+func ErrorLineNumber(err error) int {
+	v, ok := errors.GetData(err, lineNumberErrorKey).(int)
+	if !ok {
+		return -1
+	}
+	return v
+}
+
+func ErrorFilePath(err error) string {
+	v, ok := errors.GetData(err, filePathErrorKey).(string)
+	if !ok {
+		return ""
+	}
+	return v
+}
+
+func setErrorLineNumber(lnr int) errors.ErrorOption {
+	return errors.SetData(lineNumberErrorKey, lnr)
+}
+
+func setErrorFilePath(path string) errors.ErrorOption {
+	return errors.SetData(filePathErrorKey, path)
 }
 
 func (p *parser) consumeStringValue() (string, error) {
@@ -365,7 +399,9 @@ func ParseDat(r io.Reader, path string) (*types.Dat, []byte, error) {
 
 	err := p.parse()
 	if err != nil {
-		return nil, nil, fmt.Errorf("error in file %s on line %d: %v", path, p.ll.lineNumber(), err)
+		derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, p.ll.lineNumber(), err)
+		derr := ParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(p.ll.lineNumber()))
+		return nil, nil, derr
 	}
 	p.d.Normalize()
 	p.d.Path = path
@@ -498,7 +534,9 @@ func ParseXml(r io.Reader, path string) (*types.Dat, []byte, error) {
 
 	err := decoder.Decode(d)
 	if err != nil {
-		return nil, nil, fmt.Errorf("xml parsing error %d: %v", lr.line, err)
+		derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, lr.line, err)
+		derr := XMLParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(lr.line))
+		return nil, nil, derr
 	}
 
 	if strings.ContainsAny(d.Name, "/") {

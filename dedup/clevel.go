@@ -38,6 +38,7 @@ import (
 
 	"github.com/jmhodges/levigo"
 
+	"github.com/uwedeportivo/romba/config"
 	"github.com/uwedeportivo/romba/types"
 )
 
@@ -70,7 +71,7 @@ func openDb(path string) (*levigo.DB, error) {
 }
 
 func NewLevelDBDeduper() (Deduper, error) {
-	tempPath, err := ioutil.TempDir("", "romba_dedup")
+	tempPath, err := ioutil.TempDir(config.GlobalConfig.General.TmpDir, "romba_dedup")
 	if err != nil {
 		return nil, err
 	}
