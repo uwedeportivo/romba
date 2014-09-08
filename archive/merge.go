@@ -203,15 +203,7 @@ func (w *mergeWorker) mergeGzip(path string, size int64) error {
 			return err
 		}
 
-		needed := false
-
-		for _, dat := range dats {
-			if !dat.Artificial && dat.Generation == w.depot.romDB.Generation() {
-				needed = true
-				break
-			}
-		}
-		if !needed {
+		if len(dats) == 0 {
 			return nil
 		}
 	}

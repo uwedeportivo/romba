@@ -46,7 +46,6 @@ type Dat struct {
 	Clr         *Clrmamepro `xml:"header>clrmamepro"`
 	Games       GameSlice   `xml:"game"`
 	Generation  int64
-	Artificial  bool
 	Path        string
 	Software    GameSlice `xml:"software"`
 	UnzipGames  bool
@@ -194,7 +193,6 @@ func (d *Dat) NarrowToRom(rom *Rom) *Dat {
 	dc.Name = d.Name
 	dc.Path = d.Path
 	dc.Description = d.Description
-	dc.Artificial = d.Artificial
 	dc.FixDat = d.FixDat
 	dc.Generation = d.Generation
 	dc.UnzipGames = d.UnzipGames
@@ -223,7 +221,6 @@ func (d *Dat) CopyHeader(src *Dat) {
 	d.Name = src.Name
 	d.Path = src.Path
 	d.Description = src.Description
-	d.Artificial = src.Artificial
 	d.FixDat = src.FixDat
 	d.Generation = src.Generation
 	d.UnzipGames = src.UnzipGames

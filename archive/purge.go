@@ -39,7 +39,6 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
-
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
 )
@@ -131,32 +130,25 @@ func (w *purgeWorker) Process(inpath string, size int64) error {
 	rom.Md5 = hh.Md5
 	rom.Crc = hh.Crc
 
-	dats, err := w.pm.depot.romDB.DatsForRom(rom)
+	dats, oldDats, err := w.pm.depot.romDB.FilteredDatsForRom(rom, func(dat *types.Dat) bool {
+		return dat.Generation == w.pm.depot.romDB.Generation()
+	})
 	if err != nil {
 		return err
 	}
 
-	used := false
-	var realDat *types.Dat
-
-	for _, dat := range dats {
-		if !dat.Artificial && dat.Generation == w.pm.depot.romDB.Generation() {
-			used = true
-			break
-		}
-		if !dat.Artificial {
-			realDat = dat
-		}
-	}
-
-	if !used {
+	if len(dats) == 0 {
 		destPath := path.Join(w.pm.backupDir, "uncategorized", filepath.Base(inpath))
 
-		if realDat != nil && realDat.Path != "" {
-			commonRoot := worker.CommonRoot(w.pm.backupDir, realDat.Path)
-			destPath = path.Join(w.pm.backupDir,
-				strings.TrimSuffix(strings.TrimPrefix(realDat.Path, commonRoot), filepath.Ext(realDat.Path)),
-				filepath.Base(inpath))
+		if len(oldDats) > 0 {
+			oldDat := oldDats[0]
+
+			if oldDat != nil && oldDat.Path != "" {
+				commonRoot := worker.CommonRoot(w.pm.backupDir, oldDat.Path)
+				destPath = path.Join(w.pm.backupDir,
+					strings.TrimSuffix(strings.TrimPrefix(oldDat.Path, commonRoot), filepath.Ext(oldDat.Path)),
+					filepath.Base(inpath))
+			}
 		}
 		glog.V(2).Infof("purging %s, moving to %s", inpath, destPath)
 		err = worker.Mv(inpath, destPath)

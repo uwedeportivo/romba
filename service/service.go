@@ -272,24 +272,6 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 					fmt.Fprintf(cmd.Stdout, "%s\n", types.PrintDat(dn))
 				}
 			}
-
-			used := false
-			var realDat *types.Dat
-
-			for _, dat := range dats {
-				if !dat.Artificial && dat.Generation == rs.romDB.Generation() {
-					used = true
-					realDat = dat
-					break
-				}
-			}
-
-			fmt.Fprintf(cmd.Stdout, "-----------------\n")
-			if used {
-				fmt.Fprintf(cmd.Stdout, "rom used in at least %s\n", realDat.Path)
-			} else {
-				fmt.Fprintf(cmd.Stdout, "rom not used\n")
-			}
 		}
 
 		fmt.Fprintf(cmd.Stdout, "-----------------\n")

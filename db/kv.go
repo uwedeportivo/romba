@@ -224,13 +224,13 @@ func (kvdb *kvStore) GetDat(sha1Bytes []byte) (*types.Dat, error) {
 	return &dat, nil
 }
 
-func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
+func (kvdb *kvStore) FilteredDatsForRom(rom *types.Rom, filter func(*types.Dat) bool) ([]*types.Dat, []*types.Dat, error) {
 	var dBytes []byte
 
 	if rom.Sha1 != nil {
 		bs, err := kvdb.sha1DB.GetKeySuffixesFor(rom.Sha1)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if bs != nil {
 			dBytes = append(dBytes, bs...)
@@ -239,7 +239,7 @@ func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	if rom.Md5 != nil {
 		bs, err := kvdb.md5DB.GetKeySuffixesFor(rom.Md5WithSizeKey())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if bs != nil {
 			dBytes = append(dBytes, bs...)
@@ -248,7 +248,7 @@ func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	if rom.Crc != nil {
 		bs, err := kvdb.crcDB.GetKeySuffixesFor(rom.CrcWithSizeKey())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if bs != nil {
 			dBytes = append(dBytes, bs...)
@@ -256,10 +256,11 @@ func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	}
 
 	if dBytes == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var dats []*types.Dat
+	var rejectedDats []*types.Dat
 
 	seen := make(map[string]bool)
 
@@ -273,14 +274,25 @@ func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 
 		dat, err := kvdb.GetDat(sha1Bytes)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if dat != nil {
-			dats = append(dats, dat)
+			if filter(dat) {
+				dats = append(dats, dat)
+			} else {
+				rejectedDats = append(rejectedDats, dat)
+			}
 		}
 	}
 
-	return dats, nil
+	return dats, rejectedDats, nil
+}
+
+func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
+	dats, _, err := kvdb.FilteredDatsForRom(rom, func(dat *types.Dat) bool {
+		return dat.Generation == kvdb.Generation()
+	})
+	return dats, err
 }
 
 func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
@@ -485,20 +497,12 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 		return err
 	}
 
-	var exists bool
-
-	if dat.Artificial {
-		exists = false
-	} else {
-		existsSha1, err := kvb.db.datsDB.Exists(sha1Bytes)
-		if err != nil {
-			return fmt.Errorf("failed to lookup sha1 indexing dats: %v", err)
-		}
-		exists = existsSha1
+	exists, err := kvb.db.datsDB.Exists(sha1Bytes)
+	if err != nil {
+		return fmt.Errorf("failed to lookup sha1 indexing dats: %v", err)
 	}
 
 	kvb.datsBatch.Set(sha1Bytes, buf.Bytes())
-
 	kvb.size += int64(sha1.Size + buf.Len())
 
 	if !exists {
