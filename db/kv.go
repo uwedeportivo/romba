@@ -38,7 +38,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash/crc32"
-	"io"
 	"path/filepath"
 
 	"github.com/uwedeportivo/romba/types"
@@ -56,18 +55,18 @@ const (
 	md5sha1DBName = "md5sha1_db"
 )
 
-const (
-	numParts    = 51
-	keySizeCrc  = 4
-	keySizeMd5  = 16
-	keySizeSha1 = 20
-)
+var oneValue []byte
+
+func init() {
+	oneValue = make([]byte, 1)
+	oneValue[0] = 1
+}
 
 type KVStore interface {
-	Append(key, value []byte) error
 	Set(key, value []byte) error
 	Delete(key []byte) error
 	Get(key []byte) ([]byte, error)
+	GetKeySuffixesFor(keyPrefix []byte) ([]byte, error)
 	Exists(key []byte) (bool, error)
 	Flush()
 	Size() int64
@@ -81,12 +80,11 @@ type KVStore interface {
 
 type KVBatch interface {
 	Set(key, value []byte) error
-	Append(key, value []byte) error
 	Delete(key []byte) error
 	Clear()
 }
 
-var StoreOpener func(pathPrefix string, keySize int) (KVStore, error)
+var StoreOpener func(pathPrefix string) (KVStore, error)
 
 type kvStore struct {
 	generation int64
@@ -110,8 +108,8 @@ type kvBatch struct {
 	size         int64
 }
 
-func openDb(pathPrefix string, keySize int) (KVStore, error) {
-	return StoreOpener(pathPrefix, keySize)
+func openDb(pathPrefix string) (KVStore, error) {
+	return StoreOpener(pathPrefix)
 }
 
 func NewKVStoreDB(path string) (RomDB, error) {
@@ -126,42 +124,42 @@ func NewKVStoreDB(path string) (RomDB, error) {
 	kvdb.generation = gen
 
 	glog.Infof("Loading Dats DB")
-	db, err := openDb(filepath.Join(path, datsDBName), keySizeSha1)
+	db, err := openDb(filepath.Join(path, datsDBName))
 	if err != nil {
 		return nil, err
 	}
 	kvdb.datsDB = db
 
 	glog.Infof("Loading CRC DB")
-	db, err = openDb(filepath.Join(path, crcDBName), keySizeCrc)
+	db, err = openDb(filepath.Join(path, crcDBName))
 	if err != nil {
 		return nil, err
 	}
 	kvdb.crcDB = db
 
 	glog.Infof("Loading MD5 DB")
-	db, err = openDb(filepath.Join(path, md5DBName), keySizeMd5)
+	db, err = openDb(filepath.Join(path, md5DBName))
 	if err != nil {
 		return nil, err
 	}
 	kvdb.md5DB = db
 
 	glog.Infof("Loading SHA1 DB")
-	db, err = openDb(filepath.Join(path, sha1DBName), keySizeSha1)
+	db, err = openDb(filepath.Join(path, sha1DBName))
 	if err != nil {
 		return nil, err
 	}
 	kvdb.sha1DB = db
 
 	glog.Infof("Loading CRC -> SHA1 DB")
-	db, err = openDb(filepath.Join(path, crcsha1DBName), keySizeCrc)
+	db, err = openDb(filepath.Join(path, crcsha1DBName))
 	if err != nil {
 		return nil, err
 	}
 	kvdb.crcsha1DB = db
 
 	glog.Infof("Loading MD5 -> SHA1 DB")
-	db, err = openDb(filepath.Join(path, md5sha1DBName), keySizeMd5)
+	db, err = openDb(filepath.Join(path, md5sha1DBName))
 	if err != nil {
 		return nil, err
 	}
@@ -228,24 +226,32 @@ func (kvdb *kvStore) GetDat(sha1Bytes []byte) (*types.Dat, error) {
 
 func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	var dBytes []byte
-	var err error
 
 	if rom.Sha1 != nil {
-		dBytes, err = kvdb.sha1DB.Get(rom.Sha1)
+		bs, err := kvdb.sha1DB.GetKeySuffixesFor(rom.Sha1)
 		if err != nil {
 			return nil, err
 		}
+		if bs != nil {
+			dBytes = append(dBytes, bs...)
+		}
 	}
-	if rom.Md5 != nil && dBytes == nil {
-		dBytes, err = kvdb.md5DB.Get(rom.Md5WithSizeKey())
+	if rom.Md5 != nil {
+		bs, err := kvdb.md5DB.GetKeySuffixesFor(rom.Md5WithSizeKey())
 		if err != nil {
 			return nil, err
 		}
+		if bs != nil {
+			dBytes = append(dBytes, bs...)
+		}
 	}
-	if rom.Crc != nil && dBytes == nil {
-		dBytes, err = kvdb.crcDB.Get(rom.CrcWithSizeKey())
+	if rom.Crc != nil {
+		bs, err := kvdb.crcDB.GetKeySuffixesFor(rom.CrcWithSizeKey())
 		if err != nil {
 			return nil, err
+		}
+		if bs != nil {
+			dBytes = append(dBytes, bs...)
 		}
 	}
 
@@ -255,8 +261,15 @@ func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 
 	var dats []*types.Dat
 
+	seen := make(map[string]bool)
+
 	for i := 0; i < len(dBytes); i += sha1.Size {
 		sha1Bytes := dBytes[i : i+sha1.Size]
+
+		if seen[string(sha1Bytes)] {
+			continue
+		}
+		seen[string(sha1Bytes)] = true
 
 		dat, err := kvdb.GetDat(sha1Bytes)
 		if err != nil {
@@ -276,22 +289,24 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
 	}
 
 	if rom.Md5 != nil {
-		dBytes, err := kvdb.md5sha1DB.Get(rom.Md5WithSizeKey())
+		dBytes, err := kvdb.md5sha1DB.GetKeySuffixesFor(rom.Md5WithSizeKey())
 		if err != nil {
 			return err
 		}
 		if len(dBytes) >= sha1.Size {
+			// TODO(uwe): collision if there's more than one sha1 here
 			rom.Sha1 = dBytes[:sha1.Size]
 		}
 		return nil
 	}
 
 	if rom.Crc != nil {
-		dBytes, err := kvdb.crcsha1DB.Get(rom.CrcWithSizeKey())
+		dBytes, err := kvdb.crcsha1DB.GetKeySuffixesFor(rom.CrcWithSizeKey())
 		if err != nil {
 			return err
 		}
 		if len(dBytes) >= sha1.Size {
+			// TODO(uwe): collision if there's more than one sha1 here
 			rom.Sha1 = dBytes[:sha1.Size]
 		}
 	}
@@ -426,31 +441,13 @@ func (kvb *kvBatch) Close() error {
 	return err
 }
 
-func appendUniqueSha1(dst, src []byte) []byte {
-	for i := 0; i < len(src); i += sha1.Size {
-		srcBytes := src[i : i+sha1.Size]
-		found := false
-		for j := 0; j < len(dst); j += sha1.Size {
-			dstBytes := dst[j : j+sha1.Size]
-			if bytes.Equal(srcBytes, dstBytes) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			dst = append(dst, srcBytes...)
-		}
-	}
-	return dst
-}
-
 func (kvb *kvBatch) IndexRom(rom *types.Rom) error {
 	glog.V(4).Infof("indexing rom %s", rom.Name)
 
 	if rom.Sha1 != nil {
 		if rom.Crc != nil {
 			glog.V(4).Infof("declaring crc %s -> sha1 %s mapping", hex.EncodeToString(rom.Crc), hex.EncodeToString(rom.Sha1))
-			err := kvb.crcsha1Batch.Append(rom.CrcWithSizeKey(), rom.Sha1)
+			err := kvb.crcsha1Batch.Set(rom.CrcWithSizeAndSha1Key(nil), oneValue)
 			if err != nil {
 				return err
 			}
@@ -458,7 +455,7 @@ func (kvb *kvBatch) IndexRom(rom *types.Rom) error {
 		}
 		if rom.Md5 != nil {
 			glog.V(4).Infof("declaring md5 %s -> sha1 %s mapping", hex.EncodeToString(rom.Md5), hex.EncodeToString(rom.Sha1))
-			err := kvb.md5sha1Batch.Append(rom.Md5WithSizeKey(), rom.Sha1)
+			err := kvb.md5sha1Batch.Set(rom.Md5WithSizeAndSha1Key(nil), oneValue)
 			if err != nil {
 				return err
 			}
@@ -468,73 +465,7 @@ func (kvb *kvBatch) IndexRom(rom *types.Rom) error {
 		glog.V(4).Infof("indexing rom %s with missing SHA1", rom.Name)
 	}
 
-	dats, err := kvb.db.DatsForRom(rom)
-	if err != nil {
-		return err
-	}
-
-	if len(dats) > 0 {
-		glog.V(4).Infof("rom %s in at least dat %s", rom.Name, dats[0].Path)
-
-		ssd, err := kvb.db.sha1DB.Get(rom.Sha1)
-		if err != nil {
-			return err
-		}
-
-		if len(ssd) == 0 {
-			var sha1s []byte
-
-			if rom.Md5 != nil {
-				ss, err := kvb.db.md5DB.Get(rom.Md5)
-				if err != nil {
-					return err
-				}
-				if len(ss) > 0 {
-					sha1s = appendUniqueSha1(sha1s, ss)
-				}
-			}
-			if rom.Crc != nil {
-				ss, err := kvb.db.crcDB.Get(rom.Crc)
-				if err != nil {
-					return err
-				}
-				if len(ss) > 0 {
-					sha1s = appendUniqueSha1(sha1s, ss)
-				}
-			}
-			if len(sha1s) > 0 {
-				kvb.sha1Batch.Set(rom.Sha1, sha1s)
-			}
-		}
-		return nil
-	} else {
-		glog.V(4).Infof("rom %s not referenced by any dats, building artificial dat", rom.Name)
-	}
-
-	dat := new(types.Dat)
-	dat.Artificial = true
-	dat.Generation = kvb.db.generation
-	dat.Name = fmt.Sprintf("Artificial Dat for %s", rom.Name)
-	dat.Path = rom.Path
-	game := new(types.Game)
-	game.Roms = []*types.Rom{rom}
-	dat.Games = []*types.Game{game}
-
-	var buf bytes.Buffer
-
-	gobEncoder := gob.NewEncoder(&buf)
-	err = gobEncoder.Encode(dat)
-	if err != nil {
-		return err
-	}
-
-	hh := sha1.New()
-	_, err = io.Copy(hh, &buf)
-	if err != nil {
-		return err
-	}
-
-	return kvb.IndexDat(dat, hh.Sum(nil))
+	return nil
 }
 
 func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
@@ -575,7 +506,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 			glog.V(4).Infof("indexing game %s", g.Name)
 			for _, r := range g.Roms {
 				if r.Sha1 != nil {
-					err = kvb.sha1Batch.Append(r.Sha1, sha1Bytes)
+					err = kvb.sha1Batch.Set(r.Sha1Sha1Key(sha1Bytes), oneValue)
 					if err != nil {
 						return err
 					}
@@ -583,7 +514,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 				}
 
 				if r.Md5 != nil {
-					err = kvb.md5Batch.Append(r.Md5WithSizeKey(), sha1Bytes)
+					err = kvb.md5Batch.Set(r.Md5WithSizeAndSha1Key(sha1Bytes), oneValue)
 					if err != nil {
 						return err
 					}
@@ -591,7 +522,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 
 					if r.Sha1 != nil {
 						glog.V(4).Infof("declaring md5 %s -> sha1 %s mapping", hex.EncodeToString(r.Md5), hex.EncodeToString(r.Sha1))
-						err = kvb.md5sha1Batch.Append(r.Md5WithSizeKey(), r.Sha1)
+						err = kvb.md5sha1Batch.Set(r.Md5WithSizeAndSha1Key(nil), oneValue)
 						if err != nil {
 							return err
 						}
@@ -600,7 +531,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 				}
 
 				if r.Crc != nil {
-					err = kvb.crcBatch.Append(r.CrcWithSizeKey(), sha1Bytes)
+					err = kvb.crcBatch.Set(r.CrcWithSizeAndSha1Key(sha1Bytes), oneValue)
 					if err != nil {
 						return err
 					}
@@ -608,7 +539,7 @@ func (kvb *kvBatch) IndexDat(dat *types.Dat, sha1Bytes []byte) error {
 
 					if r.Sha1 != nil {
 						glog.V(4).Infof("declaring crc %s -> sha1 %s mapping", hex.EncodeToString(r.Crc), hex.EncodeToString(r.Sha1))
-						err = kvb.crcsha1Batch.Append(r.CrcWithSizeKey(), r.Sha1)
+						err = kvb.crcsha1Batch.Set(r.CrcWithSizeAndSha1Key(nil), oneValue)
 						if err != nil {
 							return err
 						}
@@ -651,14 +582,14 @@ func (kvdb *kvStore) DebugGet(key []byte, size int64) string {
 		sizeBytes := make([]byte, 8)
 		util.Int64ToBytes(size, sizeBytes)
 		key = append(key, sizeBytes...)
-		sha1s, err := kvdb.md5DB.Get(key)
+		sha1s, err := kvdb.md5DB.GetKeySuffixesFor(key)
 		if err != nil {
 			glog.Errorf("error getting from md5DB: %v", err)
 		} else {
 			buf.WriteString(fmt.Sprintf("md5DB -> %s\n", printSha1s(sha1s)))
 		}
 
-		sha1s, err = kvdb.md5sha1DB.Get(key)
+		sha1s, err = kvdb.md5sha1DB.GetKeySuffixesFor(key)
 		if err != nil {
 			glog.Errorf("error getting from md5sha1DB: %v", err)
 		} else {
@@ -669,21 +600,21 @@ func (kvdb *kvStore) DebugGet(key []byte, size int64) string {
 		util.Int64ToBytes(size, sizeBytes)
 		key = append(key, sizeBytes...)
 
-		sha1s, err := kvdb.crcDB.Get(key)
+		sha1s, err := kvdb.crcDB.GetKeySuffixesFor(key)
 		if err != nil {
 			glog.Errorf("error getting from crcDB: %v", err)
 		} else {
 			buf.WriteString(fmt.Sprintf("crcDB -> %s\n", printSha1s(sha1s)))
 		}
 
-		sha1s, err = kvdb.crcsha1DB.Get(key)
+		sha1s, err = kvdb.crcsha1DB.GetKeySuffixesFor(key)
 		if err != nil {
 			glog.Errorf("error getting from crcsha1DB: %v", err)
 		} else {
 			buf.WriteString(fmt.Sprintf("crcsha1DB -> %s\n", printSha1s(sha1s)))
 		}
 	case sha1.Size:
-		sha1s, err := kvdb.sha1DB.Get(key)
+		sha1s, err := kvdb.sha1DB.GetKeySuffixesFor(key)
 		if err != nil {
 			glog.Errorf("error getting from sha1DB: %v", err)
 		} else {

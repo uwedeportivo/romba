@@ -57,7 +57,7 @@ import (
 	"github.com/uwedeportivo/romba/worker"
 )
 
-const Version = "100"
+const Version = "150"
 
 type ProgressNessage struct {
 	TotalFiles      int32

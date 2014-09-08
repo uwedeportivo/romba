@@ -32,7 +32,6 @@ package db
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -94,28 +93,6 @@ func FormatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm%ds", mins, secs)
 	}
 	return fmt.Sprintf("%ds", secs)
-}
-
-func Upd(key, value, old []byte) ([]byte, bool, error) {
-	if old == nil {
-		return value, true, nil
-	}
-
-	found := false
-	vsize := len(value)
-
-	for i := 0; i < len(old); i += vsize {
-		if bytes.Equal(value, old[i:i+vsize]) {
-			found = true
-			break
-		}
-	}
-
-	if found {
-		return nil, false, nil
-	}
-
-	return append(old, value...), true, nil
 }
 
 func New(path string) (RomDB, error) {

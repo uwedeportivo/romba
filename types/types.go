@@ -33,8 +33,6 @@ package types
 import (
 	"bytes"
 	"sort"
-
-	"github.com/uwedeportivo/romba/util"
 )
 
 type Clrmamepro struct {
@@ -95,30 +93,6 @@ func (ar *Rom) Equals(br *Rom) bool {
 		return false
 	}
 	return true
-}
-
-func (ar *Rom) CrcWithSizeKey() []byte {
-	if ar.Crc == nil {
-		return nil
-	}
-
-	n := len(ar.Crc)
-	key := make([]byte, n+8)
-	copy(key[:n], ar.Crc)
-	util.Int64ToBytes(ar.Size, key[n:])
-	return key
-}
-
-func (ar *Rom) Md5WithSizeKey() []byte {
-	if ar.Md5 == nil {
-		return nil
-	}
-
-	n := len(ar.Md5)
-	key := make([]byte, n+8)
-	copy(key[:n], ar.Md5)
-	util.Int64ToBytes(ar.Size, key[n:])
-	return key
 }
 
 func (s GameSlice) Len() int           { return len(s) }

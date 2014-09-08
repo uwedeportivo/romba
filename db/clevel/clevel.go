@@ -31,6 +31,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package clevel
 
 import (
+	"bytes"
+	"crypto/sha1"
 	"fmt"
 
 	"github.com/jmhodges/levigo"
@@ -44,7 +46,7 @@ func init() {
 	db.StoreOpener = openDb
 }
 
-func openDb(path string, keySize int) (db.KVStore, error) {
+func openDb(path string) (db.KVStore, error) {
 	opts := levigo.NewOptions()
 	opts.SetCreateIfMissing(true)
 	opts.SetFilterPolicy(levigo.NewBloomFilter(16))
@@ -65,29 +67,36 @@ type store struct {
 	dbn *levigo.DB
 }
 
-func (s *store) Append(key, value []byte) error {
-	old, err := s.Get(key)
-	if err != nil {
-		return err
-	}
-
-	v, write, err := db.Upd(key, value, old)
-	if err != nil {
-		return err
-	}
-
-	if write {
-		return s.Set(key, v)
-	}
-	return nil
-}
-
 func (s *store) Set(key, value []byte) error {
 	return s.dbn.Put(wOptions, key, value)
 }
 
 func (s *store) Get(key []byte) ([]byte, error) {
 	return s.dbn.Get(rOptions, key)
+}
+
+func (s *store) GetKeySuffixesFor(keyPrefix []byte) ([]byte, error) {
+	// suffixes are always sha1 so size is known
+	var sha1s []byte
+
+	it := s.dbn.NewIterator(rOptions)
+	n := len(keyPrefix)
+
+	key := make([]byte, n+sha1.Size)
+	copy(key[:n], keyPrefix)
+
+	it.Seek(key)
+
+	for it.Valid() {
+		ik := it.Key()
+		if bytes.Equal(ik[:n], keyPrefix) {
+			sha1s = append(sha1s, ik[n:]...)
+		} else {
+			break
+		}
+		it.Next()
+	}
+	return sha1s, nil
 }
 
 func (s *store) Delete(key []byte) error {
@@ -135,23 +144,6 @@ func (s *store) Close() error {
 type batch struct {
 	bn *levigo.WriteBatch
 	s  *store
-}
-
-func (b *batch) Append(key, value []byte) error {
-	old, err := b.s.Get(key)
-	if err != nil {
-		return err
-	}
-
-	v, write, err := db.Upd(key, value, old)
-	if err != nil {
-		return err
-	}
-
-	if write {
-		b.bn.Put(key, v)
-	}
-	return nil
 }
 
 func (b *batch) Set(key, value []byte) error {
