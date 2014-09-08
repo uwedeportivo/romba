@@ -39,6 +39,7 @@ import (
 	"sync"
 
 	"github.com/golang/glog"
+	"github.com/uwedeportivo/romba/config"
 	"github.com/uwedeportivo/romba/dedup"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/torrentzip"
@@ -202,7 +203,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool
 			}
 			defer gameFile.Close()
 
-			gameTorrent, err = torrentzip.NewWriter(gameFile)
+			gameTorrent, err = torrentzip.NewWriterWithTemp(gameFile, config.GlobalConfig.General.TmpDir)
 			if err != nil {
 				return nil, false, err
 			}
