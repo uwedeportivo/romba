@@ -144,27 +144,27 @@ type stateFn func(*lexer) stateFn
 
 // lexer holds the state of the scanner.
 type lexer struct {
-	name     string        // the name of the input; used only for error reports.
-	state    stateFn       // the next lexing function to enter.
-	items    chan item     // channel of scanned items.
-	br       *bufio.Reader // the buffered reader we're reading items from
-	tk       []rune        // accumulates the current token value
-	err      error         // last read error
-	ln       int           // line number
-	lastRune rune          // last read rune
+	name  string        // the name of the input; used only for error reports.
+	state stateFn       // the next lexing function to enter.
+	items chan item     // channel of scanned items.
+	br    *bufio.Reader // the buffered reader we're reading items from
+	tk    []rune        // accumulates the current token value
+	err   error         // last read error
+	ln    int           // line number
+	eofed bool          // reached eof
 }
 
 // next returns the next rune in the input.
 func (l *lexer) next() rune {
 	switch r, _, err := l.br.ReadRune(); {
 	case err == nil:
-		l.lastRune = r
 		if r == '\n' {
 			l.ln++
 		}
 		l.tk = append(l.tk, r)
 		return r
 	case err == io.EOF:
+		l.eofed = true
 		return eof
 	default:
 		l.err = err
@@ -174,6 +174,9 @@ func (l *lexer) next() rune {
 
 // peek returns but does not consume the next rune in the input.
 func (l *lexer) peek() rune {
+	if l.eofed {
+		return eof
+	}
 	r, _, err := l.br.ReadRune()
 	switch err {
 	case nil:
@@ -189,10 +192,15 @@ func (l *lexer) peek() rune {
 
 // backup steps back one rune. Can only be called once per call of next.
 func (l *lexer) backup() {
+	if l.eofed {
+		return
+	}
 	if l.err == nil {
-		l.tk = l.tk[:len(l.tk)-1]
-		if l.lastRune == '\n' {
-			l.ln--
+		if len(l.tk) > 0 {
+			if l.tk[len(l.tk)-1] == '\n' {
+				l.ln--
+			}
+			l.tk = l.tk[:len(l.tk)-1]
 		}
 		l.br.UnreadRune()
 	}
@@ -201,12 +209,12 @@ func (l *lexer) backup() {
 // emit passes an item back to the client.
 func (l *lexer) emit(t itemType) {
 	l.items <- item{t, string(l.tk)}
-	l.tk = nil
+	l.tk = l.tk[0:0]
 }
 
 // ignore skips over the pending input before this point.
 func (l *lexer) ignore() {
-	l.tk = nil
+	l.tk = l.tk[0:0]
 }
 
 // accept consumes the next rune if it's from the valid set.
