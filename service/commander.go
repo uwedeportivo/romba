@@ -152,13 +152,17 @@ have a current entry in the DAT index.`,
 
 	cmd.Subcommands[1].Flag.Bool("only-needed", false, "only archive ROM files actually referenced by DAT files from the DAT index")
 	cmd.Subcommands[1].Flag.String("resume", "", "resume a previously interrupted archive operation from the specified path")
-	cmd.Subcommands[1].Flag.Bool("include-zips", false, "add zip files themselves into the depot in addition to their contents")
+	cmd.Subcommands[1].Flag.Int("include-zips", 0, "flag value == 1 means: add zip files themselves into the depot in addition"+
+		" to their contents, flag value > 1 means add zip files themselves but don't add content")
 	cmd.Subcommands[1].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
-	cmd.Subcommands[1].Flag.Bool("include-gzips", false, "add gzip files themselves into the depot in addition to their contents")
-	cmd.Subcommands[1].Flag.Bool("include-7zips", false, "add 7zip files themselves into the depot in addition to their contents")
+	cmd.Subcommands[1].Flag.Int("include-gzips", 0, "flag value == 1 means: add gzip files themselves into the depot in addition"+
+		" to their contents, flag value > 1 means add gzip files themselves but don't add content")
+	cmd.Subcommands[1].Flag.Int("include-7zips", 0, "flag value == 1 means: add 7zip files themselves into the depot in addition"+
+		" to their contents, flag value > 1 means add 7zip files themselves but don't add content")
 	cmd.Subcommands[1].Flag.Bool("skip-initial-scan", false, "skip the initial scan of the files to determine amount of work")
 	cmd.Subcommands[1].Flag.Bool("use-golang-zip", false, "use go zip implementation instead of zlib")
+	cmd.Subcommands[1].Flag.Bool("no-db", false, "archive into depot but do not touch DB index and ignore only-needed flag")
 	cmd.Subcommands[1].Flag.Bool("no-db", false, "archive into depot but do not touch DB index and ignore only-needed flag")
 
 	cmd.Subcommands[2] = &commander.Command{

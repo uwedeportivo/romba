@@ -79,9 +79,9 @@ type archiveMaster struct {
 	soFar           chan *completed
 	resumeLogFile   *os.File
 	resumeLogWriter *bufio.Writer
-	includezips     bool
-	includegzips    bool
-	include7zips    bool
+	includezips     int
+	includegzips    int
+	include7zips    int
 	onlyneeded      bool
 	skipInitialScan bool
 	useGoZip        bool
@@ -144,15 +144,13 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 		return "", nil
 	}
 
-	lines := make([]string, nl)
-	lineCursor := 0
+	lines := make([]string, 0, nl)
 
 	rng.Do(func(v interface{}) {
 		if v != nil {
 			line := v.(string)
 			if len(line) > 0 {
-				lines[lineCursor] = line
-				lineCursor++
+				lines = append(lines, line)
 			}
 		}
 	})
@@ -161,7 +159,7 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 	return lines[0], nil
 }
 
-func (depot *Depot) Archive(paths []string, resumePath string, includezips bool, includegzips bool, include7zips bool,
+func (depot *Depot) Archive(paths []string, resumePath string, includezips int, includegzips int, include7zips int,
 	onlyneeded bool, numWorkers int,
 	logDir string, pt worker.ProgressTracker, skipInitialScan bool, useGoZip bool, noDB bool) (string, error) {
 
@@ -437,70 +435,92 @@ func (zw *zipWorker) Work() {
 	zw.out <- zipWorkResult{compressedSize, perr, nrProcessed}
 }
 
-func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool) (int64, error) {
+func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself int) (int64, error) {
 	glog.V(4).Infof("archiving zip %s ", inpath)
 
-	var zfs []zipF
-
-	if w.pm.useGoZip {
-		zr, err := zip.OpenReader(inpath)
-		if err != nil {
-			return 0, err
-		}
-		defer zr.Close()
-
-		zfs = make([]zipF, len(zr.File))
-		for i, zf := range zr.File {
-			zfs[i] = zipF(zf)
-		}
-	} else {
-		zr, err := czip.OpenReader(inpath)
-		if err != nil {
-			return 0, err
-		}
-		defer zr.Close()
-
-		zfs = make([]zipF, len(zr.File))
-		for i, zf := range zr.File {
-			zfs[i] = zipF(zf)
-		}
-	}
-
-	glog.V(4).Infof("zip entries %d: %s", len(zfs), inpath)
-
-	in := make(chan zipF)
-	out := make(chan zipWorkResult)
-
-	numWorkers := w.pm.NumWorkers()
-
-	for i := 0; i < numWorkers; i++ {
-		zw := &zipWorker{
-			index:        i,
-			inpath:       inpath,
-			w:            w,
-			in:           in,
-			out:          out,
-			hh:           newHashes(),
-			md5crcBuffer: make([]byte, md5.Size+crc32.Size+8),
-		}
-		go zw.Work()
-	}
-
 	var compressedSize int64
-	var perr error
-	var nrProcessed int
-	var nrScheduled int
 
-	expectedResults := numWorkers
+	if addZipItself <= 1 {
+		var zfs []zipF
 
-	for _, zf := range zfs {
-		select {
-		case in <- zf:
-			glog.V(4).Infof("scheduled %s from zip %s", zf.FileInfo().Name(), inpath)
-			nrScheduled++
-		case zwr := <-out:
-			expectedResults--
-			glog.Warningf("breaking out of the zip loop before all files are scheduled: %s", inpath)
+		if w.pm.useGoZip {
+			zr, err := zip.OpenReader(inpath)
+			if err != nil {
+				return 0, err
+			}
+			defer zr.Close()
+
+			zfs = make([]zipF, len(zr.File))
+			for i, zf := range zr.File {
+				zfs[i] = zipF(zf)
+			}
+		} else {
+			zr, err := czip.OpenReader(inpath)
+			if err != nil {
+				return 0, err
+			}
+			defer zr.Close()
+
+			zfs = make([]zipF, len(zr.File))
+			for i, zf := range zr.File {
+				zfs[i] = zipF(zf)
+			}
+		}
+
+		glog.V(4).Infof("zip entries %d: %s", len(zfs), inpath)
+
+		in := make(chan zipF)
+		out := make(chan zipWorkResult)
+
+		numWorkers := w.pm.NumWorkers()
+
+		for i := 0; i < numWorkers; i++ {
+			zw := &zipWorker{
+				index:        i,
+				inpath:       inpath,
+				w:            w,
+				in:           in,
+				out:          out,
+				hh:           newHashes(),
+				md5crcBuffer: make([]byte, md5.Size+crc32.Size+8),
+			}
+			go zw.Work()
+		}
+
+		var perr error
+		var nrProcessed int
+		var nrScheduled int
+
+		expectedResults := numWorkers
+
+		for _, zf := range zfs {
+			select {
+			case in <- zf:
+				glog.V(4).Infof("scheduled %s from zip %s", zf.FileInfo().Name(), inpath)
+				nrScheduled++
+			case zwr := <-out:
+				expectedResults--
+				glog.Warningf("breaking out of the zip loop before all files are scheduled: %s", inpath)
+				if zwr.err != nil {
+					perr = zwr.err
+					break
+				}
+				compressedSize += zwr.compressedSize
+				nrProcessed += zwr.nrProcessed
+			}
+		}
+
+		close(in)
+
+		if perr != nil {
+			glog.Errorf("zip error %s: %v", inpath, perr)
+			return 0, perr
+		}
+
+		glog.V(4).Infof("reading results from zip %s", inpath)
+
+		for i := 0; i < expectedResults; i++ {
+			zwr := <-out
 			if zwr.err != nil {
 				perr = zwr.err
 				break
@@ -508,41 +528,22 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 			compressedSize += zwr.compressedSize
 			nrProcessed += zwr.nrProcessed
 		}
-	}
 
-	close(in)
-
-	if perr != nil {
-		glog.Errorf("zip error %s: %v", inpath, perr)
-		return 0, perr
-	}
-
-	glog.V(4).Infof("reading results from zip %s", inpath)
-
-	for i := 0; i < expectedResults; i++ {
-		zwr := <-out
-		if zwr.err != nil {
-			perr = zwr.err
-			break
+		if nrProcessed != len(zfs) || nrScheduled != len(zfs) {
+			glog.Warningf("scheduled/processed fewer zip entries: scheduled %d, processed %d, expected %d: %s",
+				nrScheduled, nrProcessed, len(zfs), inpath)
 		}
-		compressedSize += zwr.compressedSize
-		nrProcessed += zwr.nrProcessed
+
+		glog.V(4).Infof("scheduled %d, processed %d, expected %d: %s", nrScheduled, nrProcessed, len(zfs), inpath)
+		glog.V(4).Infof("finished archiving contents of zip %s", inpath)
+
+		if perr != nil {
+			glog.Errorf("zip error %s: %v", inpath, perr)
+			return 0, perr
+		}
 	}
 
-	if nrProcessed != len(zfs) || nrScheduled != len(zfs) {
-		glog.Warningf("scheduled/processed fewer zip entries: scheduled %d, processed %d, expected %d: %s",
-			nrScheduled, nrProcessed, len(zfs), inpath)
-	}
-
-	glog.V(4).Infof("scheduled %d, processed %d, expected %d: %s", nrScheduled, nrProcessed, len(zfs), inpath)
-	glog.V(4).Infof("finished archiving contents of zip %s", inpath)
-
-	if perr != nil {
-		glog.Errorf("zip error %s: %v", inpath, perr)
-		return 0, perr
-	}
-
-	if addZipItself {
+	if addZipItself == 1 {
 		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) },
 			filepath.Base(inpath), inpath, size, w.hh, w.md5crcBuffer)
 		if err != nil {
@@ -553,33 +554,35 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself bool)
 	return compressedSize, nil
 }
 
-func (w *archiveWorker) archive7Zip(inpath string, size int64, addZipItself bool) (int64, error) {
+func (w *archiveWorker) archive7Zip(inpath string, size int64, addZipItself int) (int64, error) {
 	glog.V(4).Infof("archiving 7zip %s ", inpath)
-
-	zr, err := sevenzip.Open(inpath)
-	if err != nil {
-		return 0, err
-	}
-	defer zr.Close()
 
 	var compressedSize int64
 
-	for _, zf := range zr.File {
-		glog.V(4).Infof("archiving 7zip %s: file %s ", inpath, zf.Name)
-
-		cs, err := w.archive(func() (io.ReadCloser, error) {
-			bb, err := zf.OpenUnsafe()
-			return ioutil.NopCloser(bb), err
-		}, zf.Name, filepath.Join(inpath, zf.Name), int64(zf.FileHeader.Size), w.hh, w.md5crcBuffer)
-
+	if addZipItself <= 1 {
+		zr, err := sevenzip.Open(inpath)
 		if err != nil {
-			glog.Errorf("7zip error %s: %v", inpath, err)
 			return 0, err
 		}
-		compressedSize += cs
+		defer zr.Close()
+
+		for _, zf := range zr.File {
+			glog.V(4).Infof("archiving 7zip %s: file %s ", inpath, zf.Name)
+
+			cs, err := w.archive(func() (io.ReadCloser, error) {
+				bb, err := zf.OpenUnsafe()
+				return ioutil.NopCloser(bb), err
+			}, zf.Name, filepath.Join(inpath, zf.Name), int64(zf.FileHeader.Size), w.hh, w.md5crcBuffer)
+
+			if err != nil {
+				glog.Errorf("7zip error %s: %v", inpath, err)
+				return 0, err
+			}
+			compressedSize += cs
+		}
 	}
 
-	if addZipItself {
+	if addZipItself == 1 {
 		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) },
 			filepath.Base(inpath), inpath, size, w.hh, w.md5crcBuffer)
 		if err != nil {
@@ -635,9 +638,10 @@ func openGzipReadCloser(inpath string) (io.ReadCloser, error) {
 	}, nil
 }
 
-func (w *archiveWorker) archiveGzip(inpath string, size int64, addGZipItself bool) (int64, error) {
+func (w *archiveWorker) archiveGzip(inpath string, size int64, addGZipItself int) (int64, error) {
 	var total int64
-	if addGZipItself {
+
+	if addGZipItself == 1 {
 		n, err := w.archiveRom(inpath, size)
 		if err != nil {
 			return 0, err
@@ -645,12 +649,14 @@ func (w *archiveWorker) archiveGzip(inpath string, size int64, addGZipItself boo
 		total += n
 	}
 
-	n, err := w.archive(func() (io.ReadCloser, error) { return openGzipReadCloser(inpath) },
-		filepath.Base(inpath), stripExt(inpath), size, w.hh, w.md5crcBuffer)
-	if err != nil {
-		return 0, err
+	if addGZipItself <= 1 {
+		n, err := w.archive(func() (io.ReadCloser, error) { return openGzipReadCloser(inpath) },
+			filepath.Base(inpath), stripExt(inpath), size, w.hh, w.md5crcBuffer)
+		if err != nil {
+			return 0, err
+		}
+		total += n
 	}
-	total += n
 	return total, nil
 }
 

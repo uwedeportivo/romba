@@ -123,9 +123,9 @@ func (rs *RombaService) startArchive(cmd *commander.Command, args []string) erro
 			}
 		}()
 
-		includezips := cmd.Flag.Lookup("include-zips").Value.Get().(bool)
-		includegzips := cmd.Flag.Lookup("include-gzips").Value.Get().(bool)
-		include7zips := cmd.Flag.Lookup("include-7zips").Value.Get().(bool)
+		includezips := cmd.Flag.Lookup("include-zips").Value.Get().(int)
+		includegzips := cmd.Flag.Lookup("include-gzips").Value.Get().(int)
+		include7zips := cmd.Flag.Lookup("include-7zips").Value.Get().(int)
 		onlyneeded := cmd.Flag.Lookup("only-needed").Value.Get().(bool)
 		numWorkers := cmd.Flag.Lookup("workers").Value.Get().(int)
 		skipInitialScan := cmd.Flag.Lookup("skip-initial-scan").Value.Get().(bool)
