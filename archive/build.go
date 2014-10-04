@@ -62,7 +62,7 @@ type gameBuilder struct {
 func (gb *gameBuilder) work() {
 	glog.V(4).Infof("starting subworker %d", gb.index)
 	for game := range gb.wc {
-		gamePath := filepath.Join(gb.datPath, game.Name+zipSuffix)
+		gamePath := filepath.Join(gb.datPath, game.Name)
 		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath, gb.fixdatOnly, gb.fixDat.UnzipGames, gb.deduper)
 		if err != nil {
 			glog.Errorf("error processing %s", gamePath)
