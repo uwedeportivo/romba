@@ -30,12 +30,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package worker
 
-import "sync"
+import (
+	"container/ring"
+	"sync"
+)
 
 type ProgressTracker interface {
 	SetTotalBytes(value int64)
 	SetTotalFiles(value int32)
-	AddBytesFromFile(value int64, erred bool)
+	AddBytesFromFile(value int64, path string, erred bool)
 	Finished()
 	Reset()
 	GetProgress() *Progress
@@ -45,20 +48,23 @@ type ProgressTracker interface {
 }
 
 type Progress struct {
-	TotalBytes int64
-	TotalFiles int32
-	ErrorFiles int32
-	BytesSoFar int64
-	FilesSoFar int32
-	stopped    bool
-	knowTotal  bool
-	m          *sync.Mutex
-	wc         chan bool
+	TotalBytes   int64
+	TotalFiles   int32
+	ErrorFiles   int32
+	BytesSoFar   int64
+	FilesSoFar   int32
+	CurrentFiles []string
+	stopped      bool
+	knowTotal    bool
+	m            *sync.Mutex
+	wc           chan bool
+	rng          *ring.Ring
 }
 
-func NewProgressTracker() ProgressTracker {
+func NewProgressTracker(numWorkers int) ProgressTracker {
 	pt := new(Progress)
 	pt.m = new(sync.Mutex)
+	pt.rng = ring.New(numWorkers)
 	return pt
 }
 
@@ -76,12 +82,15 @@ func (pt *Progress) SetTotalFiles(value int32) {
 	pt.knowTotal = true
 }
 
-func (pt *Progress) AddBytesFromFile(value int64, erred bool) {
+func (pt *Progress) AddBytesFromFile(value int64, path string, erred bool) {
 	pt.m.Lock()
 	defer pt.m.Unlock()
 
 	pt.BytesSoFar += value
 	pt.FilesSoFar++
+
+	pt.rng.Value = path
+	pt.rng = pt.rng.Next()
 
 	if erred {
 		pt.ErrorFiles++
@@ -139,5 +148,14 @@ func (pt *Progress) GetProgress() *Progress {
 	p.BytesSoFar = pt.BytesSoFar
 	p.FilesSoFar = pt.FilesSoFar
 	p.knowTotal = pt.knowTotal
+
+	pt.rng.Do(func(v interface{}) {
+		if v != nil {
+			path := v.(string)
+			if len(path) > 0 {
+				p.CurrentFiles = append(p.CurrentFiles, path)
+			}
+		}
+	})
 	return p
 }

@@ -248,7 +248,7 @@ func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string)
 			handleErredFile(path)
 		}
 
-		w.pt.AddBytesFromFile(wu.size, erred)
+		w.pt.AddBytesFromFile(wu.size, path, erred)
 
 		if glog.V(3) {
 			glog.Infof("finished processing file %s", path)

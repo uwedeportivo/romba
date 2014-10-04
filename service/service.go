@@ -41,6 +41,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -70,6 +71,7 @@ type ProgressNessage struct {
 	Stopping        bool
 	TerminalMessage string
 	KnowTotal       bool
+	CurrentFiles    string
 }
 
 type RombaService struct {
@@ -102,7 +104,7 @@ func NewRombaService(romDB db.RomDB, depot *archive.Depot, cfg *config.Config) *
 	rs.dats = cfg.Index.Dats
 	rs.logDir = cfg.General.LogDir
 	rs.numWorkers = cfg.General.Workers
-	rs.pt = worker.NewProgressTracker()
+	rs.pt = worker.NewProgressTracker(rs.numWorkers)
 	rs.jobMutex = new(sync.Mutex)
 	rs.progressMutex = new(sync.Mutex)
 	rs.progressListeners = make(map[string]chan *ProgressNessage)
@@ -149,6 +151,10 @@ func (rs *RombaService) broadCastProgress(t time.Time, starting bool, stopping b
 		pmsg.KnowTotal = p.KnowTotal()
 		pmsg.JobName = jn
 		pmsg.Running = true
+
+		sort.Strings(p.CurrentFiles)
+		pmsg.CurrentFiles = strings.Join(p.CurrentFiles, "\n")
+
 	} else {
 		pmsg.Running = false
 	}

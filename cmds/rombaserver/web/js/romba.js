@@ -66,6 +66,8 @@ jQuery(document).ready(function($) {
 		       $('#progressTextFiles').text("" + msg.FilesSoFar);
 		 	   $('#progressTextBytes').text("" + niceBytes(msg.BytesSoFar));
 		    }
+
+		    $('#currentFiles').val(msg.CurrentFiles)
 	 	} else {
 	 		$('#progress').hide();
 	 	}
