@@ -63,12 +63,13 @@ type Game struct {
 type GameSlice []*Game
 
 type Rom struct {
-	Name string `xml:"name,attr"`
-	Size int64  `xml:"size,attr"`
-	Crc  []byte `xml:"crc,attr"`
-	Md5  []byte `xml:"md5,attr"`
-	Sha1 []byte `xml:"sha1,attr"`
-	Path string
+	Name   string `xml:"name,attr"`
+	Size   int64  `xml:"size,attr"`
+	Crc    []byte `xml:"crc,attr"`
+	Md5    []byte `xml:"md5,attr"`
+	Sha1   []byte `xml:"sha1,attr"`
+	Status string `xml:"status,attr"`
+	Path   string
 }
 
 type RomSlice []*Rom
@@ -185,6 +186,16 @@ func (d *Dat) Normalize() {
 			g.Regions = nil
 		}
 		sort.Sort(g.Roms)
+
+		filteredRoms := make([]*Rom, 0, len(g.Roms))
+
+		for _, r := range g.Roms {
+			if r.Valid() {
+				filteredRoms = append(filteredRoms, r)
+			}
+		}
+
+		g.Roms = filteredRoms
 	}
 }
 
@@ -232,5 +243,5 @@ func (g *Game) CopyHeader(src *Game) {
 }
 
 func (r *Rom) Valid() bool {
-	return !(r.Size > 0 && len(r.Crc) == 0 && len(r.Md5) == 0 && len(r.Sha1) == 0)
+	return !(r.Size > 0 && len(r.Crc) == 0 && len(r.Md5) == 0 && len(r.Sha1) == 0) && r.Status != "nodump"
 }

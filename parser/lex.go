@@ -55,6 +55,7 @@ const (
 	itemCrc
 	itemMd5
 	itemSha1
+	itemFlags
 	itemCategory
 	itemVersion
 	itemAuthor
@@ -102,6 +103,7 @@ func (i item) String() string {
 var key = map[string]itemType{
 	"game":         itemGame,
 	"name":         itemName,
+	"flags":        itemFlags,
 	"description":  itemDescription,
 	"rom":          itemRom,
 	"size":         itemSize,

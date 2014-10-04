@@ -318,6 +318,11 @@ func (p *parser) romStmt() (*types.Rom, error) {
 			if err != nil {
 				return nil, err
 			}
+		case i.typ == itemFlags:
+			r.Status, err = p.consumeStringValue()
+			if err != nil {
+				return nil, err
+			}
 		case i.typ == itemSize:
 			r.Size, err = p.consumeIntegerValue()
 			if err != nil {
