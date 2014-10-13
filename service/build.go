@@ -97,7 +97,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		return err
 	}
 
-	err = util.DeleteEmptyFolders(datdir)
+	err = archive.DeleteEmptyFolders(datdir)
 	if err != nil {
 		return err
 	}
