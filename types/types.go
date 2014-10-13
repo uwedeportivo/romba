@@ -33,6 +33,7 @@ package types
 import (
 	"bytes"
 	"sort"
+	"strings"
 )
 
 type Clrmamepro struct {
@@ -177,6 +178,8 @@ func (d *Dat) Normalize() {
 	sort.Sort(d.Games)
 
 	for _, g := range d.Games {
+		g.Name = strings.Replace(g.Name, "\\", "/", -1)
+
 		if g.Parts != nil {
 			g.Roms = append(g.Roms, g.Parts...)
 			g.Parts = nil
@@ -190,6 +193,8 @@ func (d *Dat) Normalize() {
 		filteredRoms := make([]*Rom, 0, len(g.Roms))
 
 		for _, r := range g.Roms {
+			r.Name = strings.Replace(r.Name, "\\", "/", -1)
+
 			if r.Valid() {
 				filteredRoms = append(filteredRoms, r)
 			}
