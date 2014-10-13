@@ -197,7 +197,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool
 				return nil, false, err
 			}
 		} else {
-			gameFile, err := os.Create(gamePath)
+			gameFile, err := os.Create(gamePath + zipSuffix)
 			if err != nil {
 				return nil, false, err
 			}
