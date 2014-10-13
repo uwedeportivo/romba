@@ -261,10 +261,10 @@ func DeleteEmptyFolders(root string) error {
 		return nil
 	}
 
-	return deleteEmptyFoldersImpl(root)
+	return deleteEmptyFoldersImpl(root, 0)
 }
 
-func deleteEmptyFoldersImpl(root string) error {
+func deleteEmptyFoldersImpl(root string, level int) error {
 	fis, err := ioutil.ReadDir(root)
 	if err != nil {
 		return err
@@ -274,7 +274,7 @@ func deleteEmptyFoldersImpl(root string) error {
 
 	for _, sfi := range fis {
 		if sfi.IsDir() {
-			err = deleteEmptyFoldersImpl(filepath.Join(root, sfi.Name()))
+			err = deleteEmptyFoldersImpl(filepath.Join(root, sfi.Name()), level+1)
 			if err != nil {
 				return err
 			}
@@ -283,7 +283,7 @@ func deleteEmptyFoldersImpl(root string) error {
 		}
 	}
 
-	if !foundPlain {
+	if !foundPlain && level > 0 {
 		fis, err = ioutil.ReadDir(root)
 		if err != nil {
 			return err

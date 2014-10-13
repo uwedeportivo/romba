@@ -97,11 +97,6 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		return err
 	}
 
-	err = archive.DeleteEmptyFolders(datdir)
-	if err != nil {
-		return err
-	}
-
 	glog.Infof("finished building dat %s in directory %s", dat.Name, datdir)
 	if datInComplete {
 		glog.Info("dat has missing roms")
@@ -247,6 +242,11 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 
 		ticker.Stop()
 		stopTicker <- true
+
+		err = archive.DeleteEmptyFolders(outpath)
+		if err != nil {
+			glog.Errorf("error building dats: %v", err)
+		}
 
 		rs.jobMutex.Lock()
 		rs.busy = false
