@@ -92,7 +92,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		}
 	}
 
-	datComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.fixdatOnly, pw.pm.deduper)
+	datInComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.fixdatOnly, pw.pm.deduper)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 	}
 
 	glog.Infof("finished building dat %s in directory %s", dat.Name, datdir)
-	if !datComplete {
+	if datInComplete {
 		glog.Info("dat has missing roms")
 	}
 	return nil
