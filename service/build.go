@@ -41,6 +41,7 @@ import (
 	"github.com/uwedeportivo/commander"
 	"github.com/uwedeportivo/romba/archive"
 	"github.com/uwedeportivo/romba/dedup"
+	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
 )
@@ -61,9 +62,11 @@ func (pw *buildWorker) Process(path string, size int64) error {
 	}
 
 	if dat == nil {
-		// TODO(uwe): maybe parse it and add it to the DB
-		glog.Warningf("did not find a DAT for %s, maybe a refresh is needed", path)
-		return nil
+		glog.Warningf("did not find a DAT for %s, parsing it", path)
+		dat, _, err = parser.Parse(path)
+		if err != nil {
+			return err
+		}
 	}
 
 	reldatdir, err := filepath.Rel(pw.pm.commonRootPath, filepath.Dir(path))
