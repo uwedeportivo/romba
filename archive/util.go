@@ -37,6 +37,7 @@ import (
 	"encoding/hex"
 	"hash/crc32"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -248,4 +249,52 @@ func (w *countWriter) Write(p []byte) (int, error) {
 	n, err := w.w.Write(p)
 	w.count += int64(n)
 	return n, err
+}
+
+func DeleteEmptyFolders(root string) error {
+	fi, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+
+	if !fi.IsDir() {
+		return nil
+	}
+
+	return deleteEmptyFoldersImpl(root)
+}
+
+func deleteEmptyFoldersImpl(root string) error {
+	fis, err := ioutil.ReadDir(root)
+	if err != nil {
+		return err
+	}
+
+	foundPlain := false
+
+	for _, sfi := range fis {
+		if sfi.IsDir() {
+			err = deleteEmptyFoldersImpl(filepath.Join(root, sfi.Name()))
+			if err != nil {
+				return err
+			}
+		} else {
+			foundPlain = true
+		}
+	}
+
+	if !foundPlain {
+		fis, err = ioutil.ReadDir(root)
+		if err != nil {
+			return err
+		}
+
+		if len(fis) == 0 {
+			err = os.Remove(root)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -32,7 +32,6 @@ package service
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -95,22 +94,14 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		return err
 	}
 
-	ddInfos, err := ioutil.ReadDir(datdir)
+	err = util.DeleteEmptyFolders(datdir)
 	if err != nil {
 		return err
 	}
 
-	if len(ddInfos) == 0 {
-		glog.Infof("finished processing dat %s", dat.Name)
-		err = os.Remove(datdir)
-		if err != nil {
-			return err
-		}
-	} else {
-		glog.Infof("finished building dat %s in directory %s", dat.Name, datdir)
-		if !datComplete {
-			glog.Info("dat has missing roms")
-		}
+	glog.Infof("finished building dat %s in directory %s", dat.Name, datdir)
+	if !datComplete {
+		glog.Info("dat has missing roms")
 	}
 	return nil
 }
