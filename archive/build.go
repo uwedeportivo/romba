@@ -221,7 +221,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool
 			return nil, false, err
 		}
 
-		if rom.Sha1 == nil {
+		if rom.Sha1 == nil && rom.Size > 0 {
 			if fixGame == nil {
 				fixGame = new(types.Game)
 				fixGame.Name = game.Name

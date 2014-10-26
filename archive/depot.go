@@ -144,7 +144,21 @@ func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, error) {
 	return false, nil, nil
 }
 
+type zeroLengthReadCloser struct{}
+
+func (zlrc *zeroLengthReadCloser) Read(p []byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (zlrc *zeroLengthReadCloser) Close() error {
+	return nil
+}
+
 func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
+	if rom.Size == 0 {
+		return new(zeroLengthReadCloser), nil
+	}
+
 	if rom.Sha1 == nil {
 		return nil, fmt.Errorf("cannot open rom %s because SHA1 is missing", rom.Name)
 	}
