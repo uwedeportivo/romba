@@ -276,6 +276,7 @@ For each specified hash it looks up any available information (dat or rom).`,
 	}
 
 	cmd.Subcommands[7].Flag.Int64("size", -1, "size of the rom to lookup")
+	cmd.Subcommands[7].Flag.String("out", "", "output dir")
 
 	cmd.Subcommands[8] = &commander.Command{
 		Run:       rs.progress,

@@ -305,10 +305,7 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
 		if err != nil {
 			return err
 		}
-		if len(dBytes) >= sha1.Size {
-			// TODO(uwe): collision if there's more than one sha1 here
-			rom.Sha1 = dBytes[:sha1.Size]
-		}
+		rom.Sha1 = dBytes
 		return nil
 	}
 
@@ -317,10 +314,7 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
 		if err != nil {
 			return err
 		}
-		if len(dBytes) >= sha1.Size {
-			// TODO(uwe): collision if there's more than one sha1 here
-			rom.Sha1 = dBytes[:sha1.Size]
-		}
+		rom.Sha1 = dBytes
 	}
 	return nil
 }

@@ -122,7 +122,7 @@ func (w *purgeWorker) Process(inpath string, size int64) error {
 		return err
 	}
 
-	_, hh, err := w.pm.depot.SHA1InDepot(hex.EncodeToString(rom.Sha1))
+	_, hh, _, err := w.pm.depot.SHA1InDepot(hex.EncodeToString(rom.Sha1))
 	if err != nil {
 		return err
 	}

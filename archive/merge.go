@@ -177,7 +177,7 @@ func (w *mergeWorker) mergeGzip(path string, size int64) error {
 	}
 
 	sha1Hex := hex.EncodeToString(rom.Sha1)
-	exists, _, err := w.pm.depot.SHA1InDepot(sha1Hex)
+	exists, _, _, err := w.pm.depot.SHA1InDepot(sha1Hex)
 	if err != nil {
 		return err
 	}

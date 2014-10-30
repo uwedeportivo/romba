@@ -31,9 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package archive
 
 import (
-	"bytes"
 	"crypto/md5"
-	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
 	"hash/crc32"
@@ -92,38 +90,38 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	return depot, nil
 }
 
-func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, error) {
+func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, error) {
 	for _, root := range depot.roots {
 		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
 		if err != nil {
-			return false, nil, err
+			return false, nil, "", err
 		}
 
 		if exists {
 			hh := new(Hashes)
 			sha1Bytes, err := hex.DecodeString(sha1Hex)
 			if err != nil {
-				return false, nil, err
+				return false, nil, "", err
 			}
 			hh.Sha1 = sha1Bytes
 
 			romGZ, err := os.Open(rompath)
 			if err != nil {
-				return false, nil, err
+				return false, nil, "", err
 			}
 			defer romGZ.Close()
 
 			gzr, err := cgzip.NewReader(romGZ)
 			if err != nil {
-				return false, nil, err
+				return false, nil, "", err
 			}
 			defer gzr.Close()
 
 			md5crcBuffer := make([]byte, md5.Size+crc32.Size)
 			err = gzr.RequestExtraHeader(md5crcBuffer)
 			if err != nil {
-				return false, nil, err
+				return false, nil, "", err
 			}
 
 			gzbuf := make([]byte, 1024)
@@ -138,10 +136,10 @@ func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, error) {
 				copy(hh.Crc, md5crcBuffer[md5.Size:])
 			}
 
-			return true, hh, nil
+			return true, hh, rompath, nil
 		}
 	}
-	return false, nil, nil
+	return false, nil, "", nil
 }
 
 type zeroLengthReadCloser struct{}
@@ -163,65 +161,19 @@ func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("cannot open rom %s because SHA1 is missing", rom.Name)
 	}
 
-	if len(rom.Sha1) == sha1.Size {
-		sha1Hex := hex.EncodeToString(rom.Sha1)
+	sha1Hex := hex.EncodeToString(rom.Sha1)
 
-		for _, root := range depot.roots {
-			rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
-			exists, err := PathExists(rompath)
-			if err != nil {
-				return nil, err
-			}
-
-			if exists {
-				return os.Open(rompath)
-			}
+	for _, root := range depot.roots {
+		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
+		exists, err := PathExists(rompath)
+		if err != nil {
+			return nil, err
 		}
-	} else {
-		if glog.V(2) {
-			glog.Infof("searching for the right file for rom %s because of hash collisions", rom.Name)
-		}
-		for i := 0; i < len(rom.Sha1); i += sha1.Size {
-			sha1Hex := hex.EncodeToString(rom.Sha1[i : i+sha1.Size])
 
-			if glog.V(3) {
-				glog.Infof("trying SHA1 %s", sha1Hex)
-			}
-
-			for _, root := range depot.roots {
-				rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
-				exists, err := PathExists(rompath)
-				if err != nil {
-					return nil, err
-				}
-
-				if exists {
-					// double check that it matches crc or md5
-					if rom.Crc != nil || rom.Md5 != nil {
-						hh, err := HashesForGZFile(rompath)
-						if err != nil {
-							return nil, err
-						}
-
-						if rom.Md5 != nil && bytes.Equal(rom.Md5, hh.Md5) {
-							return os.Open(rompath)
-						}
-
-						if rom.Crc != nil && bytes.Equal(rom.Crc, hh.Crc) {
-							return os.Open(rompath)
-						}
-
-					} else {
-						if glog.V(2) {
-							glog.Warningf("rom %s with collision SHA1 and no other hash to disambigue", rom.Name)
-						}
-						return os.Open(rompath)
-					}
-				}
-			}
+		if exists {
+			return os.Open(rompath)
 		}
 	}
-
 	return nil, nil
 }
 

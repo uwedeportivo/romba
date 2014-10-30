@@ -41,6 +41,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -203,6 +204,7 @@ func runCmd(cmd *commander.Command, args []string) error {
 
 func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 	size := cmd.Flag.Lookup("size").Value.Get().(int64)
+	outpath := cmd.Flag.Lookup("out").Value.Get().(string)
 
 	for _, arg := range args {
 		fmt.Fprintf(cmd.Stdout, "----------------------------------------\n")
@@ -233,6 +235,11 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 			return fmt.Errorf("found unknown hash size: %d", len(hash))
 		}
 
+		err = rs.romDB.CompleteRom(r)
+		if err != nil {
+			return err
+		}
+
 		if len(hash) == sha1.Size {
 			dat, err := rs.romDB.GetDat(hash)
 			if err != nil {
@@ -244,24 +251,28 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 				fmt.Fprintf(cmd.Stdout, "dat with sha1 %s = %s\n", arg, types.PrintShortDat(dat))
 			}
 
-			inDepot, hh, err := rs.depot.SHA1InDepot(arg)
+		}
+
+		if r.Sha1 != nil {
+			sha1Str := hex.EncodeToString(r.Sha1)
+
+			inDepot, hh, rompath, err := rs.depot.SHA1InDepot(sha1Str)
 			if err != nil {
 				return err
 			}
 
 			if inDepot {
 				fmt.Fprintf(cmd.Stdout, "-----------------\n")
-				fmt.Fprintf(cmd.Stdout, "rom file %s.gz in depot\n", arg)
+				fmt.Fprintf(cmd.Stdout, "rom file %s.gz in depot\n", sha1Str)
 				fmt.Fprintf(cmd.Stdout, "crc = %s\n", hex.EncodeToString(hh.Crc))
 				fmt.Fprintf(cmd.Stdout, "md5 = %s\n", hex.EncodeToString(hh.Md5))
 				r.Crc = hh.Crc
 				r.Md5 = hh.Md5
-			}
-		}
 
-		err = rs.romDB.CompleteRom(r)
-		if err != nil {
-			return err
+				if outpath != "" {
+					worker.Cp(rompath, filepath.Join(outpath, filepath.Base(rompath)))
+				}
+			}
 		}
 
 		dats, err := rs.romDB.DatsForRom(r)
