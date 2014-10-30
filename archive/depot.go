@@ -45,6 +45,7 @@ import (
 
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/types"
+	"github.com/uwedeportivo/romba/util"
 )
 
 type Depot struct {
@@ -90,38 +91,40 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	return depot, nil
 }
 
-func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, error) {
+func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, int64, error) {
 	for _, root := range depot.roots {
 		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
 		if err != nil {
-			return false, nil, "", err
+			return false, nil, "", 0, err
 		}
+
+		var size int64
 
 		if exists {
 			hh := new(Hashes)
 			sha1Bytes, err := hex.DecodeString(sha1Hex)
 			if err != nil {
-				return false, nil, "", err
+				return false, nil, "", 0, err
 			}
 			hh.Sha1 = sha1Bytes
 
 			romGZ, err := os.Open(rompath)
 			if err != nil {
-				return false, nil, "", err
+				return false, nil, "", 0, err
 			}
 			defer romGZ.Close()
 
 			gzr, err := cgzip.NewReader(romGZ)
 			if err != nil {
-				return false, nil, "", err
+				return false, nil, "", 0, err
 			}
 			defer gzr.Close()
 
-			md5crcBuffer := make([]byte, md5.Size+crc32.Size)
+			md5crcBuffer := make([]byte, md5.Size+crc32.Size+8)
 			err = gzr.RequestExtraHeader(md5crcBuffer)
 			if err != nil {
-				return false, nil, "", err
+				return false, nil, "", 0, err
 			}
 
 			gzbuf := make([]byte, 1024)
@@ -129,17 +132,20 @@ func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, error) {
 
 			md5crcBuffer = gzr.GetExtraHeader()
 
-			if len(md5crcBuffer) == md5.Size+crc32.Size {
+			if len(md5crcBuffer) == md5.Size+crc32.Size+8 {
 				hh.Md5 = make([]byte, md5.Size)
 				copy(hh.Md5, md5crcBuffer[:md5.Size])
 				hh.Crc = make([]byte, crc32.Size)
-				copy(hh.Crc, md5crcBuffer[md5.Size:])
+				copy(hh.Crc, md5crcBuffer[md5.Size:md5.Size+crc32.Size])
+				size = util.BytesToInt64(md5crcBuffer[md5.Size+crc32.Size:])
+			} else {
+				glog.Warningf("rom %s has missing gzip md5 or crc header", rompath)
 			}
 
-			return true, hh, rompath, nil
+			return true, hh, rompath, size, nil
 		}
 	}
-	return false, nil, "", nil
+	return false, nil, "", 0, nil
 }
 
 type zeroLengthReadCloser struct{}

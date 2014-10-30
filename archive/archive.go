@@ -353,7 +353,7 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 	}
 
 	sha1Hex := hex.EncodeToString(hh.Sha1)
-	exists, _, _, err := w.depot.SHA1InDepot(sha1Hex)
+	exists, _, _, _, err := w.depot.SHA1InDepot(sha1Hex)
 	if err != nil {
 		return 0, err
 	}
