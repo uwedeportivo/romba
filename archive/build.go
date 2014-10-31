@@ -77,15 +77,15 @@ func (gb *gameBuilder) work() {
 		if !foundRom && !gb.fixdatOnly {
 			if gb.fixDat.UnzipGames {
 				err := os.RemoveAll(gamePath)
-				if err != nil {
+				if err != nil && !os.IsNotExist(err) {
 					glog.Errorf("error removing %s: %v", gamePath, err)
 					gb.erc <- err
 					break
 				}
 			} else {
-				err := os.Remove(gamePath)
-				if err != nil {
-					glog.Errorf("error removing %s: %v", gamePath, err)
+				err := os.Remove(gamePath + zipSuffix)
+				if err != nil && !os.IsNotExist(err) {
+					glog.Errorf("error removing %s: %v", gamePath+zipSuffix, err)
 					gb.erc <- err
 					break
 				}
@@ -139,18 +139,34 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int,
 
 	var minionErr error
 
+endLoop:
 	for _, game := range dat.Games {
 		select {
 		case wc <- game:
 		case err := <-erc:
 			minionErr = err
-			break
+			break endLoop
 		}
 	}
 	close(wc)
 
-	for i := 0; i < numSubworkers; i++ {
-		<-closeC
+	finishedSubworkers := 0
+
+endLoop2:
+	for {
+		glog.V(4).Infof("builder master: finished so far %d", finishedSubworkers)
+
+		select {
+		case <-closeC:
+			glog.V(4).Infof("builder master: finished another subworker")
+			finishedSubworkers++
+			if finishedSubworkers == numSubworkers {
+				break endLoop2
+			}
+		case err := <-erc:
+			glog.V(4).Infof("builder master: minion error")
+			minionErr = err
+		}
 	}
 
 	if minionErr != nil {
@@ -194,17 +210,20 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool
 		if unzipGame {
 			err := os.Mkdir(gamePath, 0777)
 			if err != nil {
+				glog.Errorf("error mkdir %s: %v", gamePath, err)
 				return nil, false, err
 			}
 		} else {
 			gameFile, err := os.Create(gamePath + zipSuffix)
 			if err != nil {
+				glog.Errorf("error creating zip file %s: %v", gamePath+zipSuffix, err)
 				return nil, false, err
 			}
 			defer gameFile.Close()
 
 			gameTorrent, err = torrentzip.NewWriterWithTemp(gameFile, config.GlobalConfig.General.TmpDir)
 			if err != nil {
+				glog.Errorf("error writing to torrentzip file %s: %v", gamePath+zipSuffix, err)
 				return nil, false, err
 			}
 			defer gameTorrent.Close()
@@ -218,6 +237,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool
 	for _, rom := range game.Roms {
 		err = depot.romDB.CompleteRom(rom)
 		if err != nil {
+			glog.Errorf("error completing rom %s: %v", rom.Name, err)
 			return nil, false, err
 		}
 
@@ -234,6 +254,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool
 
 		romGZ, err := depot.OpenRomGZ(rom)
 		if err != nil {
+			glog.Errorf("error opening rom %s from depot: %v", rom.Name, err)
 			return nil, false, err
 		}
 
@@ -250,6 +271,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool
 			if !seenRom {
 				err = deduper.Declare(rom)
 				if err != nil {
+					glog.Errorf("error deduping rom %s: %v", rom.Name, err)
 					return nil, false, err
 				}
 
@@ -269,6 +291,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool
 		if !fixdatOnly {
 			src, err := cgzip.NewReader(romGZ)
 			if err != nil {
+				glog.Errorf("error opening rom gz file %s: %v", rom.Name, err)
 				return nil, false, err
 			}
 
@@ -277,18 +300,21 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string, fixdatOnly bool
 			if unzipGame {
 				dst, err := os.Create(filepath.Join(gamePath, rom.Name))
 				if err != nil {
+					glog.Errorf("error creating destination rom file %s: %v", dst, err)
 					return nil, false, err
 				}
 				dstWriter = dst
 			} else {
 				dst, err := gameTorrent.Create(rom.Name)
 				if err != nil {
+					glog.Errorf("error creating torrentzip rom entry %s: %v", rom.Name, err)
 					return nil, false, err
 				}
 				dstWriter = nopWriterCloser{dst}
 			}
 			_, err = io.Copy(dstWriter, src)
 			if err != nil {
+				glog.Errorf("error copying rom %s: %v", rom.Name, err)
 				return nil, false, err
 			}
 
