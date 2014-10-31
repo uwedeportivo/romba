@@ -65,7 +65,7 @@ func (gb *gameBuilder) work() {
 		gamePath := filepath.Join(gb.datPath, game.Name)
 		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath, gb.fixdatOnly, gb.fixDat.UnzipGames, gb.deduper)
 		if err != nil {
-			glog.Errorf("error processing %s", gamePath)
+			glog.Errorf("error processing %s: %v", gamePath, err)
 			gb.erc <- err
 			break
 		}
@@ -78,14 +78,14 @@ func (gb *gameBuilder) work() {
 			if gb.fixDat.UnzipGames {
 				err := os.RemoveAll(gamePath)
 				if err != nil {
-					glog.Errorf("error processing %s", gamePath)
+					glog.Errorf("error removing %s: %v", gamePath, err)
 					gb.erc <- err
 					break
 				}
 			} else {
 				err := os.Remove(gamePath)
 				if err != nil {
-					glog.Errorf("error processing %s", gamePath)
+					glog.Errorf("error removing %s: %v", gamePath, err)
 					gb.erc <- err
 					break
 				}
