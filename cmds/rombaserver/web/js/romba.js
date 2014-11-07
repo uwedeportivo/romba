@@ -1,5 +1,7 @@
 
 var termFn = function(command, term){
+	$('#currentFiles').val("");
+	
 	if (command == 'life is good') {
 		term.echo("sure is");
 	} else if (command == 'clear') {
