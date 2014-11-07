@@ -111,7 +111,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommand(writer io.Writer, rs *RombaService) *commander.Command {
 	cmd := new(commander.Command)
 	cmd.UsageLine = "Romba"
-	cmd.Subcommands = make([]*commander.Command, 15)
+	cmd.Subcommands = make([]*commander.Command, 16)
 	cmd.Flag = *flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -360,6 +360,24 @@ Prints version.`,
 		Stdout: writer,
 		Stderr: writer,
 	}
+
+	cmd.Subcommands[15] = &commander.Command{
+		Run:       rs.ediffdat,
+		UsageLine: "ediffdat -old <dat dir> -new <dat dir> -out <outputfile>",
+		Short:     "Creates a DAT file with those entries that are in -new DAT.",
+		Long: `
+Creates a DAT file with those entries that are in -new DAT files and not
+in -old DAT files. Ignores those entries in -old that are not in -new.`,
+		Flag:   *flag.NewFlagSet("romba-ediffdat", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
+	}
+
+	cmd.Subcommands[15].Flag.String("out", "", "output filename")
+	cmd.Subcommands[15].Flag.String("old", "", "old DAT file")
+	cmd.Subcommands[15].Flag.String("new", "", "new DAT file")
+	cmd.Subcommands[15].Flag.String("name", "", "name for out DAT file")
+	cmd.Subcommands[15].Flag.String("description", "", "description for out DAT file")
 
 	return cmd
 }

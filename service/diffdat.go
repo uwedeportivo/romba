@@ -131,3 +131,121 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 
 	return nil
 }
+
+func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
+	oldDatPath := cmd.Flag.Lookup("old").Value.Get().(string)
+	newDatPath := cmd.Flag.Lookup("new").Value.Get().(string)
+	outPath := cmd.Flag.Lookup("out").Value.Get().(string)
+	givenName := cmd.Flag.Lookup("name").Value.Get().(string)
+	givenDescription := cmd.Flag.Lookup("description").Value.Get().(string)
+
+	if oldDatPath == "" {
+		fmt.Fprintf(cmd.Stdout, "-old argument required")
+		return errors.New("missing old argument")
+	}
+	if newDatPath == "" {
+		fmt.Fprintf(cmd.Stdout, "-new argument required")
+		return errors.New("missing new argument")
+	}
+	if outPath == "" {
+		fmt.Fprintf(cmd.Stdout, "-out argument required")
+		return errors.New("missing out argument")
+	}
+
+	glog.Infof("ediffdat new dat %s and old dat %s into %s", newDatPath, oldDatPath, outPath)
+
+	dd, err := dedup.NewLevelDBDeduper()
+	if err != nil {
+		return err
+	}
+	defer dd.Close()
+
+	if givenName == "" {
+		givenName = strings.TrimSuffix(filepath.Base(outPath), filepath.Ext(outPath))
+	}
+
+	if givenDescription == "" {
+		givenDescription = givenName
+	}
+
+	err = filepath.Walk(oldDatPath, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+
+		ext := filepath.Ext(path)
+		if ext == ".dat" || ext == ".xml" {
+			oldDat, _, err := parser.Parse(path)
+			if err != nil {
+				return err
+			}
+
+			err = dedup.Declare(oldDat, dd)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	diffDat := new(types.Dat)
+
+	err = filepath.Walk(newDatPath, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+
+		ext := filepath.Ext(path)
+		if ext == ".dat" || ext == ".xml" {
+			newDat, _, err := parser.Parse(path)
+			if err != nil {
+				return err
+			}
+
+			oneDiffDat, err := dedup.Dedup(newDat, dd)
+			if err != nil {
+				return err
+			}
+
+			if oneDiffDat != nil {
+				diffDat.Games = append(diffDat.Games, oneDiffDat.Games...)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if len(diffDat.Games) > 0 {
+		diffDat.Name = givenName
+		diffDat.Description = givenDescription
+		diffDat.Path = outPath
+
+		diffFile, err := os.Create(outPath)
+		if err != nil {
+			return err
+		}
+		defer diffFile.Close()
+
+		diffWriter := bufio.NewWriter(diffFile)
+		defer diffWriter.Flush()
+
+		err = types.ComposeCompliantDat(diffDat, diffWriter)
+		if err != nil {
+			return err
+		}
+		glog.Infof("ediffdat finished, %d games with diffs found, written diffdat file %s",
+			len(diffDat.Games), outPath)
+		fmt.Fprintf(cmd.Stdout, "ediffdat finished, %d games with diffs found, written diffdat file %s",
+			len(diffDat.Games), outPath)
+	} else {
+		glog.Infof("ediffdat finished, no diffs found, no diffdat file written")
+		fmt.Fprintf(cmd.Stdout, "ediffdat finished, no diffs found, no diffdat file written")
+	}
+
+	return nil
+}
