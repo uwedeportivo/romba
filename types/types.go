@@ -233,6 +233,30 @@ func (d *Dat) NarrowToRom(rom *Rom) *Dat {
 	return nil
 }
 
+func (d *Dat) FilterRoms(fn func(*Rom) bool) *Dat {
+	dc := new(Dat)
+	dc.CopyHeader(d)
+
+	for _, g := range d.Games {
+		gc := new(Game)
+		gc.Name = g.Name
+		gc.Description = g.Description
+		for _, r := range g.Roms {
+			if fn(r) {
+				gc.Roms = append(gc.Roms, r)
+			}
+		}
+		if len(gc.Roms) > 0 {
+			dc.Games = append(dc.Games, gc)
+		}
+	}
+
+	if len(dc.Games) > 0 {
+		return dc
+	}
+	return nil
+}
+
 func (d *Dat) CopyHeader(src *Dat) {
 	d.Name = src.Name
 	d.Path = src.Path

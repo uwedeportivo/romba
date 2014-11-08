@@ -102,6 +102,10 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		return err
 	}
 
+	diffDat = diffDat.FilterRoms(func(r *types.Rom) bool {
+		return r.Size > 0
+	})
+
 	if diffDat != nil {
 		diffDat.Name = givenName
 		diffDat.Description = givenDescription
@@ -220,7 +224,11 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 		return err
 	}
 
-	if len(diffDat.Games) > 0 {
+	diffDat = diffDat.FilterRoms(func(r *types.Rom) bool {
+		return r.Size > 0
+	})
+
+	if diffDat != nil && len(diffDat.Games) > 0 {
 		diffDat.Name = givenName
 		diffDat.Description = givenDescription
 		diffDat.Path = outPath
