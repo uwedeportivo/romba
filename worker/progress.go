@@ -136,6 +136,9 @@ func (pt *Progress) Reset() {
 	pt.stopped = false
 	pt.knowTotal = false
 	pt.wc = nil
+	if pt.rng != nil {
+		pt.rng = ring.New(pt.rng.Len())
+	}
 }
 
 func (pt *Progress) GetProgress() *Progress {
