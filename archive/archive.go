@@ -543,7 +543,7 @@ func (w *archiveWorker) archiveZip(inpath string, size int64, addZipItself int) 
 		}
 	}
 
-	if addZipItself == 1 {
+	if addZipItself >= 1 {
 		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) },
 			filepath.Base(inpath), inpath, size, w.hh, w.md5crcBuffer)
 		if err != nil {
@@ -582,7 +582,7 @@ func (w *archiveWorker) archive7Zip(inpath string, size int64, addZipItself int)
 		}
 	}
 
-	if addZipItself == 1 {
+	if addZipItself >= 1 {
 		cs, err := w.archive(func() (io.ReadCloser, error) { return os.Open(inpath) },
 			filepath.Base(inpath), inpath, size, w.hh, w.md5crcBuffer)
 		if err != nil {
@@ -641,7 +641,7 @@ func openGzipReadCloser(inpath string) (io.ReadCloser, error) {
 func (w *archiveWorker) archiveGzip(inpath string, size int64, addGZipItself int) (int64, error) {
 	var total int64
 
-	if addGZipItself == 1 {
+	if addGZipItself >= 1 {
 		n, err := w.archiveRom(inpath, size)
 		if err != nil {
 			return 0, err
