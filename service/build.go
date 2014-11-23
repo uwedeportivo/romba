@@ -92,7 +92,13 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		}
 	}
 
-	datInComplete, err := pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.fixdatOnly, pw.pm.deduper)
+	datInComplete := false
+	if pw.pm.fixdatOnly {
+		datInComplete, err = pw.pm.rs.depot.FixDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.deduper)
+	} else {
+		datInComplete, err = pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.deduper)
+	}
+
 	if err != nil {
 		return err
 	}

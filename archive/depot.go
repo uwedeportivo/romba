@@ -91,6 +91,21 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	return depot, nil
 }
 
+func (depot *Depot) RomInDepot(sha1Hex string) (bool, error) {
+	for _, root := range depot.roots {
+		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
+		exists, err := PathExists(rompath)
+		if err != nil {
+			return false, err
+		}
+
+		if exists {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, int64, error) {
 	for _, root := range depot.roots {
 		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
