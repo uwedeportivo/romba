@@ -176,14 +176,16 @@ func (depot *Depot) fixdatGame(game *types.Game, gamePath string,
 			return nil, err
 		}
 
-		if rom.Sha1 == nil && rom.Size > 0 {
-			if fixGame == nil {
-				fixGame = new(types.Game)
-				fixGame.Name = game.Name
-				fixGame.Description = game.Description
-			}
+		if rom.Sha1 == nil {
+			if rom.Size > 0 {
+				if fixGame == nil {
+					fixGame = new(types.Game)
+					fixGame.Name = game.Name
+					fixGame.Description = game.Description
+				}
 
-			fixGame.Roms = append(fixGame.Roms, rom)
+				fixGame.Roms = append(fixGame.Roms, rom)
+			}
 			continue
 		}
 
