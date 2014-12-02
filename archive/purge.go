@@ -56,7 +56,8 @@ type purgeMaster struct {
 	backupDir  string
 }
 
-func (depot *Depot) Purge(backupDir string, numWorkers int, pt worker.ProgressTracker) (string, error) {
+func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string,
+	pt worker.ProgressTracker) (string, error) {
 	pm := new(purgeMaster)
 	pm.depot = depot
 	pm.pt = pt
@@ -78,7 +79,11 @@ func (depot *Depot) Purge(backupDir string, numWorkers int, pt worker.ProgressTr
 		return "", err
 	}
 
-	return worker.Work("purge roms", depot.roots, pm)
+	wds := depot.roots
+	if len(workDepot) > 0 {
+		wds = []string{workDepot}
+	}
+	return worker.Work("purge roms", wds, pm)
 }
 
 func (pm *purgeMaster) Accept(path string) bool {
