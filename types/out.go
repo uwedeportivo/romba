@@ -34,13 +34,14 @@ import (
 	"bytes"
 	"encoding/hex"
 	"io"
+	"strings"
 	"text/template"
 )
 
 const datTemplate = `
 dat (
 	name "{{.Name}}"
-	description "{{.Description}}"
+	description "{{omitQuote .Description}}"
 	{{if .FixDat}}category "FIXDATFILE"{{end}}
 	path "{{.Path}}"
 	{{if .UnzipGames}}forcezipping "no"{{end}}
@@ -48,7 +49,7 @@ dat (
 {{with .Games}}{{range .}}
 game (
 	name "{{.Name}}"
-	description "{{.Description}}"
+	description "{{omitQuote .Description}}"
 	{{with .Roms}}{{range .}}
 	rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}} ){{end}}{{end}}
 ){{end}}{{end}}
@@ -56,13 +57,13 @@ game (
 
 const compliantDatTemplate = `clrmamepro (
 	name "{{.Name}}"
-	description "{{.Description}}"
+	description "{{omitQuote .Description}}"
 	{{if .FixDat}}category "FIXDATFILE"{{end}}
 	{{if .UnzipGames}}forcezipping "no"{{end}}
 ){{with .Games}}{{range .}}
 game (
 	name "{{.Name}}"
-	description "{{.Description}}"
+	description "{{omitQuote .Description}}"
 	{{with .Roms}}{{range .}}
 	rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}} ){{end}}{{end}}
 ){{end}}{{end}}
@@ -75,7 +76,7 @@ rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sh
 const datShortTemplate = `
 dat (
 	name "{{.Name}}"
-	description "{{.Description}}"
+	description "{{omitQuote .Description}}"
 	{{if .FixDat}}category "FIXDATFILE"{{end}}
 	path "{{.Path}}"
 	{{if .UnzipGames}}forcezipping "no"{{end}}
@@ -83,14 +84,14 @@ dat (
 {{with .Games}}{{range .}}
 game (
 	name "{{.Name}}"
-	description "{{.Description}}"
+	description "{{omitQuote .Description}}"
 ){{end}}{{end}}
 `
 const datsTemplate = `
 {{range .}}
 dat (
 	name "{{.Name}}"
-	description "{{.Description}}"
+	description "{{omitQuote .Description}}"
 	{{if .FixDat}}category "FIXDATFILE"{{end}}
 	path "{{.Path}}"
 	{{if .UnzipGames}}forcezipping "no"{{end}}
@@ -115,6 +116,15 @@ func md5str(bs []byte) string {
 
 func sha1str(bs []byte) string {
 	return hexstr("sha1", bs)
+}
+
+func omitQuote(v string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '"' {
+			return -1
+		}
+		return r
+	}, v)
 }
 
 var ff = template.FuncMap{
