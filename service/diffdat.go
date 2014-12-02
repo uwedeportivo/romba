@@ -195,8 +195,6 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 		return err
 	}
 
-	diffDat := new(types.Dat)
-
 	err = filepath.Walk(newDatPath, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
 			return nil
@@ -215,7 +213,7 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 			}
 
 			if oneDiffDat != nil {
-				diffDat.Games = append(diffDat.Games, oneDiffDat.Games...)
+				return writeDiffDat(oneDiffDat, filepath.Join(outPath, oneDiffDat.Name+".dat"))
 			}
 		}
 		return nil
@@ -224,36 +222,27 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 		return err
 	}
 
+	glog.Infof("ediffdat finished")
+	fmt.Fprintf(cmd.Stdout, "ediffdat finished")
+
+	return nil
+}
+
+func writeDiffDat(diffDat *types.Dat, outPath string) error {
 	diffDat = diffDat.FilterRoms(func(r *types.Rom) bool {
 		return r.Size > 0
 	})
 
-	if diffDat != nil && len(diffDat.Games) > 0 {
-		diffDat.Name = givenName
-		diffDat.Description = givenDescription
-		diffDat.Path = outPath
+	diffDat.Path = outPath
 
-		diffFile, err := os.Create(outPath)
-		if err != nil {
-			return err
-		}
-		defer diffFile.Close()
-
-		diffWriter := bufio.NewWriter(diffFile)
-		defer diffWriter.Flush()
-
-		err = types.ComposeCompliantDat(diffDat, diffWriter)
-		if err != nil {
-			return err
-		}
-		glog.Infof("ediffdat finished, %d games with diffs found, written diffdat file %s",
-			len(diffDat.Games), outPath)
-		fmt.Fprintf(cmd.Stdout, "ediffdat finished, %d games with diffs found, written diffdat file %s",
-			len(diffDat.Games), outPath)
-	} else {
-		glog.Infof("ediffdat finished, no diffs found, no diffdat file written")
-		fmt.Fprintf(cmd.Stdout, "ediffdat finished, no diffs found, no diffdat file written")
+	diffFile, err := os.Create(outPath)
+	if err != nil {
+		return err
 	}
+	defer diffFile.Close()
 
-	return nil
+	diffWriter := bufio.NewWriter(diffFile)
+	defer diffWriter.Flush()
+
+	return types.ComposeCompliantDat(diffDat, diffWriter)
 }
