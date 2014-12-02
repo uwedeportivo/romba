@@ -128,9 +128,10 @@ func omitQuote(v string) string {
 }
 
 var ff = template.FuncMap{
-	"hexcrc":  crcstr,
-	"hexmd5":  md5str,
-	"hexsha1": sha1str,
+	"hexcrc":    crcstr,
+	"hexmd5":    md5str,
+	"hexsha1":   sha1str,
+	"omitQuote": omitQuote,
 }
 
 var dt = template.Must(template.New("datout").Funcs(ff).Parse(datTemplate))
