@@ -263,7 +263,7 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 
 			if inDepot {
 				fmt.Fprintf(cmd.Stdout, "-----------------\n")
-				fmt.Fprintf(cmd.Stdout, "rom file %s.gz in depot\n", sha1Str)
+				fmt.Fprintf(cmd.Stdout, "rom file %s in depot\n", rompath)
 				fmt.Fprintf(cmd.Stdout, "crc = %s\n", hex.EncodeToString(hh.Crc))
 				fmt.Fprintf(cmd.Stdout, "md5 = %s\n", hex.EncodeToString(hh.Md5))
 				fmt.Fprintf(cmd.Stdout, "size = %d\n", size)
