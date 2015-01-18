@@ -84,7 +84,7 @@ type KVBatch interface {
 	Clear()
 }
 
-var StoreOpener func(pathPrefix string) (KVStore, error)
+var StoreOpener func(pathPrefix string, keySize int) (KVStore, error)
 
 type kvStore struct {
 	generation int64
@@ -108,8 +108,8 @@ type kvBatch struct {
 	size         int64
 }
 
-func openDb(pathPrefix string) (KVStore, error) {
-	return StoreOpener(pathPrefix)
+func openDb(pathPrefix string, keySize int) (KVStore, error) {
+	return StoreOpener(pathPrefix, keySize)
 }
 
 func NewKVStoreDB(path string) (RomDB, error) {
@@ -124,42 +124,42 @@ func NewKVStoreDB(path string) (RomDB, error) {
 	kvdb.generation = gen
 
 	glog.Infof("Loading Dats DB")
-	db, err := openDb(filepath.Join(path, datsDBName))
+	db, err := openDb(filepath.Join(path, datsDBName), sha1.Size)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.datsDB = db
 
 	glog.Infof("Loading CRC DB")
-	db, err = openDb(filepath.Join(path, crcDBName))
+	db, err = openDb(filepath.Join(path, crcDBName), crc32.Size+sha1.Size+8)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.crcDB = db
 
 	glog.Infof("Loading MD5 DB")
-	db, err = openDb(filepath.Join(path, md5DBName))
+	db, err = openDb(filepath.Join(path, md5DBName), md5.Size+sha1.Size+8)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.md5DB = db
 
 	glog.Infof("Loading SHA1 DB")
-	db, err = openDb(filepath.Join(path, sha1DBName))
+	db, err = openDb(filepath.Join(path, sha1DBName), sha1.Size)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.sha1DB = db
 
 	glog.Infof("Loading CRC -> SHA1 DB")
-	db, err = openDb(filepath.Join(path, crcsha1DBName))
+	db, err = openDb(filepath.Join(path, crcsha1DBName), crc32.Size+sha1.Size+8)
 	if err != nil {
 		return nil, err
 	}
 	kvdb.crcsha1DB = db
 
 	glog.Infof("Loading MD5 -> SHA1 DB")
-	db, err = openDb(filepath.Join(path, md5sha1DBName))
+	db, err = openDb(filepath.Join(path, md5sha1DBName), md5.Size+sha1.Size+8)
 	if err != nil {
 		return nil, err
 	}
@@ -624,4 +624,15 @@ func (kvdb *kvStore) DebugGet(key []byte, size int64) string {
 	}
 
 	return buf.String()
+}
+
+func (kvdb *kvStore) ResolveHash(key []byte) ([]byte, error) {
+	switch len(key) {
+	case md5.Size:
+		return kvdb.md5sha1DB.GetKeySuffixesFor(key)
+	case crc32.Size:
+		return kvdb.crcsha1DB.GetKeySuffixesFor(key)
+	default:
+		return nil, fmt.Errorf("crc or md5 hash expected, got hash size: %d", len(key))
+	}
 }

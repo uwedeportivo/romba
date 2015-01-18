@@ -75,6 +75,7 @@ type RomDB interface {
 	PrintStats() string
 	Generation() int64
 	DebugGet(key []byte, size int64) string
+	ResolveHash(key []byte) ([]byte, error)
 }
 
 var DBFactory func(path string) (RomDB, error)

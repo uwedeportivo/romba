@@ -32,7 +32,6 @@ package clevel
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"fmt"
 
 	"github.com/jmhodges/levigo"
@@ -46,7 +45,7 @@ func init() {
 	db.StoreOpener = openDb
 }
 
-func openDb(path string) (db.KVStore, error) {
+func openDb(path string, keySize int) (db.KVStore, error) {
 	opts := levigo.NewOptions()
 	opts.SetCreateIfMissing(true)
 	opts.SetFilterPolicy(levigo.NewBloomFilter(16))
@@ -59,12 +58,14 @@ func openDb(path string) (db.KVStore, error) {
 		return nil, fmt.Errorf("failed to open db at %s: %v\n", path, err)
 	}
 	return &store{
-		dbn: dbn,
+		dbn:     dbn,
+		keySize: keySize,
 	}, nil
 }
 
 type store struct {
-	dbn *levigo.DB
+	dbn     *levigo.DB
+	keySize int
 }
 
 func (s *store) Set(key, value []byte) error {
@@ -76,13 +77,12 @@ func (s *store) Get(key []byte) ([]byte, error) {
 }
 
 func (s *store) GetKeySuffixesFor(keyPrefix []byte) ([]byte, error) {
-	// suffixes are always sha1 so size is known
-	var sha1s []byte
+	var suffixes []byte
 
 	it := s.dbn.NewIterator(rOptions)
 	n := len(keyPrefix)
 
-	key := make([]byte, n+sha1.Size)
+	key := make([]byte, s.keySize)
 	copy(key[:n], keyPrefix)
 
 	it.Seek(key)
@@ -90,13 +90,13 @@ func (s *store) GetKeySuffixesFor(keyPrefix []byte) ([]byte, error) {
 	for it.Valid() {
 		ik := it.Key()
 		if bytes.Equal(ik[:n], keyPrefix) {
-			sha1s = append(sha1s, ik[n:]...)
+			suffixes = append(suffixes, ik[n:]...)
 		} else {
 			break
 		}
 		it.Next()
 	}
-	return sha1s, nil
+	return suffixes, nil
 }
 
 func (s *store) Delete(key []byte) error {

@@ -89,6 +89,10 @@ func (noop *NoOpBatch) Size() int64 {
 	return 0
 }
 
-func (noop *NoOpBatch) DebugGet(key []byte, size int64) string {
+func (noop *NoOpDB) DebugGet(key []byte, size int64) string {
 	return ""
+}
+
+func (noop *NoOpDB) ResolveHash(key []byte) ([]byte, error) {
+	return nil, nil
 }
