@@ -266,7 +266,7 @@ func (depot *Depot) reserveRoot(size int64) (int, error) {
 			humanize.IBytes(uint64(depot.maxSizes[k])), humanize.IBytes(uint64(depot.sizes[k])))
 	}
 
-	return -1, fmt.Errorf("depot ran out of disk space")
+	return -1, worker.StopProcessing.New("depot ran out of disk space")
 }
 
 func (w *archiveWorker) Process(path string, size int64) error {

@@ -32,7 +32,6 @@ package worker
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -42,6 +41,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
+	"github.com/spacemonkeygo/errors"
 
 	"github.com/uwedeportivo/romba/config"
 )
@@ -52,6 +52,11 @@ type countVisitor struct {
 	commonRootPath string
 	master         Master
 }
+
+var (
+	Error          = errors.NewClass("Worker Error")
+	StopProcessing = Error.NewClass("Stop Processing Error")
+)
 
 func CommonRoot(pa, pb string) string {
 	if pa == "" || pb == "" {
@@ -137,7 +142,7 @@ type scanVisitor struct {
 	pt     ProgressTracker
 }
 
-var scanStopped = errors.New("scan stopped")
+var scanStopped = Error.New("scan stopped")
 
 func (sv *scanVisitor) visit(path string, f os.FileInfo, err error) error {
 	if sv.pt.Stopped() {
@@ -246,6 +251,10 @@ func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string)
 				perr = err
 			}
 			handleErredFile(path)
+
+			if StopProcessing.Contains(err) {
+				w.pt.Stop(nil)
+			}
 		}
 
 		w.pt.AddBytesFromFile(wu.size, path, erred)
