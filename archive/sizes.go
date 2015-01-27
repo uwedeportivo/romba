@@ -42,7 +42,8 @@ import (
 )
 
 const (
-	sizeFilename = ".romba_size"
+	sizeFilename       = ".romba_size"
+	backupSizeFilename = ".romba_size.backup"
 )
 
 type ByteSize float64
@@ -84,7 +85,23 @@ func (b ByteSize) String() string {
 }
 
 func writeSizeFile(root string, size int64) error {
-	file, err := os.Create(filepath.Join(root, sizeFilename))
+	sizeFilePath := filepath.Join(root, sizeFilename)
+
+	exists, err := PathExists(sizeFilePath)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		backupSizeFilePath := filepath.Join(root, backupSizeFilename)
+
+		err := os.Rename(sizeFilePath, backupSizeFilePath)
+		if err != nil {
+			return err
+		}
+	}
+
+	file, err := os.Create(sizeFilePath)
 	if err != nil {
 		return err
 	}
