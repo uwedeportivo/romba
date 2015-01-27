@@ -42,15 +42,16 @@ type Clrmamepro struct {
 }
 
 type Dat struct {
-	Name        string      `xml:"header>name"`
-	Description string      `xml:"header>description"`
-	Clr         *Clrmamepro `xml:"header>clrmamepro"`
-	Games       GameSlice   `xml:"game"`
-	Generation  int64
-	Path        string
-	Software    GameSlice `xml:"software"`
-	UnzipGames  bool
-	FixDat      bool
+	Name         string      `xml:"header>name"`
+	Description  string      `xml:"header>description"`
+	Clr          *Clrmamepro `xml:"header>clrmamepro"`
+	Games        GameSlice   `xml:"game"`
+	Generation   int64
+	Path         string
+	Software     GameSlice `xml:"software"`
+	UnzipGames   bool
+	FixDat       bool
+	MissingSha1s bool
 }
 
 type Game struct {

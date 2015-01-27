@@ -132,6 +132,7 @@ contents of any changed dats.`,
 
 	cmd.Subcommands[0].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
+	cmd.Subcommands[0].Flag.String("missingSha1s", "", "write paths of dats with missing sha1s into this file")
 
 	cmd.Subcommands[1] = &commander.Command{
 		Run:       rs.startArchive,

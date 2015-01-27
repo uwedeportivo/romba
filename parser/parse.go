@@ -289,6 +289,10 @@ func (p *parser) gameStmt() (*types.Game, error) {
 
 			if r != nil {
 				g.Roms = append(g.Roms, r)
+
+				if r.Sha1 == nil {
+					p.d.MissingSha1s = true
+				}
 			}
 		}
 	}

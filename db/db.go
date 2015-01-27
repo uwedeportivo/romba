@@ -33,6 +33,7 @@ package db
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -148,6 +149,7 @@ func ReadGenerationFile(root string) (int64, error) {
 
 type refreshWorker struct {
 	romBatch RomBatch
+	pm       *refreshMaster
 }
 
 func (pw *refreshWorker) Process(path string, size int64) error {
@@ -162,6 +164,14 @@ func (pw *refreshWorker) Process(path string, size int64) error {
 	if err != nil {
 		return err
 	}
+
+	if pw.pm.missingSha1sWriter != nil && dat.MissingSha1s {
+		_, err = fmt.Fprintln(pw.pm.missingSha1sWriter, dat.Path)
+		if err != nil {
+			return err
+		}
+	}
+
 	return pw.romBatch.IndexDat(dat, sha1Bytes)
 }
 
@@ -172,9 +182,10 @@ func (pw *refreshWorker) Close() error {
 }
 
 type refreshMaster struct {
-	romdb      RomDB
-	numWorkers int
-	pt         worker.ProgressTracker
+	romdb              RomDB
+	numWorkers         int
+	pt                 worker.ProgressTracker
+	missingSha1sWriter io.Writer
 }
 
 func (pm *refreshMaster) CalculateWork() bool {
@@ -189,6 +200,7 @@ func (pm *refreshMaster) Accept(path string) bool {
 func (pm *refreshMaster) NewWorker(workerIndex int) worker.Worker {
 	return &refreshWorker{
 		romBatch: pm.romdb.StartBatch(),
+		pm:       pm,
 	}
 }
 
@@ -212,16 +224,32 @@ func (pm *refreshMaster) Start() error {
 
 func (pm *refreshMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
 
-func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTracker) (string, error) {
+func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTracker, missingSha1s string) (string, error) {
 	err := romdb.OrphanDats()
 	if err != nil {
 		return "", err
 	}
 
+	var missingSha1sWriter io.Writer
+
+	if missingSha1s != "" {
+		missingSha1sFile, err := os.Create(missingSha1s)
+		if err != nil {
+			return "", err
+		}
+		defer missingSha1sFile.Close()
+
+		missingSha1sBuf := bufio.NewWriter(missingSha1sFile)
+		defer missingSha1sBuf.Flush()
+
+		missingSha1sWriter = missingSha1sBuf
+	}
+
 	pm := &refreshMaster{
-		romdb:      romdb,
-		numWorkers: numWorkers,
-		pt:         pt,
+		romdb:              romdb,
+		numWorkers:         numWorkers,
+		pt:                 pt,
+		missingSha1sWriter: missingSha1sWriter,
 	}
 
 	return worker.Work("refresh dats", []string{datsPath}, pm)
