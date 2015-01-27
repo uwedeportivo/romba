@@ -124,10 +124,18 @@ func extractResumePoint(resumePath string, numWorkers int) (string, error) {
 
 		line = strings.TrimSpace(line)
 
-		if len(line) > 0 {
+		if len(line) > 41 {
 			numLines++
-			rng.Value = line
-			rng = rng.Next()
+
+			sha1Str := line[len(line)-40:]
+			line := line[:len(line)-41]
+
+			computedSha1Str := fmt.Sprintf("%x", sha1.Sum([]byte(line)))
+
+			if sha1Str == computedSha1Str {
+				rng.Value = line
+				rng = rng.Next()
+			}
 		}
 		if err == io.EOF {
 			break
@@ -677,7 +685,7 @@ func writeResumeLogEntry(comps []string, depot *Depot, resumeLogWriter *bufio.Wr
 	sort.Strings(nonEmptyComps)
 
 	for _, ncomp := range nonEmptyComps {
-		fmt.Fprintf(resumeLogWriter, "%s\n", ncomp)
+		fmt.Fprintf(resumeLogWriter, "%s %x\n", ncomp, sha1.Sum([]byte(ncomp)))
 	}
 	depot.writeSizes()
 }
