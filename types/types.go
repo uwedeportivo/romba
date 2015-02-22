@@ -42,16 +42,18 @@ type Clrmamepro struct {
 }
 
 type Dat struct {
-	Name         string      `xml:"header>name"`
-	Description  string      `xml:"header>description"`
-	Clr          *Clrmamepro `xml:"header>clrmamepro"`
-	Games        GameSlice   `xml:"game"`
-	Generation   int64
-	Path         string
-	Software     GameSlice `xml:"software"`
-	UnzipGames   bool
-	FixDat       bool
-	MissingSha1s bool
+	Name          string      `xml:"header>name"`
+	Description   string      `xml:"header>description"`
+	Clr           *Clrmamepro `xml:"header>clrmamepro"`
+	Games         GameSlice   `xml:"game"`
+	Generation    int64
+	Path          string
+	Software      GameSlice `xml:"software"`
+	UnzipGames    bool
+	FixDat        bool
+	MissingSha1s  bool
+	SLName        string `xml:"name,attr"`
+	SLDescription string `xml:"description,attr"`
 }
 
 type Game struct {
@@ -168,10 +170,18 @@ func (ad *Dat) Equals(bd *Dat) bool {
 }
 
 func (d *Dat) Normalize() {
+	if d.SLName != "" {
+		d.Name = d.SLName
+	}
+	if d.SLDescription != "" {
+		d.Description = d.SLDescription
+	}
+
 	if d.Clr != nil && (d.Clr.ForcePacking == "unzip" || d.Clr.ForcePacking == "false" || d.Clr.ForcePacking == "no" ||
 		d.Clr.ForceZipping == "unzip" || d.Clr.ForceZipping == "false" || d.Clr.ForceZipping == "no") {
 		d.UnzipGames = true
 	}
+
 	if d.Software != nil {
 		d.Games = append(d.Games, d.Software...)
 		d.Software = nil
