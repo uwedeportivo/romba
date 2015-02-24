@@ -201,6 +201,8 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 	var gameTorrent *torrentzip.Writer
 	var err error
 
+	glog.V(4).Infof("building game %s with path %s", game.Name, gamePath)
+
 	if unzipGame {
 		err := os.Mkdir(gamePath, 0777)
 		if err != nil {
@@ -208,6 +210,16 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 			return nil, false, err
 		}
 	} else {
+		gameDir := filepath.Dir(game.Name)
+		if gameDir != "." {
+			// name has dirs in it
+			err := os.MkdirAll(filepath.Dir(gamePath), 0777)
+			if err != nil {
+				glog.Errorf("error mkdir %s: %v", filepath.Dir(gamePath), err)
+				return nil, false, err
+			}
+		}
+
 		gameFile, err := os.Create(gamePath + zipSuffix)
 		if err != nil {
 			glog.Errorf("error creating zip file %s: %v", gamePath+zipSuffix, err)

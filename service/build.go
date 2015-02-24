@@ -67,6 +67,8 @@ func (pw *buildWorker) Process(path string, size int64) error {
 		if err != nil {
 			return err
 		}
+
+		glog.V(4).Infof("parsed dat=%s", types.PrintShortDat(dat))
 	}
 
 	reldatdir, err := filepath.Rel(pw.pm.commonRootPath, filepath.Dir(path))
