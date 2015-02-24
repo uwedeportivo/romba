@@ -32,7 +32,6 @@ package archive
 
 import (
 	"bufio"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -41,12 +40,12 @@ import (
 	"github.com/uwedeportivo/romba/types"
 )
 
-type gameWalker struct {
-	game     *types.Game
-	gamepath string
+type romWalker struct {
+	dat        *types.Dat
+	sourcePath string
 }
 
-func (gw *gameWalker) visit(path string, f os.FileInfo, err error) error {
+func (rw *romWalker) visit(path string, f os.FileInfo, err error) error {
 	if f == nil || f.Name() == ".DS_Store" {
 		return nil
 	}
@@ -59,7 +58,7 @@ func (gw *gameWalker) visit(path string, f os.FileInfo, err error) error {
 		return err
 	}
 
-	romName, err := filepath.Rel(gw.gamepath, path)
+	romName, err := filepath.Rel(rw.sourcePath, path)
 	if err != nil {
 		return err
 	}
@@ -71,52 +70,29 @@ func (gw *gameWalker) visit(path string, f os.FileInfo, err error) error {
 	rom.Md5 = hh.Md5
 	rom.Sha1 = hh.Sha1
 
-	gw.game.Roms = append(gw.game.Roms, rom)
+	game := new(types.Game)
+	game.Name = romName
 
+	game.Roms = append(game.Roms, rom)
+
+	rw.dat.Games = append(rw.dat.Games, game)
 	return nil
 }
 
-func populateGame(srcpath string, gameDirInfo os.FileInfo) (*types.Game, error) {
-	game := new(types.Game)
-	baseName := gameDirInfo.Name()
-
-	game.Name = baseName
-	game.Description = baseName
-
-	gw := &gameWalker{
-		game:     game,
-		gamepath: filepath.Join(srcpath, baseName),
-	}
-
-	err := filepath.Walk(gw.gamepath, gw.visit)
-	if err != nil {
-		return nil, err
-	}
-
-	return game, nil
-}
-
 func Dir2Dat(dat *types.Dat, srcpath, outpath string) error {
-	glog.Infof("composing DAT from source %s into output dir %s", srcpath, outpath)
+	glog.Infof("composing DAT from source %s into output %s", srcpath, outpath)
 
-	fis, err := ioutil.ReadDir(srcpath)
+	rw := &romWalker{
+		dat:        dat,
+		sourcePath: srcpath,
+	}
+
+	err := filepath.Walk(srcpath, rw.visit)
 	if err != nil {
 		return err
 	}
 
-	for _, fi := range fis {
-		if fi.IsDir() {
-			game, err := populateGame(srcpath, fi)
-			if err != nil {
-				return err
-			}
-
-			dat.Games = append(dat.Games, game)
-		}
-	}
-
-	outfilename := filepath.Join(outpath, dat.Name+datSuffix)
-	outf, err := os.Create(outfilename)
+	outf, err := os.Create(outpath)
 	if err != nil {
 		return err
 	}

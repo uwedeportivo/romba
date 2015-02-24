@@ -197,13 +197,10 @@ structure. Saves this DAT file in specified output filename.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[3].Flag.String("out", "", "output filename")
+	cmd.Subcommands[3].Flag.String("out", "", "output file")
 	cmd.Subcommands[3].Flag.String("source", "", "source directory")
-	cmd.Subcommands[3].Flag.String("name", "", "name value in DAT header")
+	cmd.Subcommands[3].Flag.String("name", "untitled", "name value in DAT header")
 	cmd.Subcommands[3].Flag.String("description", "", "description value in DAT header")
-	cmd.Subcommands[3].Flag.String("category", "", "category value in DAT header")
-	cmd.Subcommands[3].Flag.String("version", "", "vesrion value in DAT header")
-	cmd.Subcommands[3].Flag.String("author", "", "author value in DAT header")
 
 	cmd.Subcommands[4] = &commander.Command{
 		Run:       rs.diffdat,

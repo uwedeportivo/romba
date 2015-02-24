@@ -272,10 +272,6 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 func (rs *RombaService) dir2dat(cmd *commander.Command, args []string) error {
 	outpath := cmd.Flag.Lookup("out").Value.Get().(string)
 
-	if err := os.MkdirAll(outpath, 0777); err != nil {
-		return err
-	}
-
 	srcpath := cmd.Flag.Lookup("source").Value.Get().(string)
 	srcInfo, err := os.Stat(srcpath)
 	if err != nil {
