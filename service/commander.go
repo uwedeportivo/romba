@@ -362,7 +362,7 @@ Prints version.`,
 
 	cmd.Subcommands[15] = &commander.Command{
 		Run:       rs.ediffdat,
-		UsageLine: "ediffdat -old <dat dir> -new <dat dir> -out <outputfile>",
+		UsageLine: "ediffdat -old <dat dir> -new <dat dir> -out <output dir>",
 		Short:     "Creates a DAT file with those entries that are in -new DAT.",
 		Long: `
 Creates a DAT file with those entries that are in -new DAT files and not
@@ -372,11 +372,9 @@ in -old DAT files. Ignores those entries in -old that are not in -new.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[15].Flag.String("out", "", "output filename")
+	cmd.Subcommands[15].Flag.String("out", "", "output dir")
 	cmd.Subcommands[15].Flag.String("old", "", "old DAT file")
 	cmd.Subcommands[15].Flag.String("new", "", "new DAT file")
-	cmd.Subcommands[15].Flag.String("name", "", "name for out DAT file")
-	cmd.Subcommands[15].Flag.String("description", "", "description for out DAT file")
 
 	return cmd
 }

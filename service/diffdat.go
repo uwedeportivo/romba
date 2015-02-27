@@ -140,8 +140,6 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 	oldDatPath := cmd.Flag.Lookup("old").Value.Get().(string)
 	newDatPath := cmd.Flag.Lookup("new").Value.Get().(string)
 	outPath := cmd.Flag.Lookup("out").Value.Get().(string)
-	givenName := cmd.Flag.Lookup("name").Value.Get().(string)
-	givenDescription := cmd.Flag.Lookup("description").Value.Get().(string)
 
 	if oldDatPath == "" {
 		fmt.Fprintf(cmd.Stdout, "-old argument required")
@@ -156,6 +154,11 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 		return errors.New("missing out argument")
 	}
 
+	err := os.MkdirAll(outPath, 0777)
+	if err != nil {
+		return err
+	}
+
 	glog.Infof("ediffdat new dat %s and old dat %s into %s", newDatPath, oldDatPath, outPath)
 
 	dd, err := dedup.NewLevelDBDeduper()
@@ -163,14 +166,6 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 		return err
 	}
 	defer dd.Close()
-
-	if givenName == "" {
-		givenName = strings.TrimSuffix(filepath.Base(outPath), filepath.Ext(outPath))
-	}
-
-	if givenDescription == "" {
-		givenDescription = givenName
-	}
 
 	err = filepath.Walk(oldDatPath, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
@@ -213,6 +208,12 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 			}
 
 			if oneDiffDat != nil {
+				oneDiffDat = oneDiffDat.FilterRoms(func(r *types.Rom) bool {
+					return r.Size > 0
+				})
+			}
+
+			if oneDiffDat != nil {
 				return writeDiffDat(oneDiffDat, filepath.Join(outPath, oneDiffDat.Name+".dat"))
 			}
 		}
@@ -229,10 +230,6 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 }
 
 func writeDiffDat(diffDat *types.Dat, outPath string) error {
-	diffDat = diffDat.FilterRoms(func(r *types.Rom) bool {
-		return r.Size > 0
-	})
-
 	diffDat.Path = outPath
 
 	diffFile, err := os.Create(outPath)
