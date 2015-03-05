@@ -37,6 +37,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/golang/glog"
 
@@ -106,6 +107,8 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		return r.Size > 0
 	})
 
+	var endMsg string
+
 	if diffDat != nil {
 		diffDat.Name = givenName
 		diffDat.Description = givenDescription
@@ -124,14 +127,17 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		glog.Infof("diffdat finished, %d games with diffs found, written diffdat file %s",
-			len(diffDat.Games), outPath)
-		fmt.Fprintf(cmd.Stdout, "diffdat finished, %d games with diffs found, written diffdat file %s",
+
+		endMsg = fmt.Sprintf("diffdat finished, %d games with diffs found, written diffdat file %s",
 			len(diffDat.Games), outPath)
 	} else {
-		glog.Infof("diffdat finished, no diffs found, no diffdat file written")
-		fmt.Fprintf(cmd.Stdout, "diffdat finished, no diffs found, no diffdat file written")
+		endMsg = "diffdat finished, no diffs found, no diffdat file written"
+
 	}
+
+	glog.Infof(endMsg)
+	fmt.Fprintf(cmd.Stdout, endMsg)
+	rs.broadCastProgress(time.Now(), false, true, endMsg)
 
 	return nil
 }
@@ -225,6 +231,7 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 
 	glog.Infof("ediffdat finished")
 	fmt.Fprintf(cmd.Stdout, "ediffdat finished")
+	rs.broadCastProgress(time.Now(), false, true, "ediffdat finished")
 
 	return nil
 }
