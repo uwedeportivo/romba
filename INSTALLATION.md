@@ -5,6 +5,19 @@ romba
 
 * Install [Go](http://golang.org/doc/install):
 
+Edit your _~/.profile_ file adding the following lines:
+
+```
+export GOPATH=$HOME/go
+export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
+```
+
+Reload your profile file:
+
+```
+. ~/.profile
+```
+
 * Install Mercurial:
 
 ```
