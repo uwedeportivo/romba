@@ -184,6 +184,7 @@ structure. It also deletes the specified DATs from the DAT index.`,
 	cmd.Subcommands[2].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
 	cmd.Subcommands[2].Flag.String("depot", "", "work only on specified depot path")
+	cmd.Subcommands[2].Flag.String("dat", "", "purge only roms declared in this dat")
 
 	cmd.Subcommands[3] = &commander.Command{
 		Run:       rs.dir2dat,

@@ -190,7 +190,7 @@ func (depot *Depot) fixdatGame(game *types.Game, gamePath string,
 		}
 
 		sha1Hex := hex.EncodeToString(rom.Sha1)
-		exists, err := depot.RomInDepot(sha1Hex)
+		exists, _, err := depot.RomInDepot(sha1Hex)
 		if err != nil {
 			glog.Errorf("error checking rom %s in depot: %v", rom.Name, err)
 			return nil, err

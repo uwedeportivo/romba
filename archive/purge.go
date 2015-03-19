@@ -39,6 +39,7 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
+	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
 )
@@ -56,7 +57,66 @@ type purgeMaster struct {
 	backupDir  string
 }
 
-func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string,
+type romsFromDatIterator struct {
+	dat        *types.Dat
+	gameCursor int
+	romCursor  int
+	depot      *Depot
+}
+
+func (rdi *romsFromDatIterator) inc() {
+	rdi.romCursor = rdi.romCursor + 1
+	for {
+		if rdi.gameCursor == len(rdi.dat.Games) {
+			return
+		}
+		g := rdi.dat.Games[rdi.gameCursor]
+		if rdi.romCursor == len(g.Roms) {
+			rdi.romCursor = 0
+			rdi.gameCursor = rdi.gameCursor + 1
+		} else {
+			return
+		}
+	}
+}
+
+func (rdi *romsFromDatIterator) Next() (string, bool, error) {
+	if rdi.gameCursor == len(rdi.dat.Games) {
+		return "", false, nil
+	}
+	g := rdi.dat.Games[rdi.gameCursor]
+	r := g.Roms[rdi.romCursor]
+	rdi.inc()
+
+	if r.Sha1 == nil {
+		err := rdi.depot.romDB.CompleteRom(r)
+		if err != nil {
+			return "", false, err
+		}
+	}
+	if r.Sha1 == nil {
+		return "", true, nil
+	}
+
+	sha1Hex := hex.EncodeToString(r.Sha1)
+	exists, rompath, err := rdi.depot.RomInDepot(sha1Hex)
+	if err != nil {
+		return "", false, err
+	}
+
+	if !exists {
+		return "", true, nil
+	}
+
+	return rompath, true, nil
+}
+
+func (rdi *romsFromDatIterator) Reset() {
+	rdi.gameCursor = 0
+	rdi.romCursor = 0
+}
+
+func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fromDat string,
 	pt worker.ProgressTracker) (string, error) {
 	pm := new(purgeMaster)
 	pm.depot = depot
@@ -79,11 +139,23 @@ func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string,
 		return "", err
 	}
 
-	wds := depot.roots
-	if len(workDepot) > 0 {
-		wds = []string{workDepot}
+	if fromDat == "" {
+		wds := depot.roots
+		if len(workDepot) > 0 {
+			wds = []string{workDepot}
+		}
+		return worker.Work("purge roms", wds, pm)
+	} else {
+		dat, _, err := parser.Parse(fromDat)
+		if err != nil {
+			return "", err
+		}
+		rdi := &romsFromDatIterator{
+			dat:   dat,
+			depot: depot,
+		}
+		return worker.WorkPathIterator("purge roms", rdi, pm)
 	}
-	return worker.Work("purge roms", wds, pm)
 }
 
 func (pm *purgeMaster) Accept(path string) bool {

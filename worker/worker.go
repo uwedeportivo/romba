@@ -273,7 +273,55 @@ func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string)
 	glog.Infof("exiting worker %d for %s", workerNum, workname)
 }
 
+type PathIterator interface {
+	Next() (string, bool, error)
+	Reset()
+}
+
+type slicePathIterator struct {
+	paths  []string
+	cursor int
+}
+
+func newSlicePathIterator(paths []string) (*slicePathIterator, error) {
+	spi := new(slicePathIterator)
+	spi.paths = make([]string, len(paths))
+
+	for k, name := range paths {
+		if !filepath.IsAbs(name) {
+			absname, err := filepath.Abs(name)
+			if err != nil {
+				return nil, err
+			}
+			spi.paths[k] = absname
+		}
+	}
+	return spi, nil
+}
+
+func (spi *slicePathIterator) Next() (string, bool, error) {
+	if spi.cursor < len(spi.paths) {
+		i := spi.cursor
+		spi.cursor = spi.cursor + 1
+		return spi.paths[i], true, nil
+	}
+	return "", false, nil
+}
+
+func (spi *slicePathIterator) Reset() {
+	spi.cursor = 0
+}
+
 func Work(workname string, paths []string, master Master) (string, error) {
+	spi, err := newSlicePathIterator(paths)
+	if err != nil {
+		return "", err
+	}
+
+	return WorkPathIterator(workname, spi, master)
+}
+
+func WorkPathIterator(workname string, pi PathIterator, master Master) (string, error) {
 	pt := master.ProgressTracker()
 
 	glog.Infof("starting %s\n", workname)
@@ -291,25 +339,21 @@ func Work(workname string, paths []string, master Master) (string, error) {
 		cv = new(countVisitor)
 		cv.master = master
 
-		for k, name := range paths {
-			if !filepath.IsAbs(name) {
-				absname, err := filepath.Abs(name)
-				if err != nil {
-					return "", err
-				}
-				paths[k] = absname
+		for name, goOn, err := pi.Next(); goOn; name, goOn, err = pi.Next() {
+			if name == "" {
+				continue
 			}
-		}
-
-		for _, name := range paths {
 			glog.Infof("initial scan of %s to determine amount of work\n", name)
-
-			err := filepath.Walk(name, cv.visit)
+			if err == nil {
+				err = filepath.Walk(name, cv.visit)
+			}
 			if err != nil {
 				glog.Errorf("failed to count in dir %s: %v\n", name, err)
 				return "", err
 			}
 		}
+
+		pi.Reset()
 
 		glog.Infof("found %d files and %s to do. starting work...\n", cv.numFiles, humanize.IBytes(uint64(cv.numBytes)))
 
@@ -339,11 +383,16 @@ func Work(workname string, paths []string, master Master) (string, error) {
 		go runSlave(worker, inwork, i, workname)
 	}
 
-	for _, name := range paths {
+	for name, goOn, err := pi.Next(); goOn; name, goOn, err = pi.Next() {
+		if name == "" {
+			continue
+		}
 		if pt.Stopped() {
 			break
 		}
-		err := filepath.Walk(name, sv.visit)
+		if err == nil {
+			err = filepath.Walk(name, sv.visit)
+		}
 		if err == scanStopped {
 			break
 		}

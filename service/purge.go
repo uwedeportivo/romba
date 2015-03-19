@@ -76,8 +76,9 @@ func (rs *RombaService) purge(cmd *commander.Command, args []string) error {
 		backupDir := cmd.Flag.Lookup("backup").Value.Get().(string)
 		numWorkers := cmd.Flag.Lookup("workers").Value.Get().(int)
 		workDepot := cmd.Flag.Lookup("depot").Value.Get().(string)
+		fromDat := cmd.Flag.Lookup("dat").Value.Get().(string)
 
-		endMsg, err := rs.depot.Purge(backupDir, numWorkers, workDepot, rs.pt)
+		endMsg, err := rs.depot.Purge(backupDir, numWorkers, workDepot, fromDat, rs.pt)
 		if err != nil {
 			glog.Errorf("error purging: %v", err)
 		}
