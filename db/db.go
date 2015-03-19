@@ -77,6 +77,7 @@ type RomDB interface {
 	Generation() int64
 	DebugGet(key []byte, size int64) string
 	ResolveHash(key []byte) ([]byte, error)
+	ForEachDat(datF func(dat *types.Dat) error) error
 }
 
 var DBFactory func(path string) (RomDB, error)

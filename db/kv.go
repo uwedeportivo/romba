@@ -76,6 +76,7 @@ type KVStore interface {
 	BeginRefresh() error
 	EndRefresh() error
 	PrintStats() string
+	Iterate(func(key, value []byte) (bool, error)) error
 }
 
 type KVBatch interface {
@@ -203,12 +204,7 @@ func (kvdb *kvStore) Generation() int64 {
 	return kvdb.generation
 }
 
-func (kvdb *kvStore) GetDat(sha1Bytes []byte) (*types.Dat, error) {
-	dBytes, err := kvdb.datsDB.Get(sha1Bytes)
-	if err != nil {
-		return nil, err
-	}
-
+func decodeDat(dBytes []byte) (*types.Dat, error) {
 	if dBytes == nil {
 		return nil, nil
 	}
@@ -217,11 +213,19 @@ func (kvdb *kvStore) GetDat(sha1Bytes []byte) (*types.Dat, error) {
 
 	var dat types.Dat
 
-	err = datDecoder.Decode(&dat)
+	err := datDecoder.Decode(&dat)
 	if err != nil {
 		return nil, err
 	}
 	return &dat, nil
+}
+
+func (kvdb *kvStore) GetDat(sha1Bytes []byte) (*types.Dat, error) {
+	dBytes, err := kvdb.datsDB.Get(sha1Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return decodeDat(dBytes)
 }
 
 func (kvdb *kvStore) FilteredDatsForRom(rom *types.Rom, filter func(*types.Dat) bool) ([]*types.Dat, []*types.Dat, error) {
@@ -635,4 +639,18 @@ func (kvdb *kvStore) ResolveHash(key []byte) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("crc or md5 hash expected, got hash size: %d", len(key))
 	}
+}
+
+func (kvdb *kvStore) ForEachDat(datF func(dat *types.Dat) error) error {
+	return kvdb.datsDB.Iterate(func(key, value []byte) (bool, error) {
+		dat, err := decodeDat(value)
+		if err != nil {
+			return false, err
+		}
+		err = datF(dat)
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	})
 }

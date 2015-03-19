@@ -111,7 +111,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommand(writer io.Writer, rs *RombaService) *commander.Command {
 	cmd := new(commander.Command)
 	cmd.UsageLine = "Romba"
-	cmd.Subcommands = make([]*commander.Command, 16)
+	cmd.Subcommands = make([]*commander.Command, 17)
 	cmd.Flag = *flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -375,6 +375,17 @@ in -old DAT files. Ignores those entries in -old that are not in -new.`,
 	cmd.Subcommands[15].Flag.String("out", "", "output dir")
 	cmd.Subcommands[15].Flag.String("old", "", "old DAT file")
 	cmd.Subcommands[15].Flag.String("new", "", "new DAT file")
+
+	cmd.Subcommands[16] = &commander.Command{
+		Run:       rs.depotstats,
+		UsageLine: "depotstats",
+		Short:     "Prints depot stats.",
+		Long: `
+Print depot stats.`,
+		Flag:   *flag.NewFlagSet("romba-depotstats", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
+	}
 
 	return cmd
 }

@@ -96,3 +96,7 @@ func (noop *NoOpDB) DebugGet(key []byte, size int64) string {
 func (noop *NoOpDB) ResolveHash(key []byte) ([]byte, error) {
 	return nil, nil
 }
+
+func (noop *NoOpDB) ForEachDat(datF func(dat *types.Dat) error) error {
+	return nil
+}

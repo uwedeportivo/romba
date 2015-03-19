@@ -35,8 +35,10 @@ import (
 	"runtime"
 	"runtime/debug"
 
+	"github.com/codahale/hdrhistogram"
 	"github.com/dustin/go-humanize"
 	"github.com/uwedeportivo/commander"
+	"github.com/uwedeportivo/romba/types"
 )
 
 func (rs *RombaService) printVersion(cmd *commander.Command, args []string) error {
@@ -87,5 +89,55 @@ func (rs *RombaService) dbstats(cmd *commander.Command, args []string) error {
 	defer rs.jobMutex.Unlock()
 
 	fmt.Fprintf(cmd.Stdout, "dbstats = %s", rs.romDB.PrintStats())
+	return nil
+}
+
+func (rs *RombaService) depotstats(cmd *commander.Command, args []string) error {
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	h := hdrhistogram.New(0, 1000000000000, 3)
+	total := 0
+
+	err := rs.romDB.ForEachDat(func(dat *types.Dat) error {
+		for _, g := range dat.Games {
+			for _, r := range g.Roms {
+				h.RecordValue(r.Size)
+				total++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	bs := h.CumulativeDistribution()
+
+	fmt.Fprintf(cmd.Stdout, "number of roms=%d\n", total)
+
+	fmt.Fprintf(cmd.Stdout, "rom size cumulative distribution = \n")
+	fmt.Fprintf(cmd.Stdout, "count, percentile, file size\n")
+	for i := 0; i < len(bs); i++ {
+		b := bs[i]
+
+		vstr := humanize.IBytes(uint64(b.ValueAt))
+
+		if (i < len(bs)-1 && vstr != humanize.IBytes(uint64(bs[i+1].ValueAt))) || (i == len(bs)-1) {
+			fmt.Fprintf(cmd.Stdout, "%d, %.8f, %s\n", b.Count, b.Quantile, humanize.IBytes(uint64(b.ValueAt)))
+		}
+	}
+
+	fmt.Fprintf(cmd.Stdout, "rom size histogram = \n")
+	fmt.Fprintf(cmd.Stdout, "count, file size\n")
+	var lastCount int64
+	for _, b := range bs {
+		count := b.Count - lastCount
+		if count > 0 {
+			fmt.Fprintf(cmd.Stdout, "%d, %s\n", count, humanize.IBytes(uint64(b.ValueAt)))
+		}
+		lastCount = b.Count
+	}
+
 	return nil
 }

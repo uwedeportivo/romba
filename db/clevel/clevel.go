@@ -141,6 +141,26 @@ func (s *store) Close() error {
 	return nil
 }
 
+func (s *store) Iterate(df func(key, value []byte) (bool, error)) error {
+	it := s.dbn.NewIterator(rOptions)
+
+	it.SeekToFirst()
+
+	for it.Valid() {
+		goOn, err := df(it.Key(), it.Value())
+
+		if err != nil {
+			return err
+		}
+
+		if !goOn {
+			break
+		}
+		it.Next()
+	}
+	return nil
+}
+
 type batch struct {
 	bn *levigo.WriteBatch
 	s  *store
