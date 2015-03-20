@@ -294,6 +294,8 @@ func newSlicePathIterator(paths []string) (*slicePathIterator, error) {
 				return nil, err
 			}
 			spi.paths[k] = absname
+		} else {
+			spi.paths[k] = name
 		}
 	}
 	return spi, nil
