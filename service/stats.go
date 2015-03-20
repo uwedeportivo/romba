@@ -38,6 +38,7 @@ import (
 	"github.com/codahale/hdrhistogram"
 	"github.com/dustin/go-humanize"
 	"github.com/uwedeportivo/commander"
+	"github.com/uwedeportivo/romba/dedup"
 	"github.com/uwedeportivo/romba/types"
 )
 
@@ -105,13 +106,28 @@ func (rs *RombaService) datstats(cmd *commander.Command, args []string) error {
 	rs.jobMutex.Lock()
 	defer rs.jobMutex.Unlock()
 
+	deduper, err := dedup.NewLevelDBDeduper()
+	if err != nil {
+		return err
+	}
+	defer deduper.Close()
+
 	dts := &datStats{
 		h: hdrhistogram.New(0, 1000000000000, 5),
 	}
 
-	err := rs.romDB.ForEachDat(func(dat *types.Dat) error {
+	err = rs.romDB.ForEachDat(func(dat *types.Dat) error {
+		dedat, err := dedup.Dedup(dat, deduper)
+		if err != nil {
+			return err
+		}
+
+		if dedat == nil {
+			return nil
+		}
+
 		dts.nDats = dts.nDats + 1
-		for _, g := range dat.Games {
+		for _, g := range dedat.Games {
 			dts.nGames = dts.nGames + 1
 			for _, r := range g.Roms {
 				dts.h.RecordValue(r.Size)
