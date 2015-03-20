@@ -92,18 +92,34 @@ func (rs *RombaService) dbstats(cmd *commander.Command, args []string) error {
 	return nil
 }
 
-func (rs *RombaService) depotstats(cmd *commander.Command, args []string) error {
+type datStats struct {
+	h            *hdrhistogram.Histogram
+	nRoms        int
+	nDats        int
+	nGames       int
+	totalSize    uint64
+	nRomsBelow4k int
+}
+
+func (rs *RombaService) datstats(cmd *commander.Command, args []string) error {
 	rs.jobMutex.Lock()
 	defer rs.jobMutex.Unlock()
 
-	h := hdrhistogram.New(0, 1000000000000, 3)
-	total := 0
+	dts := &datStats{
+		h: hdrhistogram.New(0, 1000000000000, 5),
+	}
 
 	err := rs.romDB.ForEachDat(func(dat *types.Dat) error {
+		dts.nDats = dts.nDats + 1
 		for _, g := range dat.Games {
+			dts.nGames = dts.nGames + 1
 			for _, r := range g.Roms {
-				h.RecordValue(r.Size)
-				total++
+				dts.h.RecordValue(r.Size)
+				dts.nRoms = dts.nRoms + 1
+				dts.totalSize = dts.totalSize + uint64(r.Size)
+				if r.Size <= 4000 {
+					dts.nRomsBelow4k = dts.nRomsBelow4k + 1
+				}
 			}
 		}
 		return nil
@@ -112,9 +128,13 @@ func (rs *RombaService) depotstats(cmd *commander.Command, args []string) error 
 		return err
 	}
 
-	bs := h.CumulativeDistribution()
+	bs := dts.h.CumulativeDistribution()
 
-	fmt.Fprintf(cmd.Stdout, "number of roms=%d\n", total)
+	fmt.Fprintf(cmd.Stdout, "number of dats = %d\n", dts.nDats)
+	fmt.Fprintf(cmd.Stdout, "number of games = %d\n", dts.nGames)
+	fmt.Fprintf(cmd.Stdout, "number of roms = %d\n", dts.nRoms)
+	fmt.Fprintf(cmd.Stdout, "total rom size = %s\n", humanize.IBytes(dts.totalSize))
+	fmt.Fprintf(cmd.Stdout, "number of roms below 4k size = %d\n\n", dts.nRomsBelow4k)
 
 	fmt.Fprintf(cmd.Stdout, "rom size cumulative distribution = \n")
 	fmt.Fprintf(cmd.Stdout, "count, percentile, file size\n")
@@ -128,7 +148,7 @@ func (rs *RombaService) depotstats(cmd *commander.Command, args []string) error 
 		}
 	}
 
-	fmt.Fprintf(cmd.Stdout, "rom size histogram = \n")
+	fmt.Fprintf(cmd.Stdout, "\nrom size histogram = \n")
 	fmt.Fprintf(cmd.Stdout, "count, file size\n")
 	var lastCount int64
 	for _, b := range bs {

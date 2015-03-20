@@ -378,12 +378,12 @@ in -old DAT files. Ignores those entries in -old that are not in -new.`,
 	cmd.Subcommands[15].Flag.String("new", "", "new DAT file")
 
 	cmd.Subcommands[16] = &commander.Command{
-		Run:       rs.depotstats,
-		UsageLine: "depotstats",
-		Short:     "Prints depot stats.",
+		Run:       rs.datstats,
+		UsageLine: "datstats",
+		Short:     "Prints dat stats.",
 		Long: `
-Print depot stats.`,
-		Flag:   *flag.NewFlagSet("romba-depotstats", flag.ContinueOnError),
+Print dat stats.`,
+		Flag:   *flag.NewFlagSet("romba-datstats", flag.ContinueOnError),
 		Stdout: writer,
 		Stderr: writer,
 	}
