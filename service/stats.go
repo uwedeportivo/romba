@@ -117,6 +117,9 @@ func (rs *RombaService) datstats(cmd *commander.Command, args []string) error {
 	}
 
 	err = rs.romDB.ForEachDat(func(dat *types.Dat) error {
+		if dat.Generation != rs.romDB.Generation() {
+			return nil
+		}
 		dedat, err := dedup.Dedup(dat, deduper)
 		if err != nil {
 			return err
