@@ -56,7 +56,7 @@ func findLatestResumeLog(prefixStr, logDir string) (string, error) {
 		//archive-resume-2014-05-17-15_48_50.log
 		name := lf.Name()
 		if strings.HasPrefix(name, prefixStr) && strings.HasSuffix(name, ".log") {
-			dateStr := name[15 : len(name)-4]
+			dateStr := name[len(prefixStr) : len(name)-4]
 			tstamp, err := time.Parse("2006-01-02-15_04_05", dateStr)
 			if err != nil {
 				return "", err
