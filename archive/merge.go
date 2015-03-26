@@ -67,7 +67,7 @@ type mergeMaster struct {
 func (depot *Depot) Merge(paths []string, resumePath string, onlyneeded bool, numWorkers int,
 	logDir string, pt worker.ProgressTracker, skipInitialScan bool) (string, error) {
 
-	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("merge-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
+	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("merge-resume-%s.log", time.Now().Format(ResumeDateFormat)))
 	resumeLogFile, err := os.Create(resumeLogPath)
 	if err != nil {
 		return "", err

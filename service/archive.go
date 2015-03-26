@@ -41,6 +41,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
 	"github.com/uwedeportivo/commander"
+	"github.com/uwedeportivo/romba/archive"
 )
 
 func findLatestResumeLog(prefixStr, logDir string) (string, error) {
@@ -49,7 +50,7 @@ func findLatestResumeLog(prefixStr, logDir string) (string, error) {
 		return "", err
 	}
 
-	latestTs, _ := time.Parse("2006-01-02-15_04_05", "2010-01-02-15_04_05")
+	latestTs, _ := time.Parse(archive.ResumeDateFormat, "2010-01-02-15_04_05")
 	latestFile := ""
 
 	for _, lf := range lfs {
@@ -57,7 +58,7 @@ func findLatestResumeLog(prefixStr, logDir string) (string, error) {
 		name := lf.Name()
 		if strings.HasPrefix(name, prefixStr) && strings.HasSuffix(name, ".log") {
 			dateStr := name[len(prefixStr) : len(name)-4]
-			tstamp, err := time.Parse("2006-01-02-15_04_05", dateStr)
+			tstamp, err := time.Parse(archive.ResumeDateFormat, dateStr)
 			if err != nil {
 				return "", err
 			}

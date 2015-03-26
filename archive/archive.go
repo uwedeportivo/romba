@@ -58,6 +58,8 @@ import (
 	"github.com/uwedeportivo/torrentzip/czip"
 )
 
+const ResumeDateFormat = "2006-01-02-15_04_05"
+
 type completed struct {
 	path        string
 	workerIndex int
@@ -171,7 +173,7 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips int, 
 	onlyneeded bool, numWorkers int,
 	logDir string, pt worker.ProgressTracker, skipInitialScan bool, useGoZip bool, noDB bool) (string, error) {
 
-	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format("2006-01-02-15_04_05")))
+	resumeLogPath := filepath.Join(logDir, fmt.Sprintf("archive-resume-%s.log", time.Now().Format(ResumeDateFormat)))
 	resumeLogFile, err := os.Create(resumeLogPath)
 	if err != nil {
 		return "", err
