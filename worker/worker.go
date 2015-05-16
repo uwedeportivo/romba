@@ -37,6 +37,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -253,6 +254,10 @@ func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string)
 			handleErredFile(path)
 
 			if StopProcessing.Contains(err) {
+				w.pt.Stop(nil)
+			}
+
+			if e, ok := err.(*os.PathError); ok && e.Err == syscall.ENOSPC {
 				w.pt.Stop(nil)
 			}
 		}
