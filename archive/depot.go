@@ -52,6 +52,7 @@ type Depot struct {
 	roots    []string
 	sizes    []int64
 	maxSizes []int64
+	touched  []bool
 	romDB    db.RomDB
 	lock     *sync.Mutex
 	// where in the depot to reserve the next space
@@ -65,6 +66,7 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	depot.roots = make([]string, len(roots))
 	depot.sizes = make([]int64, len(roots))
 	depot.maxSizes = make([]int64, len(roots))
+	depot.touched = make([]bool, len(roots))
 
 	copy(depot.roots, roots)
 	copy(depot.maxSizes, maxSize)
@@ -203,9 +205,13 @@ func (depot *Depot) writeSizes() {
 	defer depot.lock.Unlock()
 
 	for k, root := range depot.roots {
-		err := writeSizeFile(root, depot.sizes[k])
-		if err != nil {
-			glog.Errorf("failed to write size file into %s: %v\n", root, err)
+		if depot.touched[k] {
+			err := writeSizeFile(root, depot.sizes[k])
+			if err != nil {
+				glog.Errorf("failed to write size file into %s: %v\n", root, err)
+			} else {
+				depot.touched[k] = false
+			}
 		}
 	}
 }
@@ -219,4 +225,6 @@ func (depot *Depot) adjustSize(index int, delta int64) {
 	if depot.sizes[index] < 0 {
 		depot.sizes[index] = 0
 	}
+
+	depot.touched[index] = true
 }
