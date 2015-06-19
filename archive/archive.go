@@ -41,7 +41,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -50,10 +49,10 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
+	"github.com/uwedeportivo/lzmadec"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/util"
 	"github.com/uwedeportivo/romba/worker"
-	"github.com/uwedeportivo/sevenzip"
 	"github.com/uwedeportivo/torrentzip/cgzip"
 	"github.com/uwedeportivo/torrentzip/czip"
 )
@@ -570,19 +569,17 @@ func (w *archiveWorker) archive7Zip(inpath string, size int64, addZipItself int)
 	var compressedSize int64
 
 	if addZipItself <= 1 {
-		zr, err := sevenzip.Open(inpath)
+		zr, err := lzmadec.NewArchive(inpath)
 		if err != nil {
 			return 0, err
 		}
-		defer zr.Close()
 
-		for _, zf := range zr.File {
-			glog.V(4).Infof("archiving 7zip %s: file %s ", inpath, zf.Name)
+		for index, zf := range zr.Entries {
+			glog.V(4).Infof("archiving 7zip %s: file %s ", inpath, zf.Path)
 
 			cs, err := w.archive(func() (io.ReadCloser, error) {
-				bb, err := zf.OpenUnsafe()
-				return ioutil.NopCloser(bb), err
-			}, zf.Name, filepath.Join(inpath, zf.Name), int64(zf.FileHeader.Size), w.hh, w.md5crcBuffer)
+				return zr.GetFileReader(index)
+			}, zf.Path, filepath.Join(inpath, zf.Path), int64(zf.Size), w.hh, w.md5crcBuffer)
 
 			if err != nil {
 				glog.Errorf("7zip error %s: %v", inpath, err)
