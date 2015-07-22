@@ -39,6 +39,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
 
 	"github.com/uwedeportivo/commander"
@@ -142,7 +143,7 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 	return nil
 }
 
-func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
+func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) error {
 	oldDatPath := cmd.Flag.Lookup("old").Value.Get().(string)
 	newDatPath := cmd.Flag.Lookup("new").Value.Get().(string)
 	outPath := cmd.Flag.Lookup("out").Value.Get().(string)
@@ -189,6 +190,8 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 			if err != nil {
 				return err
 			}
+
+			rs.pt.AddBytesFromFile(info.Size(), path, false)
 		}
 		return nil
 	})
@@ -220,8 +223,11 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 			}
 
 			if oneDiffDat != nil {
-				return writeDiffDat(oneDiffDat, filepath.Join(outPath, oneDiffDat.Name+".dat"))
+				err = writeDiffDat(oneDiffDat, filepath.Join(outPath, oneDiffDat.Name+".dat"))
 			}
+
+			rs.pt.AddBytesFromFile(info.Size(), path, err != nil)
+			return err
 		}
 		return nil
 	})
@@ -229,9 +235,61 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 		return err
 	}
 
-	glog.Infof("ediffdat finished")
-	fmt.Fprintf(cmd.Stdout, "ediffdat finished")
-	rs.broadCastProgress(time.Now(), false, true, "ediffdat finished")
+	return nil
+}
+
+func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	if rs.busy {
+		p := rs.pt.GetProgress()
+
+		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+			p.FilesSoFar, p.TotalFiles, humanize.IBytes(uint64(p.BytesSoFar)), humanize.IBytes(uint64(p.TotalBytes)))
+		return nil
+	}
+
+	rs.pt.Reset()
+	rs.busy = true
+	rs.jobName = "ediffdat"
+
+	go func() {
+		ticker := time.NewTicker(time.Second * 5)
+		stopTicker := make(chan bool)
+		go func() {
+			glog.Infof("starting progress broadcaster")
+			for {
+				select {
+				case t := <-ticker.C:
+					rs.broadCastProgress(t, false, false, "")
+				case <-stopTicker:
+					glog.Info("stopped progress broadcaster")
+					return
+				}
+			}
+		}()
+
+		err := rs.ediffdatWork(cmd, args)
+		if err != nil {
+			glog.Errorf("error ediffdats: %v", err)
+		}
+
+		ticker.Stop()
+		stopTicker <- true
+
+		rs.jobMutex.Lock()
+		rs.busy = false
+		rs.jobName = ""
+		rs.jobMutex.Unlock()
+
+		glog.Infof("ediffdat finished")
+		rs.pt.Finished()
+		rs.broadCastProgress(time.Now(), false, true, "ediffdat finished")
+	}()
+
+	glog.Infof("service starting ediffdat")
+	fmt.Fprintf(cmd.Stdout, "started ediffdat")
 
 	return nil
 }
