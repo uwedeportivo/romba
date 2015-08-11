@@ -36,6 +36,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/golang/glog"
@@ -302,7 +303,15 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 		var dstWriter io.WriteCloser
 
 		if unzipGame {
-			dst, err := os.Create(filepath.Join(gamePath, rom.Name))
+			romPath := filepath.Join(gamePath, rom.Name)
+			if strings.ContainsRune(rom.Name, filepath.Separator) {
+				err := os.MkdirAll(filepath.Dir(romPath), 0777)
+				if err != nil {
+					glog.Errorf("error mkdir %s: %v", filepath.Dir(romPath), err)
+					return nil, false, err
+				}
+			}
+			dst, err := os.Create(romPath)
 			if err != nil {
 				glog.Errorf("error creating destination rom file %s: %v", dst, err)
 				return nil, false, err
