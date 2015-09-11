@@ -31,13 +31,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package main
 
 import (
-	"code.google.com/p/gcfg"
 	"flag"
 	"fmt"
-	"github.com/uwedeportivo/romba/archive"
-	"github.com/uwedeportivo/romba/db"
 	"log"
 	"os"
+
+	"github.com/scalingdata/gcfg"
+	"github.com/uwedeportivo/romba/archive"
+	"github.com/uwedeportivo/romba/db"
 )
 
 const (

@@ -42,10 +42,10 @@ import (
 	"sync"
 	"time"
 
-	"code.google.com/p/go.net/websocket"
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
 	"github.com/uwedeportivo/commander"
+	"golang.org/x/net/websocket"
 
 	"github.com/uwedeportivo/romba/archive"
 	"github.com/uwedeportivo/romba/config"

@@ -43,10 +43,10 @@ import (
 	"strconv"
 	"syscall"
 
-	"code.google.com/p/gcfg"
-	"code.google.com/p/go.net/websocket"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
+	"github.com/scalingdata/gcfg"
+	"golang.org/x/net/websocket"
 
 	"github.com/golang/glog"
 
