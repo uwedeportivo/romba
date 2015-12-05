@@ -49,6 +49,7 @@ type Dat struct {
 	Generation    int64
 	Path          string
 	Software      GameSlice `xml:"software"`
+	Machines      GameSlice `xml:"machine"`
 	UnzipGames    bool
 	FixDat        bool
 	MissingSha1s  bool
@@ -185,6 +186,11 @@ func (d *Dat) Normalize() {
 	if d.Software != nil {
 		d.Games = append(d.Games, d.Software...)
 		d.Software = nil
+	}
+
+	if d.Machines != nil {
+		d.Games = append(d.Games, d.Machines...)
+		d.Machines = nil
 	}
 	sort.Sort(d.Games)
 
