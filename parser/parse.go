@@ -230,9 +230,6 @@ func (p *parser) datStmt() error {
 			if err != nil {
 				return err
 			}
-			if strings.ContainsAny(p.d.Name, "/") {
-				return fmt.Errorf("/ is not allowed in name: %s", p.d.Name)
-			}
 		case i.typ == itemDescription:
 			p.d.Description, err = p.consumeStringValue()
 			if err != nil {
@@ -546,10 +543,6 @@ func ParseXml(r io.Reader, path string) (*types.Dat, []byte, error) {
 		derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, lr.line, err)
 		derr := XMLParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(lr.line))
 		return nil, nil, derr
-	}
-
-	if strings.ContainsAny(d.Name, "/") {
-		return nil, nil, fmt.Errorf("/ is not allowed in name: %s", d.Name)
 	}
 
 	for _, g := range d.Games {

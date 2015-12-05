@@ -43,6 +43,7 @@ type Clrmamepro struct {
 
 type Dat struct {
 	Name          string      `xml:"header>name"`
+	OriginalName  string
 	Description   string      `xml:"header>description"`
 	Clr           *Clrmamepro `xml:"header>clrmamepro"`
 	Games         GameSlice   `xml:"game"`
@@ -174,6 +175,12 @@ func (d *Dat) Normalize() {
 	if d.SLName != "" {
 		d.Name = d.SLName
 	}
+
+	if strings.ContainsAny(d.Name, "/") {
+		d.OriginalName = d.Name
+		d.Name = strings.Replace(d.Name, "/", "-", -1)
+	}
+	
 	if d.SLDescription != "" {
 		d.Description = d.SLDescription
 	}
@@ -276,6 +283,7 @@ func (d *Dat) FilterRoms(fn func(*Rom) bool) *Dat {
 
 func (d *Dat) CopyHeader(src *Dat) {
 	d.Name = src.Name
+	d.OriginalName = src.OriginalName
 	d.Path = src.Path
 	d.Description = src.Description
 	d.FixDat = src.FixDat
