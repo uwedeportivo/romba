@@ -239,6 +239,7 @@ func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string)
 	for wu := range inwork {
 		path := wu.path
 
+		w.pt.AddBytesFromFile(0, path, false)
 		if glog.V(3) {
 			glog.Infof("processing file %s", path)
 		}
@@ -262,7 +263,7 @@ func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string)
 			}
 		}
 
-		w.pt.AddBytesFromFile(wu.size, path, erred)
+		w.pt.AddBytesFromFile(wu.size, "", erred)
 
 		if glog.V(3) {
 			glog.Infof("finished processing file %s", path)

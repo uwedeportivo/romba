@@ -89,8 +89,10 @@ func (pt *Progress) AddBytesFromFile(value int64, path string, erred bool) {
 	pt.BytesSoFar += value
 	pt.FilesSoFar++
 
-	pt.rng.Value = path
-	pt.rng = pt.rng.Next()
+	if path != "" {
+		pt.rng.Value = path
+		pt.rng = pt.rng.Next()
+	}
 
 	if erred {
 		pt.ErrorFiles++
