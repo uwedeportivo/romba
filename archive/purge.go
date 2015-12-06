@@ -58,35 +58,55 @@ type purgeMaster struct {
 }
 
 type romsFromDatIterator struct {
-	dat        *types.Dat
+	dats       []*types.Dat
+	datCursor  int
 	gameCursor int
 	romCursor  int
 	depot      *Depot
 }
 
-func (rdi *romsFromDatIterator) inc() {
-	rdi.romCursor = rdi.romCursor + 1
-	for {
-		if rdi.gameCursor == len(rdi.dat.Games) {
-			return
-		}
-		g := rdi.dat.Games[rdi.gameCursor]
-		if rdi.romCursor == len(g.Roms) {
-			rdi.romCursor = 0
-			rdi.gameCursor = rdi.gameCursor + 1
-		} else {
-			return
-		}
+func newRomsFromDatIterator(depot *Depot, dats []*types.Dat) *romsFromDatIterator {
+	rdi := &romsFromDatIterator{
+		depot: depot,
+		dats:  dats,
 	}
+	rdi.romCursor = -1
+
+	rdi.datCursor, rdi.gameCursor, rdi.romCursor = rdi.position()
+	return rdi
+}
+
+func (rdi *romsFromDatIterator) position() (datCursor int, gameCursor int, romCursor int) {
+	datCursor = rdi.datCursor
+	gameCursor = rdi.gameCursor
+	romCursor = rdi.romCursor + 1
+
+	for datCursor < len(rdi.dats) {
+		for gameCursor < len(rdi.dats[datCursor].Games) {
+			if romCursor < len(rdi.dats[datCursor].Games[gameCursor].Roms) {
+				return
+			} else {
+				romCursor = 0
+				gameCursor++
+			}
+		}
+		romCursor = 0
+		gameCursor = 0
+		datCursor++
+	}
+	return
 }
 
 func (rdi *romsFromDatIterator) Next() (string, bool, error) {
-	if rdi.gameCursor == len(rdi.dat.Games) {
+	if rdi.datCursor == len(rdi.dats) {
 		return "", false, nil
 	}
-	g := rdi.dat.Games[rdi.gameCursor]
+
+	d := rdi.dats[rdi.datCursor]
+	g := d.Games[rdi.gameCursor]
 	r := g.Roms[rdi.romCursor]
-	rdi.inc()
+
+	rdi.datCursor, rdi.gameCursor, rdi.romCursor = rdi.position()
 
 	if r.Sha1 == nil {
 		err := rdi.depot.romDB.CompleteRom(r)
@@ -112,11 +132,14 @@ func (rdi *romsFromDatIterator) Next() (string, bool, error) {
 }
 
 func (rdi *romsFromDatIterator) Reset() {
+	rdi.datCursor = 0
 	rdi.gameCursor = 0
-	rdi.romCursor = 0
+	rdi.romCursor = -1
+
+	rdi.datCursor, rdi.gameCursor, rdi.romCursor = rdi.position()
 }
 
-func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fromDat string,
+func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fromDats string,
 	pt worker.ProgressTracker) (string, error) {
 	pm := new(purgeMaster)
 	pm.depot = depot
@@ -139,21 +162,30 @@ func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fr
 		return "", err
 	}
 
-	if fromDat == "" {
+	if fromDats == "" {
 		wds := depot.roots
 		if len(workDepot) > 0 {
 			wds = []string{workDepot}
 		}
 		return worker.Work("purge roms", wds, pm)
 	} else {
-		dat, _, err := parser.Parse(fromDat)
+		var dats []*types.Dat
+
+		err = filepath.Walk(fromDats, func(path string, info os.FileInfo, err error) error {
+			if !info.IsDir() && (strings.HasSuffix(path, ".dat") || strings.HasSuffix(path, ".xml")) {
+				dat, _, err := parser.Parse(path)
+				if err != nil {
+					return err
+				}
+				dats = append(dats, dat)
+			}
+			return nil
+		})
 		if err != nil {
 			return "", err
 		}
-		rdi := &romsFromDatIterator{
-			dat:   dat,
-			depot: depot,
-		}
+
+		rdi := newRomsFromDatIterator(depot, dats)
 		return worker.WorkPathIterator("purge roms", rdi, pm)
 	}
 }
