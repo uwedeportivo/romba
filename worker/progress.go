@@ -38,7 +38,8 @@ import (
 type ProgressTracker interface {
 	SetTotalBytes(value int64)
 	SetTotalFiles(value int32)
-	AddBytesFromFile(value int64, path string, erred bool)
+	AddBytesFromFile(value int64, erred bool)
+	DeclareFile(path string)
 	Finished()
 	Reset()
 	GetProgress() *Progress
@@ -82,17 +83,22 @@ func (pt *Progress) SetTotalFiles(value int32) {
 	pt.knowTotal = true
 }
 
-func (pt *Progress) AddBytesFromFile(value int64, path string, erred bool) {
+func (pt *Progress) DeclareFile(path string) {
 	pt.m.Lock()
 	defer pt.m.Unlock()
-
-	pt.BytesSoFar += value
-	pt.FilesSoFar++
 
 	if path != "" {
 		pt.rng.Value = path
 		pt.rng = pt.rng.Next()
 	}
+}
+
+func (pt *Progress) AddBytesFromFile(value int64, erred bool) {
+	pt.m.Lock()
+	defer pt.m.Unlock()
+
+	pt.BytesSoFar += value
+	pt.FilesSoFar++
 
 	if erred {
 		pt.ErrorFiles++

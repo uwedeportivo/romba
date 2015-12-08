@@ -181,6 +181,8 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 
 		ext := filepath.Ext(path)
 		if ext == ".dat" || ext == ".xml" {
+			rs.pt.DeclareFile(path)
+
 			oldDat, _, err := parser.Parse(path)
 			if err != nil {
 				return err
@@ -191,7 +193,7 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 				return err
 			}
 
-			rs.pt.AddBytesFromFile(info.Size(), path, false)
+			rs.pt.AddBytesFromFile(info.Size(), false)
 		}
 		return nil
 	})
@@ -206,6 +208,8 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 
 		ext := filepath.Ext(path)
 		if ext == ".dat" || ext == ".xml" {
+			rs.pt.DeclareFile(path)
+
 			newDat, _, err := parser.Parse(path)
 			if err != nil {
 				return err
@@ -226,7 +230,7 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 				err = writeDiffDat(oneDiffDat, filepath.Join(outPath, oneDiffDat.Name+".dat"))
 			}
 
-			rs.pt.AddBytesFromFile(info.Size(), path, err != nil)
+			rs.pt.AddBytesFromFile(info.Size(), err != nil)
 			return err
 		}
 		return nil
