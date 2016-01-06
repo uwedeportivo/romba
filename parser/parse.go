@@ -569,6 +569,18 @@ func ParseXml(r io.Reader, path string) (*types.Dat, []byte, error) {
 		}
 	}
 
+	for _, g := range d.Machines {
+		for _, rom := range g.Roms {
+			fixHashes(rom)
+		}
+		for _, rom := range g.Parts {
+			fixHashes(rom)
+		}
+		for _, rom := range g.Regions {
+			fixHashes(rom)
+		}
+	}
+
 	d.Normalize()
 	d.Path = path
 	return d, hr.h.Sum(nil), nil
