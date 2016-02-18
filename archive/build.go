@@ -40,11 +40,11 @@ import (
 	"sync"
 
 	"github.com/golang/glog"
+	"github.com/klauspost/compress/gzip"
 	"github.com/uwedeportivo/romba/config"
 	"github.com/uwedeportivo/romba/dedup"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/torrentzip"
-	"github.com/uwedeportivo/torrentzip/cgzip"
 )
 
 type gameBuilder struct {
@@ -294,7 +294,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 
 		foundRom = true
 
-		src, err := cgzip.NewReader(romGZ)
+		src, err := gzip.NewReader(romGZ)
 		if err != nil {
 			glog.Errorf("error opening rom gz file %s: %v", rom.Name, err)
 			return nil, false, err

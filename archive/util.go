@@ -35,16 +35,16 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/hex"
-	"hash/crc32"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/crc32"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/util"
-	"github.com/uwedeportivo/torrentzip/cgzip"
 )
 
 const (
@@ -84,7 +84,7 @@ func (hh *Hashes) forReader(in io.Reader) error {
 
 	hSha1 := sha1.New()
 	hMd5 := md5.New()
-	hCrc := cgzip.NewCrc32()
+	hCrc := crc32.NewIEEE()
 
 	w := io.MultiWriter(hSha1, hMd5, hCrc)
 
@@ -107,7 +107,7 @@ func HashesForGZFile(inpath string) (*Hashes, error) {
 	}
 	defer file.Close()
 
-	gzipReader, err := cgzip.NewReader(file)
+	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
 		return nil, err
 	}
@@ -145,21 +145,13 @@ func HashesFromGZHeader(inpath string, md5crcBuffer []byte) (*Hashes, int64, err
 	}
 	defer romGZ.Close()
 
-	gzr, err := cgzip.NewReader(romGZ)
+	gzr, err := gzip.NewReader(romGZ)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer gzr.Close()
 
-	err = gzr.RequestExtraHeader(md5crcBuffer)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	gzbuf := make([]byte, 1024)
-	gzr.Read(gzbuf)
-
-	md5crcBuffer = gzr.GetExtraHeader()
+	md5crcBuffer = gzr.Header.Extra
 
 	var hh *Hashes
 	var size int64

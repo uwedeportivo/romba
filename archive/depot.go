@@ -41,7 +41,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
-	"github.com/uwedeportivo/torrentzip/cgzip"
+	"github.com/klauspost/compress/gzip"
 
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/types"
@@ -132,22 +132,13 @@ func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, int64, e
 			}
 			defer romGZ.Close()
 
-			gzr, err := cgzip.NewReader(romGZ)
+			gzr, err := gzip.NewReader(romGZ)
 			if err != nil {
 				return false, nil, "", 0, err
 			}
 			defer gzr.Close()
 
-			md5crcBuffer := make([]byte, md5.Size+crc32.Size+8)
-			err = gzr.RequestExtraHeader(md5crcBuffer)
-			if err != nil {
-				return false, nil, "", 0, err
-			}
-
-			gzbuf := make([]byte, 1024)
-			gzr.Read(gzbuf)
-
-			md5crcBuffer = gzr.GetExtraHeader()
+			md5crcBuffer := gzr.Header.Extra
 
 			if len(md5crcBuffer) == md5.Size+crc32.Size+8 {
 				hh.Md5 = make([]byte, md5.Size)

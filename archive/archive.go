@@ -49,11 +49,11 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
+	"github.com/klauspost/compress/gzip"
 	"github.com/uwedeportivo/lzmadec"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/util"
 	"github.com/uwedeportivo/romba/worker"
-	"github.com/uwedeportivo/torrentzip/cgzip"
 	"github.com/uwedeportivo/torrentzip/czip"
 )
 
@@ -607,7 +607,7 @@ func stripExt(path string) string {
 
 type gzipReadCloser struct {
 	file *os.File
-	zr   *cgzip.Reader
+	zr   *gzip.Reader
 }
 
 func (grc *gzipReadCloser) Close() error {
@@ -633,7 +633,7 @@ func openGzipReadCloser(inpath string) (io.ReadCloser, error) {
 		f.Close()
 		return nil, err
 	}
-	zr, err := cgzip.NewReader(f)
+	zr, err := gzip.NewReader(f)
 	if err != nil {
 		f.Close()
 		return nil, err
@@ -729,13 +729,10 @@ func archive(outpath string, r io.Reader, extra []byte) (int64, error) {
 
 	bufout := bufio.NewWriter(cw)
 
-	zipWriter := cgzip.NewWriter(bufout)
+	zipWriter := gzip.NewWriter(bufout)
 
 	if len(extra) > 0 {
-		err = zipWriter.SetExtraHeader(extra)
-		if err != nil {
-			return 0, err
-		}
+		zipWriter.Header.Extra = extra
 	}
 
 	_, err = io.Copy(zipWriter, br)
