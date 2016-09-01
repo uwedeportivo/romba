@@ -59,6 +59,7 @@ type Hashes struct {
 	Crc  []byte
 	Md5  []byte
 	Sha1 []byte
+	Size int64
 }
 
 func newHashes() *Hashes {
@@ -87,8 +88,11 @@ func (hh *Hashes) forReader(in io.Reader) error {
 	hCrc := crc32.NewIEEE()
 
 	w := io.MultiWriter(hSha1, hMd5, hCrc)
+	cw := &countWriter{
+		w: w,
+	}
 
-	_, err := io.Copy(w, br)
+	_, err := io.Copy(cw, br)
 	if err != nil {
 		return err
 	}
@@ -96,6 +100,7 @@ func (hh *Hashes) forReader(in io.Reader) error {
 	hh.Crc = hCrc.Sum(hh.Crc[0:0])
 	hh.Md5 = hMd5.Sum(hh.Md5[0:0])
 	hh.Sha1 = hSha1.Sum(hh.Sha1[0:0])
+	hh.Size = cw.count
 
 	return nil
 }

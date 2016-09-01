@@ -328,6 +328,11 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 		return 0, err
 	}
 
+	// if filestat size is different than size read then size read wins
+	if size != hh.Size {
+		size = hh.Size
+	}
+
 	copy(md5crcBuffer[0:md5.Size], hh.Md5)
 	copy(md5crcBuffer[md5.Size:md5.Size+crc32.Size], hh.Crc)
 	util.Int64ToBytes(size, md5crcBuffer[md5.Size+crc32.Size:])
