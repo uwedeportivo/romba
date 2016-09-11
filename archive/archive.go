@@ -736,6 +736,9 @@ func archive(outpath string, r io.Reader, extra []byte) (int64, error) {
 
 	zipWriter := gzip.NewWriter(bufout)
 
+	zipWriter.Header.ModTime = time.Time{}
+	zipWriter.Header.OS = 0
+
 	if len(extra) > 0 {
 		zipWriter.Header.Extra = extra
 	}
