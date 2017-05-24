@@ -46,6 +46,7 @@ import (
 	"github.com/uwedeportivo/romba/dedup"
 	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/types"
+	"github.com/uwedeportivo/romba/worker"
 )
 
 func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
@@ -227,7 +228,15 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 			}
 
 			if oneDiffDat != nil {
-				err = writeDiffDat(oneDiffDat, filepath.Join(outPath, oneDiffDat.Name+".dat"))
+				commonRoot := worker.CommonRoot(path, outPath)
+				destDir := filepath.Join(outPath, filepath.Dir(strings.TrimPrefix(path, commonRoot)))
+				err := os.Mkdir(destDir, 0777)
+				if err != nil {
+					glog.Errorf("error mkdir %s: %v", destDir, err)
+					return err
+				}
+
+				err = writeDiffDat(oneDiffDat, filepath.Join(destDir, oneDiffDat.Name+".dat"))
 			}
 
 			rs.pt.AddBytesFromFile(info.Size(), err != nil)
