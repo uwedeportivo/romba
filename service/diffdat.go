@@ -230,7 +230,7 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 			if oneDiffDat != nil {
 				commonRoot := worker.CommonRoot(path, outPath)
 				destDir := filepath.Join(outPath, filepath.Dir(strings.TrimPrefix(path, commonRoot)))
-				err := os.Mkdir(destDir, 0777)
+				err := os.MkdirAll(destDir, 0777)
 				if err != nil {
 					glog.Errorf("error mkdir %s: %v", destDir, err)
 					return err
