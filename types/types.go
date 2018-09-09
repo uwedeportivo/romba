@@ -32,6 +32,7 @@ package types
 
 import (
 	"bytes"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -289,6 +290,13 @@ func (d *Dat) CopyHeader(src *Dat) {
 	d.FixDat = src.FixDat
 	d.Generation = src.Generation
 	d.UnzipGames = src.UnzipGames
+}
+
+func (d *Dat) Filename() string {
+	if d.Path != "" {
+		return filepath.Base(d.Path)
+	}
+	return d.Name
 }
 
 func (g *Game) CopyHeader(src *Game) {

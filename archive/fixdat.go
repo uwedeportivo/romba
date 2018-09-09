@@ -142,7 +142,7 @@ endLoop2:
 	}
 
 	if len(fixDat.Games) > 0 {
-		fixDatPath := filepath.Join(outpath, fixPrefix+dat.Name+datSuffix)
+		fixDatPath := filepath.Join(outpath, fixPrefix+dat.Filename()+datSuffix)
 
 		fixFile, err := os.Create(fixDatPath)
 		if err != nil {
