@@ -2,3 +2,6 @@ language: go
 
 go:
   - "1.11"
+
+before_install:
+  - ./travis.sh
