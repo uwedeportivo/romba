@@ -313,7 +313,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 			}
 			dst, err := os.Create(romPath)
 			if err != nil {
-				glog.Errorf("error creating destination rom file %s: %v", dst, err)
+				glog.Errorf("error creating destination rom file %s: %v", dst.Name(), err)
 				return nil, false, err
 			}
 			dstWriter = dst

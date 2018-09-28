@@ -395,9 +395,7 @@ func TestParseRomNoHashXml(t *testing.T) {
 		t.Fatalf("error parsing test data: %v", err)
 	}
 
-	r := dat.Games[0].Roms[0]
-
-	if !(r.Size > 0 && len(r.Crc) == 0 && len(r.Md5) == 0 && len(r.Sha1) == 0) {
-		t.Fatalf("parsed rom hashes not nil")
+	if len(dat.Games[0].Roms) > 0 {
+		t.Fatalf("parsed rom without hashes")
 	}
 }

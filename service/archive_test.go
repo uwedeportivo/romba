@@ -36,7 +36,7 @@ import (
 )
 
 func TestLatestResumeFile(t *testing.T) {
-	latest, err := findLatestResumeLog("testdata")
+	latest, err := findLatestResumeLog("archive-resume-","testdata")
 	if err != nil {
 		t.Errorf("findLatestResumeLog failed with %v", err)
 	}

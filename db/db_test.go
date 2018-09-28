@@ -41,7 +41,7 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/uwedeportivo/romba/db/kyoto"
+	_ "github.com/uwedeportivo/romba/db/clevel"
 )
 
 const datText = `

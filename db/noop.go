@@ -62,7 +62,7 @@ func (noop *NoOpDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	return nil, nil
 }
 
-func (noop *NoOpDB) FilteredDatsForRom(rom *types.Rom) ([]*types.Dat, []*types.Dat, error) {
+func (noop *NoOpDB) FilteredDatsForRom(rom *types.Rom, filter func(*types.Dat) bool) ([]*types.Dat, []*types.Dat, error) {
 	return nil, nil, nil
 }
 
@@ -109,3 +109,21 @@ func (noop *NoOpDB) JoinCrcMd5(combiner combine.Combiner) error {
 func (noop *NoOpDB) NumRoms() int64 {
 	return 0
 }
+
+func (noop *NoOpDB) BeginDatRefresh() error {
+	return nil
+}
+
+func (noop *NoOpDB) EndDatRefresh() error {
+	return nil
+}
+
+func (noop *NoOpDB) CompleteRom(rom *types.Rom) error {
+	return nil
+}
+
+func (noop *NoOpDB) Flush() {}
+
+func (noop *NoOpDB) Generation() int64 { return 0 }
+
+func (noop *NoOpDB) PrintStats() string { return "" }
