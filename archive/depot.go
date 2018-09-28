@@ -53,7 +53,7 @@ type Depot struct {
 	sizes    []int64
 	maxSizes []int64
 	touched  []bool
-	romDB    db.RomDB
+	RomDB    db.RomDB
 	lock     *sync.Mutex
 	// where in the depot to reserve the next space
 	// when archiving
@@ -87,7 +87,7 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 			humanize.IBytes(uint64(depot.maxSizes[k])), humanize.IBytes(uint64(depot.sizes[k])))
 	}
 
-	depot.romDB = romDB
+	depot.RomDB = romDB
 	depot.lock = new(sync.Mutex)
 	glog.Info("Depot init finished")
 	return depot, nil

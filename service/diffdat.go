@@ -236,7 +236,7 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 					return err
 				}
 
-				err = writeDiffDat(oneDiffDat, filepath.Join(destDir, oneDiffDat.Name+".dat"))
+				err = writeDat(oneDiffDat, filepath.Join(destDir, oneDiffDat.Name+".dat"))
 			}
 
 			rs.pt.AddBytesFromFile(info.Size(), err != nil)
@@ -307,17 +307,17 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 	return nil
 }
 
-func writeDiffDat(diffDat *types.Dat, outPath string) error {
-	diffDat.Path = outPath
+func writeDat(dat *types.Dat, outPath string) error {
+	dat.Path = outPath
 
-	diffFile, err := os.Create(outPath)
+	file, err := os.Create(outPath)
 	if err != nil {
 		return err
 	}
-	defer diffFile.Close()
+	defer file.Close()
 
-	diffWriter := bufio.NewWriter(diffFile)
-	defer diffWriter.Flush()
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
 
-	return types.ComposeCompliantDat(diffDat, diffWriter)
+	return types.ComposeCompliantDat(dat, writer)
 }

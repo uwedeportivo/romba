@@ -350,7 +350,7 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 
 	if !w.pm.noDB {
 		if w.pm.onlyneeded {
-			dats, err := w.depot.romDB.DatsForRom(rom)
+			dats, err := w.depot.RomDB.DatsForRom(rom)
 			if err != nil {
 				return 0, err
 			}
@@ -360,7 +360,7 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 			}
 		}
 
-		err = w.depot.romDB.IndexRom(rom)
+		err = w.depot.RomDB.IndexRom(rom)
 		if err != nil {
 			return 0, err
 		}

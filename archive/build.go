@@ -241,7 +241,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 	foundRom := false
 
 	for _, rom := range game.Roms {
-		err = depot.romDB.CompleteRom(rom)
+		err = depot.RomDB.CompleteRom(rom)
 		if err != nil {
 			glog.Errorf("error completing rom %s: %v", rom.Name, err)
 			return nil, false, err
