@@ -33,7 +33,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	"github.com/uwedeportivo/romba/worker"
 	"os"
 
 	"github.com/scalingdata/gcfg"
@@ -89,7 +89,7 @@ func main() {
 		config.Depot.MaxSize[i] *= int64(archive.GB)
 	}
 
-	depot, err := archive.NewDepot(config.Depot.Root, config.Depot.MaxSize, new(db.NoOpDB), 8)
+	depot, err := archive.NewDepot(config.Depot.Root, config.Depot.MaxSize, new(db.NoOpDB))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "creating depot failed: %v\n", err)
 		os.Exit(1)
@@ -109,10 +109,12 @@ func main() {
 	}
 	defer archiveLoggerFile.Close()
 
-	err = depot.Archive(flag.Args(), *resume, log.New(resumeLoggerFile, "", 0), log.New(archiveLoggerFile, "", 0))
+	msg, err := depot.Archive(flag.Args(), *resume, 1, 1, 1,
+		false, 1, ".",
+		worker.NewProgressTracker(1), false, false, true)
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "archiving failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "archiving failed: %s %v\n", msg, err)
 		os.Exit(1)
 	}
 }

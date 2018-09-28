@@ -192,7 +192,7 @@ func (rs *RombaService) Execute(r *http.Request, req *TerminalRequest, reply *Te
 }
 
 func runCmd(cmd *commander.Command, args []string) error {
-	fmt.Fprintf(cmd.Stdout, "command %s with args %s not implemented yet\n", cmd.Name, strings.Join(args, " "))
+	fmt.Fprintf(cmd.Stdout, "command %s with args %s not implemented yet\n", cmd.Name(), strings.Join(args, " "))
 	return nil
 }
 

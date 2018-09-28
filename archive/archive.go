@@ -445,7 +445,7 @@ func (zw *zipWorker) Work() {
 		glog.V(4).Infof("subworker %d: done archiving zip %s: file %s", zw.index, zw.inpath, zf.FileInfo().Name())
 	}
 
-	glog.V(4).Infof("stopped subworker %d for zip %s", zw.index, zw.inpath, nrProcessed)
+	glog.V(4).Infof("stopped subworker %d for zip %s, nrProcessed %d", zw.index, zw.inpath, nrProcessed)
 	zw.out <- zipWorkResult{compressedSize, perr, nrProcessed}
 }
 

@@ -95,8 +95,10 @@ func (pm *parseMaster) Start() error {
 func (pm *parseMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
 
 func (pm *parseMaster) ProgressTracker() worker.ProgressTracker {
-	return worker.NewProgressTracker()
+	return worker.NewProgressTracker(1)
 }
+
+func (pm *parseMaster) CalculateWork() bool { return false}
 
 func main() {
 	flag.Usage = usage

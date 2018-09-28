@@ -35,7 +35,7 @@ import (
 )
 
 func executeTestCommonRoot(pa, pb, expected string, t *testing.T) {
-	c := commonRoot(pa, pb)
+	c := CommonRoot(pa, pb)
 
 	if c != expected {
 		t.Fatalf("expected = %s, got = %s;     a = %s, b = %s", expected, c, pa, pb)
