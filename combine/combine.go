@@ -28,84 +28,12 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package db
+package combine
 
-import (
-	"github.com/uwedeportivo/romba/combine"
-	"github.com/uwedeportivo/romba/types"
-)
+import "github.com/uwedeportivo/romba/types"
 
-type NoOpDB struct{}
-type NoOpBatch struct{}
-
-func (noop *NoOpDB) IndexRom(rom *types.Rom) error {
-	return nil
-}
-
-func (noop *NoOpDB) IndexDat(dat *types.Dat, sha1 []byte) error {
-	return nil
-}
-
-func (noop *NoOpDB) OrphanDats() error {
-	return nil
-}
-
-func (noop *NoOpDB) Close() error {
-	return nil
-}
-
-func (noop *NoOpDB) GetDat(sha1 []byte) (*types.Dat, error) {
-	return nil, nil
-}
-
-func (noop *NoOpDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
-	return nil, nil
-}
-
-func (noop *NoOpDB) FilteredDatsForRom(rom *types.Rom) ([]*types.Dat, []*types.Dat, error) {
-	return nil, nil, nil
-}
-
-func (noop *NoOpDB) StartBatch() RomBatch {
-	return new(NoOpBatch)
-}
-
-func (noop *NoOpBatch) Flush() error {
-	return nil
-}
-
-func (noop *NoOpBatch) Close() error {
-	return nil
-}
-
-func (noop *NoOpBatch) IndexRom(rom *types.Rom) error {
-	return nil
-}
-
-func (noop *NoOpBatch) IndexDat(dat *types.Dat, sha1 []byte) error {
-	return nil
-}
-
-func (noop *NoOpBatch) Size() int64 {
-	return 0
-}
-
-func (noop *NoOpDB) DebugGet(key []byte, size int64) string {
-	return ""
-}
-
-func (noop *NoOpDB) ResolveHash(key []byte) ([]byte, error) {
-	return nil, nil
-}
-
-func (noop *NoOpDB) ForEachDat(datF func(dat *types.Dat) error) error {
-	return nil
-}
-
-func (noop *NoOpDB) JoinCrcMd5(combiner combine.Combiner) error {
-	return nil
-}
-
-func (noop *NoOpDB) NumRoms() int64 {
-	return 0
+type Combiner interface {
+	Declare(rom *types.Rom) error
+	ForEachRom(romF func(rom *types.Rom) error) error
+	Close() error
 }

@@ -33,6 +33,7 @@ package db
 import (
 	"bufio"
 	"fmt"
+	"github.com/uwedeportivo/romba/combine"
 	"io"
 	"io/ioutil"
 	"os"
@@ -78,6 +79,8 @@ type RomDB interface {
 	DebugGet(key []byte, size int64) string
 	ResolveHash(key []byte) ([]byte, error)
 	ForEachDat(datF func(dat *types.Dat) error) error
+	JoinCrcMd5(combiner combine.Combiner) error
+	NumRoms() int64
 }
 
 var DBFactory func(path string) (RomDB, error)

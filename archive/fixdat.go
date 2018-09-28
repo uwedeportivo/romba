@@ -170,7 +170,7 @@ func (depot *Depot) fixdatGame(game *types.Game, gamePath string,
 	var fixGame *types.Game
 
 	for _, rom := range game.Roms {
-		err = depot.romDB.CompleteRom(rom)
+		err = depot.RomDB.CompleteRom(rom)
 		if err != nil {
 			glog.Errorf("error completing rom %s: %v", rom.Name, err)
 			return nil, err

@@ -37,6 +37,7 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
+	"github.com/uwedeportivo/romba/combine"
 	"hash/crc32"
 	"path/filepath"
 
@@ -653,4 +654,42 @@ func (kvdb *kvStore) ForEachDat(datF func(dat *types.Dat) error) error {
 		}
 		return true, nil
 	})
+}
+
+func (kvdb *kvStore) JoinCrcMd5(combiner combine.Combiner) error {
+	glog.V(4).Infof("leveldb combiner processing crc mappings")
+	err := kvdb.crcsha1DB.Iterate(func(key, value []byte) (bool, error) {
+		rom := new(types.Rom)
+
+		rom.Sha1 = key[crc32.Size + 8:]
+		rom.Crc = key[:crc32.Size]
+		rom.Size = util.BytesToInt64(key[crc32.Size:crc32.Size+8])
+
+		err := combiner.Declare(rom)
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	})
+	if err != nil {
+		return err
+	}
+	glog.V(4).Infof("leveldb combiner processing md5 mappings")
+	return kvdb.md5sha1DB.Iterate(func(key, value []byte) (bool, error) {
+		rom := new(types.Rom)
+
+		rom.Sha1 = key[md5.Size + 8:]
+		rom.Md5 = key[:md5.Size]
+		rom.Size = util.BytesToInt64(key[md5.Size:md5.Size+8])
+
+		err := combiner.Declare(rom)
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	})
+}
+
+func (kvdb *kvStore) NumRoms() int64 {
+	return kvdb.sha1DB.Size()
 }

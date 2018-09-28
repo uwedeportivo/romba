@@ -307,3 +307,13 @@ func (g *Game) CopyHeader(src *Game) {
 func (r *Rom) Valid() bool {
 	return !(r.Size > 0 && len(r.Crc) == 0 && len(r.Md5) == 0 && len(r.Sha1) == 0) && r.Status != "nodump"
 }
+
+func (r *Rom) Copy(src *Rom) {
+	r.Name = src.Name
+	r.Path = src.Path
+	r.Crc = src.Crc
+	r.Md5 = src.Md5
+	r.Sha1 = src.Sha1
+	r.Size = src.Size
+	r.Status = src.Status
+}

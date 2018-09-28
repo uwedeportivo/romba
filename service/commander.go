@@ -111,7 +111,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommand(writer io.Writer, rs *RombaService) *commander.Command {
 	cmd := new(commander.Command)
 	cmd.UsageLine = "Romba"
-	cmd.Subcommands = make([]*commander.Command, 17)
+	cmd.Subcommands = make([]*commander.Command, 18)
 	cmd.Flag = *flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -387,6 +387,19 @@ Print dat stats.`,
 		Stdout: writer,
 		Stderr: writer,
 	}
+
+	cmd.Subcommands[17] = &commander.Command{
+		Run:       rs.export,
+		UsageLine: "export",
+		Short:     "Exports the hashes associations as a DAT file.",
+		Long: `
+Exports the hashes associations as a DAT file.`,
+		Flag:   *flag.NewFlagSet("romba-export", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
+	}
+
+	cmd.Subcommands[17].Flag.String("out", "", "output DAT file")
 
 	return cmd
 }

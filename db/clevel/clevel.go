@@ -33,7 +33,6 @@ package clevel
 import (
 	"bytes"
 	"fmt"
-
 	"github.com/jmhodges/levigo"
 	"github.com/uwedeportivo/romba/db"
 )
@@ -80,6 +79,7 @@ func (s *store) GetKeySuffixesFor(keyPrefix []byte) ([]byte, error) {
 	var suffixes []byte
 
 	it := s.dbn.NewIterator(rOptions)
+	defer it.Close()
 	n := len(keyPrefix)
 
 	key := make([]byte, s.keySize)
@@ -143,6 +143,7 @@ func (s *store) Close() error {
 
 func (s *store) Iterate(df func(key, value []byte) (bool, error)) error {
 	it := s.dbn.NewIterator(rOptions)
+	defer it.Close()
 
 	it.SeekToFirst()
 

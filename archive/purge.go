@@ -109,7 +109,7 @@ func (rdi *romsFromDatIterator) Next() (string, bool, error) {
 	rdi.datCursor, rdi.gameCursor, rdi.romCursor = rdi.position()
 
 	if r.Sha1 == nil {
-		err := rdi.depot.romDB.CompleteRom(r)
+		err := rdi.depot.RomDB.CompleteRom(r)
 		if err != nil {
 			return "", false, err
 		}
@@ -239,8 +239,8 @@ func (w *purgeWorker) Process(inpath string, size int64) error {
 	rom.Md5 = hh.Md5
 	rom.Crc = hh.Crc
 
-	dats, oldDats, err := w.pm.depot.romDB.FilteredDatsForRom(rom, func(dat *types.Dat) bool {
-		return dat.Generation == w.pm.depot.romDB.Generation()
+	dats, oldDats, err := w.pm.depot.RomDB.FilteredDatsForRom(rom, func(dat *types.Dat) bool {
+		return dat.Generation == w.pm.depot.RomDB.Generation()
 	})
 	if err != nil {
 		return err

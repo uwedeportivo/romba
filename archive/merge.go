@@ -198,7 +198,7 @@ func (w *mergeWorker) mergeGzip(path string, size int64) error {
 	rom.Path = path
 
 	if w.pm.onlyneeded {
-		dats, err := w.depot.romDB.DatsForRom(rom)
+		dats, err := w.depot.RomDB.DatsForRom(rom)
 		if err != nil {
 			return err
 		}
@@ -208,7 +208,7 @@ func (w *mergeWorker) mergeGzip(path string, size int64) error {
 		}
 	}
 
-	err = w.depot.romDB.IndexRom(rom)
+	err = w.depot.RomDB.IndexRom(rom)
 	if err != nil {
 		return err
 	}

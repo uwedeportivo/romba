@@ -28,84 +28,73 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package db
+package combine
 
 import (
-	"github.com/uwedeportivo/romba/combine"
+	"encoding/hex"
+	"github.com/golang/glog"
+	"sync"
+
 	"github.com/uwedeportivo/romba/types"
 )
 
-type NoOpDB struct{}
-type NoOpBatch struct{}
+type memoryCombiner struct {
+	sha1s  map[string]*types.Rom
 
-func (noop *NoOpDB) IndexRom(rom *types.Rom) error {
+	mutex sync.Mutex
+}
+
+func NewMemoryCombiner() Combiner {
+	return &memoryCombiner{
+		sha1s: make(map[string]*types.Rom),
+	}
+}
+
+func (mc *memoryCombiner) Declare(rom *types.Rom) error {
+	mc.mutex.Lock()
+	defer mc.mutex.Unlock()
+
+	glog.V(4).Infof("combining rom %s", rom.Name)
+
+	if rom.Sha1 != nil {
+
+		seenRom, ok := mc.sha1s[string(rom.Sha1)]
+		if !ok {
+			seenRom = new(types.Rom)
+			seenRom.Copy(rom)
+			mc.sha1s[string(rom.Sha1)] = seenRom
+		}
+
+		if rom.Crc != nil {
+			glog.V(4).Infof("declaring crc %s -> sha1 %s mapping", hex.EncodeToString(rom.Crc), hex.EncodeToString(rom.Sha1))
+
+			seenRom.Crc = rom.Crc
+		}
+		if rom.Md5 != nil {
+			glog.V(4).Infof("declaring md5 %s -> sha1 %s mapping", hex.EncodeToString(rom.Md5), hex.EncodeToString(rom.Sha1))
+
+			seenRom.Md5 = rom.Md5
+		}
+	} else {
+		glog.V(4).Infof("combining rom %s with missing SHA1", rom.Name)
+	}
+
 	return nil
 }
 
-func (noop *NoOpDB) IndexDat(dat *types.Dat, sha1 []byte) error {
+func (mc *memoryCombiner) ForEachRom(romF func(rom *types.Rom) error) error {
+	mc.mutex.Lock()
+	defer mc.mutex.Unlock()
+
+	for _, rom := range mc.sha1s {
+		err := romF(rom)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (noop *NoOpDB) OrphanDats() error {
+func (mc *memoryCombiner) Close() error {
 	return nil
-}
-
-func (noop *NoOpDB) Close() error {
-	return nil
-}
-
-func (noop *NoOpDB) GetDat(sha1 []byte) (*types.Dat, error) {
-	return nil, nil
-}
-
-func (noop *NoOpDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
-	return nil, nil
-}
-
-func (noop *NoOpDB) FilteredDatsForRom(rom *types.Rom) ([]*types.Dat, []*types.Dat, error) {
-	return nil, nil, nil
-}
-
-func (noop *NoOpDB) StartBatch() RomBatch {
-	return new(NoOpBatch)
-}
-
-func (noop *NoOpBatch) Flush() error {
-	return nil
-}
-
-func (noop *NoOpBatch) Close() error {
-	return nil
-}
-
-func (noop *NoOpBatch) IndexRom(rom *types.Rom) error {
-	return nil
-}
-
-func (noop *NoOpBatch) IndexDat(dat *types.Dat, sha1 []byte) error {
-	return nil
-}
-
-func (noop *NoOpBatch) Size() int64 {
-	return 0
-}
-
-func (noop *NoOpDB) DebugGet(key []byte, size int64) string {
-	return ""
-}
-
-func (noop *NoOpDB) ResolveHash(key []byte) ([]byte, error) {
-	return nil, nil
-}
-
-func (noop *NoOpDB) ForEachDat(datF func(dat *types.Dat) error) error {
-	return nil
-}
-
-func (noop *NoOpDB) JoinCrcMd5(combiner combine.Combiner) error {
-	return nil
-}
-
-func (noop *NoOpDB) NumRoms() int64 {
-	return 0
 }
