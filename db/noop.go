@@ -35,6 +35,7 @@ import (
 	"github.com/uwedeportivo/romba/types"
 )
 
+// for testing
 type NoOpDB struct{}
 type NoOpBatch struct{}
 
