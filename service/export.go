@@ -31,7 +31,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package service
 
 import (
-	"bufio"
 	"crypto/sha1"
 	"errors"
 	"fmt"
@@ -39,7 +38,6 @@ import (
 	"github.com/uwedeportivo/romba/config"
 	"github.com/uwedeportivo/romba/types"
 	"io/ioutil"
-	"os"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -124,16 +122,7 @@ func (rs *RombaService) exportWork(cmd *commander.Command, args []string) error 
 
 	var endMsg string
 
-	exportFile, err := os.Create(outPath)
-	if err != nil {
-		return err
-	}
-	defer exportFile.Close()
-
-	exportWriter := bufio.NewWriter(exportFile)
-	defer exportWriter.Flush()
-
-	err = types.ComposeCompliantDat(exportDat, exportWriter)
+	err = writeDat(exportDat, outPath)
 	if err != nil {
 		return err
 	}
