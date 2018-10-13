@@ -31,6 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package service
 
 import (
+	"bufio"
 	"crypto/sha1"
 	"errors"
 	"fmt"
@@ -38,6 +39,7 @@ import (
 	"github.com/uwedeportivo/romba/config"
 	"github.com/uwedeportivo/romba/types"
 	"io/ioutil"
+	"os"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -94,24 +96,45 @@ func (rs *RombaService) exportWork(cmd *commander.Command, args []string) error 
 		cbr:combiner,
 	}
 
-	exportGame := new(types.Game)
-	exportGame.Name = "wrapper"
-	exportGame.Description = "exported roms"
-
 	exportDat := new(types.Dat)
 	exportDat.Name = "romba_export"
 	exportDat.Description = "joins md5, crc, sha1 for each rom"
 	exportDat.Path = outPath
-	exportDat.Games = []*types.Game{exportGame}
 
 	err = rs.depot.RomDB.JoinCrcMd5(pgc)
 	if err != nil {
 		return err
 	}
 
+	file, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+
+	err = types.ComposeCompliantDat(exportDat, writer)
+	if err != nil {
+		return err
+	}
+
+	writer.WriteString("\n")
+
+	exportGame := new(types.Game)
+	exportGame.Roms = make([]*types.Rom, 1)
+
+	numRoms := 0
+
 	err = pgc.ForEachRom(func(rom *types.Rom) error {
 		if rom.Crc != nil && rom.Md5 != nil {
-			exportGame.Roms = append(exportGame.Roms, rom)
+			exportGame.Roms[0] = rom
+			exportGame.Name = rom.Name
+			exportGame.Description = rom.Name
+
+			types.ComposeGame(exportGame, writer)
+			numRoms++
 		}
 		rs.pt.AddBytesFromFile(int64(sha1.Size), false)
 		return nil
@@ -122,13 +145,8 @@ func (rs *RombaService) exportWork(cmd *commander.Command, args []string) error 
 
 	var endMsg string
 
-	err = writeDat(exportDat, outPath)
-	if err != nil {
-		return err
-	}
-
 	endMsg = fmt.Sprintf("export finished, %d roms written to exportdat file %s",
-		len(exportDat.Games[0].Roms), outPath)
+		numRoms, outPath)
 
 	glog.Infof(endMsg)
 	fmt.Fprintf(cmd.Stdout, endMsg)

@@ -73,6 +73,14 @@ const romTemplate = `
 rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}} )
 `
 
+const gameTemplate = `game (
+	name "{{.Name}}"
+	description "{{omitQuote .Description}}"
+	{{with .Roms}}{{range .}}
+	rom ( name "{{.Name}}" size {{.Size}}{{hexcrc .Crc}}{{hexmd5 .Md5}}{{hexsha1 .Sha1}} ){{end}}{{end}}
+)
+`
+
 const datShortTemplate = `
 dat (
 	name "{{.Name}}"
@@ -139,6 +147,7 @@ var cdt = template.Must(template.New("compliantdatout").Funcs(ff).Parse(complian
 var sdt = template.Must(template.New("datshortout").Funcs(ff).Parse(datShortTemplate))
 var dts = template.Must(template.New("datsout").Funcs(ff).Parse(datsTemplate))
 var rt = template.Must(template.New("romout").Funcs(ff).Parse(romTemplate))
+var gt = template.Must(template.New("gameout").Funcs(ff).Parse(gameTemplate))
 
 func PrintDat(d *Dat) []byte {
 	buf := new(bytes.Buffer)
@@ -168,6 +177,10 @@ func PrintCompliantDat(d *Dat) []byte {
 
 func ComposeCompliantDat(d *Dat, w io.Writer) error {
 	return cdt.Execute(w, d)
+}
+
+func ComposeGame(g *Game, w io.Writer) error {
+	return gt.Execute(w, g)
 }
 
 func PrintShortDat(d *Dat) []byte {
