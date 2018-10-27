@@ -37,6 +37,8 @@ import (
 	"fmt"
 	"github.com/uwedeportivo/romba/combine"
 	"github.com/uwedeportivo/romba/config"
+	"github.com/uwedeportivo/romba/db"
+	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/types"
 	"io/ioutil"
 	"os"
@@ -48,6 +50,7 @@ import (
 	"github.com/uwedeportivo/commander"
 )
 
+const MB = 1000000
 
 type progressCombiner struct {
 	rs *RombaService
@@ -207,6 +210,134 @@ func (rs *RombaService) export(cmd *commander.Command, args []string) error {
 
 	glog.Infof("service starting export")
 	fmt.Fprintf(cmd.Stdout, "started export")
+
+	return nil
+}
+
+
+func (rs *RombaService) imprt(cmd *commander.Command, args []string) error {
+	rs.jobMutex.Lock()
+	defer rs.jobMutex.Unlock()
+
+	if rs.busy {
+		p := rs.pt.GetProgress()
+
+		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+			p.FilesSoFar, p.TotalFiles, humanize.IBytes(uint64(p.BytesSoFar)), humanize.IBytes(uint64(p.TotalBytes)))
+		return nil
+	}
+
+	rs.pt.Reset()
+	rs.busy = true
+	rs.jobName = "import"
+
+	go func() {
+		ticker := time.NewTicker(time.Second * 5)
+		stopTicker := make(chan bool)
+		go func() {
+			glog.Infof("starting progress broadcaster")
+			for {
+				select {
+				case t := <-ticker.C:
+					rs.broadCastProgress(t, false, false, "")
+				case <-stopTicker:
+					glog.Info("stopped progress broadcaster")
+					return
+				}
+			}
+		}()
+
+		err := rs.importWork(cmd, args)
+		if err != nil {
+			glog.Errorf("error import: %v", err)
+		}
+
+		ticker.Stop()
+		stopTicker <- true
+
+		rs.jobMutex.Lock()
+		rs.busy = false
+		rs.jobName = ""
+		rs.jobMutex.Unlock()
+
+		glog.Infof("import finished")
+		rs.pt.Finished()
+		rs.broadCastProgress(time.Now(), false, true, "import finished")
+	}()
+
+	glog.Infof("service starting import")
+	fmt.Fprintf(cmd.Stdout, "started import")
+
+	return nil
+}
+
+type imprtParseListener struct {
+	numRoms int
+	rs *RombaService
+	activeBatch db.RomBatch
+}
+
+func (ipl *imprtParseListener) ParsedDatStmt(dat *types.Dat) error {
+	return nil
+}
+
+func (ipl *imprtParseListener) ParsedGameStmt(game *types.Game) error {
+	ipl.numRoms += len(game.Roms)
+
+	for _, r := range game.Roms {
+		ipl.activeBatch.IndexRom(r)
+	}
+
+	if ipl.activeBatch.Size() > 10 * MB {
+		err := ipl.activeBatch.Close()
+		if err != nil {
+			return err
+		}
+
+		ipl.activeBatch = ipl.rs.depot.RomDB.StartBatch()
+	}
+	return nil
+}
+
+func (rs *RombaService) importWork(cmd *commander.Command, args []string) error {
+	inPath := cmd.Flag.Lookup("in").Value.Get().(string)
+
+	if inPath == "" {
+		fmt.Fprintf(cmd.Stdout, "-in argument required")
+		return errors.New("missing in argument")
+	}
+
+	glog.Infof("import hashes from %s", inPath)
+
+	file, err := os.Open(inPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	ipl := &imprtParseListener{
+		rs: rs,
+		activeBatch: rs.depot.RomDB.StartBatch(),
+	}
+
+	_, err = parser.ParseDatWithListener(file, inPath, ipl)
+	if err != nil {
+		return err
+	}
+
+	err = ipl.activeBatch.Close()
+	if err != nil {
+		return err
+	}
+
+	var endMsg string
+
+	endMsg = fmt.Sprintf("import finished, %d roms imported from file %s",
+		ipl.numRoms, inPath)
+
+	glog.Infof(endMsg)
+	fmt.Fprintf(cmd.Stdout, endMsg)
+	rs.broadCastProgress(time.Now(), false, true, endMsg)
 
 	return nil
 }
