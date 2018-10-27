@@ -172,6 +172,32 @@ func (ad *Dat) Equals(bd *Dat) bool {
 	return true
 }
 
+func (g *Game) Normalize() {
+	g.Name = strings.Replace(g.Name, "\\", "/", -1)
+
+	if g.Parts != nil {
+		g.Roms = append(g.Roms, g.Parts...)
+		g.Parts = nil
+	}
+	if g.Regions != nil {
+		g.Roms = append(g.Roms, g.Regions...)
+		g.Regions = nil
+	}
+	sort.Sort(g.Roms)
+
+	filteredRoms := make([]*Rom, 0, len(g.Roms))
+
+	for _, r := range g.Roms {
+		r.Name = strings.Replace(r.Name, "\\", "/", -1)
+
+		if r.Valid() {
+			filteredRoms = append(filteredRoms, r)
+		}
+	}
+
+	g.Roms = filteredRoms
+}
+
 func (d *Dat) Normalize() {
 	if d.SLName != "" {
 		d.Name = d.SLName
@@ -203,29 +229,7 @@ func (d *Dat) Normalize() {
 	sort.Sort(d.Games)
 
 	for _, g := range d.Games {
-		g.Name = strings.Replace(g.Name, "\\", "/", -1)
-
-		if g.Parts != nil {
-			g.Roms = append(g.Roms, g.Parts...)
-			g.Parts = nil
-		}
-		if g.Regions != nil {
-			g.Roms = append(g.Roms, g.Regions...)
-			g.Regions = nil
-		}
-		sort.Sort(g.Roms)
-
-		filteredRoms := make([]*Rom, 0, len(g.Roms))
-
-		for _, r := range g.Roms {
-			r.Name = strings.Replace(r.Name, "\\", "/", -1)
-
-			if r.Valid() {
-				filteredRoms = append(filteredRoms, r)
-			}
-		}
-
-		g.Roms = filteredRoms
+		g.Normalize()
 	}
 }
 

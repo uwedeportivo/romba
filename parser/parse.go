@@ -57,6 +57,7 @@ const (
 type parser struct {
 	ll *lexer
 	d  *types.Dat
+	pl ParseListener
 }
 
 var (
@@ -369,13 +370,28 @@ func (p *parser) parse() error {
 			if err != nil {
 				return err
 			}
+			if p.pl != nil {
+				p.d.Normalize()
+				err = p.pl.ParsedDatStmt(p.d)
+				if err != nil {
+					return err
+				}
+			}
 		case i.typ == itemGame:
 			g, err := p.gameStmt()
 			if err != nil {
 				return err
 			}
 			if g != nil {
-				p.d.Games = append(p.d.Games, g)
+				if p.pl != nil {
+					g.Normalize()
+					err = p.pl.ParsedGameStmt(g)
+					if err != nil {
+						return err
+					}
+				} else {
+					p.d.Games = append(p.d.Games, g)
+				}
 			}
 		}
 	}
@@ -392,6 +408,33 @@ func (p *parser) match(i item, typ itemType) error {
 	return fmt.Errorf("expected token of type %v, got %v instead", typ, i)
 }
 
+type ParseListener interface {
+	ParsedDatStmt(dat *types.Dat) error
+	ParsedGameStmt(game *types.Game) error
+}
+
+func ParseDatWithListener(r io.Reader, path string, pl ParseListener) ([]byte, error) {
+	hr := hashingReader{
+		ir: r,
+		h:  sha1.New(),
+	}
+
+	p := &parser{
+		ll: lex("dat - "+path, hr),
+		d:  &types.Dat{},
+		pl: pl,
+	}
+
+	p.d.Path = path
+	err := p.parse()
+	if err != nil {
+		derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, p.ll.lineNumber(), err)
+		derr := ParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(p.ll.lineNumber()))
+		return nil, derr
+	}
+	return hr.h.Sum(nil), nil
+}
+
 func ParseDat(r io.Reader, path string) (*types.Dat, []byte, error) {
 	hr := hashingReader{
 		ir: r,
@@ -403,6 +446,7 @@ func ParseDat(r io.Reader, path string) (*types.Dat, []byte, error) {
 		d:  &types.Dat{},
 	}
 
+	p.d.Path = path
 	err := p.parse()
 	if err != nil {
 		derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, p.ll.lineNumber(), err)
@@ -410,7 +454,6 @@ func ParseDat(r io.Reader, path string) (*types.Dat, []byte, error) {
 		return nil, nil, derr
 	}
 	p.d.Normalize()
-	p.d.Path = path
 	return p.d, hr.h.Sum(nil), nil
 }
 
