@@ -628,3 +628,88 @@ func ParseXml(r io.Reader, path string) (*types.Dat, []byte, error) {
 	d.Path = path
 	return d, hr.h.Sum(nil), nil
 }
+
+type xmlDatHeader struct {
+	Name          string      `xml:"name"`
+	Description   string      `xml:"description"`
+	Clr           *types.Clrmamepro `xml:"clrmamepro"`
+}
+
+func ParseXmlWithListener(r io.Reader, path string, pl ParseListener) ([]byte, error) {
+	br := bufio.NewReader(r)
+
+	hr := hashingReader{
+		ir: br,
+		h:  sha1.New(),
+	}
+
+	lr := lineCountingReader{
+		ir: hr,
+	}
+
+	decoder := xml.NewDecoder(lr)
+
+	var inElement string
+	for {
+		t, err := decoder.Token()
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return nil, err
+			}
+		}
+		if t == nil {
+			break
+		}
+		switch se := t.(type) {
+		case xml.StartElement:
+			inElement = se.Name.Local
+			if inElement == "header" {
+				d := new(types.Dat)
+				d.Path = path
+				var hdr xmlDatHeader
+				err = decoder.DecodeElement(&hdr, &se)
+				if err != nil {
+					return nil, err
+				}
+
+				d.Name = hdr.Name
+				d.Description = hdr.Description
+				d.Clr = hdr.Clr
+
+				d.Normalize()
+
+				err = pl.ParsedDatStmt(d)
+				if err != nil {
+					return nil, err
+				}
+			} else if inElement == "game" || inElement == "software" {
+				g := new(types.Game)
+				err = decoder.DecodeElement(g, &se)
+				if err != nil {
+					return nil, err
+				}
+				for _, rom := range g.Roms {
+					fixHashes(rom)
+				}
+				for _, rom := range g.Parts {
+					fixHashes(rom)
+				}
+				for _, rom := range g.Regions {
+					fixHashes(rom)
+				}
+				g.Normalize()
+
+				err = pl.ParsedGameStmt(g)
+				if err != nil {
+					return nil, err
+				}
+			}
+		default:
+		}
+	}
+
+	return hr.h.Sum(nil), nil
+}
+
