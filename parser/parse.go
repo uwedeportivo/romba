@@ -527,6 +527,24 @@ func Parse(path string) (*types.Dat, []byte, error) {
 	return ParseDat(file, path)
 }
 
+func ParseWithListener(path string, pl ParseListener) ([]byte, error) {
+	isXML, err := isXML(path)
+	if err != nil {
+		return nil, err
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	if isXML {
+		return ParseXmlWithListener(file, path, pl)
+	}
+	return ParseDatWithListener(file, path, pl)
+}
+
 func fixHashes(rom *types.Rom) {
 	if rom.Crc != nil {
 		strV := string(rom.Crc)
