@@ -144,6 +144,58 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 	return nil
 }
 
+type declareParseListener struct {
+	dd dedup.Deduper
+}
+
+func (ipl *declareParseListener) ParsedDatStmt(dat *types.Dat) error {
+	return nil
+}
+
+func (ipl *declareParseListener) ParsedGameStmt(game *types.Game) error {
+	for _, r := range game.Roms {
+		ipl.dd.Declare(r)
+	}
+	return nil
+}
+
+type dedupParseListener struct {
+	dd dedup.Deduper
+	oneDiffDat *types.Dat
+}
+
+func (ipl *dedupParseListener) ParsedDatStmt(dat *types.Dat) error {
+	dc := new(types.Dat)
+	dc.CopyHeader(dat)
+	ipl.oneDiffDat = dc
+	return nil
+}
+
+func (ipl *dedupParseListener) ParsedGameStmt(game *types.Game) error {
+	gc := new(types.Game)
+	gc.CopyHeader(game)
+	for _, r := range game.Roms {
+		if !r.Valid() {
+			continue
+		}
+		seen, err := ipl.dd.Seen(r)
+		if err != nil {
+			return err
+		}
+		if !seen {
+			gc.Roms = append(gc.Roms, r)
+			err = ipl.dd.Declare(r)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if len(gc.Roms) > 0 {
+		ipl.oneDiffDat.Games = append(ipl.oneDiffDat.Games, gc)
+	}
+	return nil
+}
+
 func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) error {
 	oldDatPath := cmd.Flag.Lookup("old").Value.Get().(string)
 	newDatPath := cmd.Flag.Lookup("new").Value.Get().(string)
@@ -175,6 +227,8 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 	}
 	defer dd.Close()
 
+	ipl := new(declareParseListener)
+
 	err = filepath.Walk(oldDatPath, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
 			return nil
@@ -184,12 +238,7 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 		if ext == ".dat" || ext == ".xml" {
 			rs.pt.DeclareFile(path)
 
-			oldDat, _, err := parser.Parse(path)
-			if err != nil {
-				return err
-			}
-
-			err = dedup.Declare(oldDat, dd)
+			_, err := parser.ParseWithListener(path, ipl)
 			if err != nil {
 				return err
 			}
@@ -211,17 +260,16 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 		if ext == ".dat" || ext == ".xml" {
 			rs.pt.DeclareFile(path)
 
-			newDat, _, err := parser.Parse(path)
+			ipl := new(dedupParseListener)
+
+			_, err := parser.ParseWithListener(path, ipl)
 			if err != nil {
 				return err
 			}
 
-			oneDiffDat, err := dedup.Dedup(newDat, dd)
-			if err != nil {
-				return err
-			}
+			oneDiffDat := ipl.oneDiffDat
 
-			if oneDiffDat != nil {
+			if len(oneDiffDat.Games) > 0 {
 				oneDiffDat = oneDiffDat.FilterRoms(func(r *types.Rom) bool {
 					return r.Size > 0
 				})
