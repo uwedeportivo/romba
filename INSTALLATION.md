@@ -39,13 +39,10 @@ sudo apt-get install git
 sudo apt-get install g++
 ```
 
-* Install [leveldb](https://code.google.com/p/leveldb/downloads/list), download latest and unpack in Downloads folder, then execute in the unpacked directory:
+* Install leveldb:
 
 ```
-make
-sudo cp --preserve=links libleveldb.* /usr/local/lib
-sudo cp -R include/leveldb /usr/local/include
-sudo ldconfig
+sudo apt-get install libleveldb-dev
 ```
 
 * Install ROMba:
