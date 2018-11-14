@@ -192,5 +192,5 @@ func main() {
 
 	fmt.Printf("starting romba server version %s at localhost:%d/romba.html\n", service.Version, cfg.Server.Port)
 
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.Port), nil))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port), nil))
 }

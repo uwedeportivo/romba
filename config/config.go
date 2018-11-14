@@ -53,6 +53,7 @@ type Config struct {
 
 	Server struct {
 		Port int
+		Host string
 	}
 }
 
