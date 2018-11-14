@@ -154,7 +154,10 @@ func (ipl *declareParseListener) ParsedDatStmt(dat *types.Dat) error {
 
 func (ipl *declareParseListener) ParsedGameStmt(game *types.Game) error {
 	for _, r := range game.Roms {
-		ipl.dd.Declare(r)
+		err := ipl.dd.Declare(r)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
