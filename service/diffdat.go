@@ -277,18 +277,17 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 				oneDiffDat = oneDiffDat.FilterRoms(func(r *types.Rom) bool {
 					return r.Size > 0
 				})
-			}
+				if oneDiffDat != nil {
+					commonRoot := worker.CommonRoot(path, outPath)
+					destDir := filepath.Join(outPath, filepath.Dir(strings.TrimPrefix(path, commonRoot)))
+					err := os.MkdirAll(destDir, 0777)
+					if err != nil {
+						glog.Errorf("error mkdir %s: %v", destDir, err)
+						return err
+					}
 
-			if oneDiffDat != nil {
-				commonRoot := worker.CommonRoot(path, outPath)
-				destDir := filepath.Join(outPath, filepath.Dir(strings.TrimPrefix(path, commonRoot)))
-				err := os.MkdirAll(destDir, 0777)
-				if err != nil {
-					glog.Errorf("error mkdir %s: %v", destDir, err)
-					return err
+					err = writeDat(oneDiffDat, filepath.Join(destDir, oneDiffDat.Name+".dat"))
 				}
-
-				err = writeDat(oneDiffDat, filepath.Join(destDir, oneDiffDat.Name+".dat"))
 			}
 
 			rs.pt.AddBytesFromFile(info.Size(), err != nil)
