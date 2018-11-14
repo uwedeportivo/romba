@@ -165,9 +165,7 @@ type dedupParseListener struct {
 }
 
 func (ipl *dedupParseListener) ParsedDatStmt(dat *types.Dat) error {
-	dc := new(types.Dat)
-	dc.CopyHeader(dat)
-	ipl.oneDiffDat = dc
+	ipl.oneDiffDat.CopyHeader(dat)
 	return nil
 }
 
@@ -263,6 +261,7 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 
 			ipl := new(dedupParseListener)
 			ipl.dd = dd
+			ipl.oneDiffDat = new(types.Dat)
 
 			_, err := parser.ParseWithListener(path, ipl)
 			if err != nil {
