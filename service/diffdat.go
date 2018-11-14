@@ -228,6 +228,7 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 	defer dd.Close()
 
 	ipl := new(declareParseListener)
+	ipl.dd = dd
 
 	err = filepath.Walk(oldDatPath, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
@@ -261,6 +262,7 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 			rs.pt.DeclareFile(path)
 
 			ipl := new(dedupParseListener)
+			ipl.dd = dd
 
 			_, err := parser.ParseWithListener(path, ipl)
 			if err != nil {
