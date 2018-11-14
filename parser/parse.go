@@ -702,7 +702,7 @@ func ParseXmlWithListener(r io.Reader, path string, pl ParseListener) ([]byte, e
 				if err != nil {
 					return nil, err
 				}
-			} else if inElement == "game" || inElement == "software" {
+			} else if inElement == "game" || inElement == "software" || inElement == "machine" {
 				g := new(types.Game)
 				err = decoder.DecodeElement(g, &se)
 				if err != nil {
