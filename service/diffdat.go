@@ -57,15 +57,24 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 	givenDescription := cmd.Flag.Lookup("description").Value.Get().(string)
 
 	if oldDatPath == "" {
-		fmt.Fprintf(cmd.Stdout, "-old argument required")
+		_, err := fmt.Fprintf(cmd.Stdout, "-old argument required")
+		if err != nil {
+			return err
+		}
 		return errors.New("missing old argument")
 	}
 	if newDatPath == "" {
-		fmt.Fprintf(cmd.Stdout, "-new argument required")
+		_, err := fmt.Fprintf(cmd.Stdout, "-new argument required")
+		if err != nil {
+			return err
+		}
 		return errors.New("missing new argument")
 	}
 	if outPath == "" {
-		fmt.Fprintf(cmd.Stdout, "-out argument required")
+		_, err := fmt.Fprintf(cmd.Stdout, "-out argument required")
+		if err != nil {
+			return err
+		}
 		return errors.New("missing out argument")
 	}
 
@@ -93,7 +102,12 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer dd.Close()
+	defer func (){
+		err := dd.Close()
+		if err != nil {
+			glog.Errorf("error closing dedup leveldb: %v", err)
+		}
+	}()
 
 	err = dedup.Declare(oldDat, dd)
 	if err != nil {
@@ -120,10 +134,20 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		defer diffFile.Close()
+		defer func(){
+			err := diffFile.Close()
+			if err != nil {
+				glog.Errorf("error closing diff file %s: %v", outPath, err)
+			}
+		}()
 
 		diffWriter := bufio.NewWriter(diffFile)
-		defer diffWriter.Flush()
+		defer func(){
+			err := diffWriter.Flush()
+			if err != nil {
+				glog.Errorf("error flushing diff file %s: %v", outPath, err)
+			}
+		}()
 
 		err = types.ComposeCompliantDat(diffDat, diffWriter)
 		if err != nil {
@@ -138,9 +162,11 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 	}
 
 	glog.Infof(endMsg)
-	fmt.Fprintf(cmd.Stdout, endMsg)
-	rs.broadCastProgress(time.Now(), false, true, endMsg)
-
+	_, err = fmt.Fprintf(cmd.Stdout, endMsg)
+	if err != nil {
+		return err
+	}
+	rs.broadCastProgress(time.Now(), false, true, endMsg, nil)
 	return nil
 }
 
@@ -203,15 +229,24 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 	outPath := cmd.Flag.Lookup("out").Value.Get().(string)
 
 	if oldDatPath == "" {
-		fmt.Fprintf(cmd.Stdout, "-old argument required")
+		_, err := fmt.Fprintf(cmd.Stdout, "-old argument required")
+		if err != nil {
+			return err
+		}
 		return errors.New("missing old argument")
 	}
 	if newDatPath == "" {
-		fmt.Fprintf(cmd.Stdout, "-new argument required")
+		_, err := fmt.Fprintf(cmd.Stdout, "-new argument required")
+		if err != nil {
+			return err
+		}
 		return errors.New("missing new argument")
 	}
 	if outPath == "" {
-		fmt.Fprintf(cmd.Stdout, "-out argument required")
+		_, err := fmt.Fprintf(cmd.Stdout, "-out argument required")
+		if err != nil {
+			return err
+		}
 		return errors.New("missing out argument")
 	}
 
@@ -226,7 +261,12 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 	if err != nil {
 		return err
 	}
-	defer dd.Close()
+	defer func(){
+		err := dd.Close()
+		if err != nil {
+			glog.Errorf("error closing leveldb deduper: %v", err)
+		}
+	}()
 
 	ipl := new(declareParseListener)
 	ipl.dd = dd
@@ -309,9 +349,9 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 	if rs.busy {
 		p := rs.pt.GetProgress()
 
-		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+		_, err := fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
 			p.FilesSoFar, p.TotalFiles, humanize.IBytes(uint64(p.BytesSoFar)), humanize.IBytes(uint64(p.TotalBytes)))
-		return nil
+		return err
 	}
 
 	rs.pt.Reset()
@@ -326,7 +366,7 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 			for {
 				select {
 				case t := <-ticker.C:
-					rs.broadCastProgress(t, false, false, "")
+					rs.broadCastProgress(t, false, false, "", nil)
 				case <-stopTicker:
 					glog.Info("stopped progress broadcaster")
 					return
@@ -349,13 +389,12 @@ func (rs *RombaService) ediffdat(cmd *commander.Command, args []string) error {
 
 		glog.Infof("ediffdat finished")
 		rs.pt.Finished()
-		rs.broadCastProgress(time.Now(), false, true, "ediffdat finished")
+		rs.broadCastProgress(time.Now(), false, true, "ediffdat finished", err)
 	}()
 
 	glog.Infof("service starting ediffdat")
-	fmt.Fprintf(cmd.Stdout, "started ediffdat")
-
-	return nil
+	_, err := fmt.Fprintf(cmd.Stdout, "started ediffdat")
+	return err
 }
 
 func writeDat(dat *types.Dat, outPath string) error {
@@ -365,10 +404,20 @@ func writeDat(dat *types.Dat, outPath string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func(){
+		err := file.Close()
+		if err != nil {
+			glog.Errorf("error closing file %s: %v", outPath, err)
+		}
+	}()
 
 	writer := bufio.NewWriter(file)
-	defer writer.Flush()
+	defer func() {
+		err := writer.Flush()
+		if err != nil {
+			glog.Errorf("error flushing file %s: %v", outPath, err)
+		}
+	}()
 
 	return types.ComposeCompliantDat(dat, writer)
 }

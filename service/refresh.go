@@ -47,9 +47,9 @@ func (rs *RombaService) startRefreshDats(cmd *commander.Command, args []string) 
 	if rs.busy {
 		p := rs.pt.GetProgress()
 
-		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+		_, err := fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
 			p.FilesSoFar, p.TotalFiles, humanize.IBytes(uint64(p.BytesSoFar)), humanize.IBytes(uint64(p.TotalBytes)))
-		return nil
+		return err
 	}
 
 	rs.pt.Reset()
@@ -58,7 +58,7 @@ func (rs *RombaService) startRefreshDats(cmd *commander.Command, args []string) 
 
 	go func() {
 		glog.Infof("service starting refresh-dats")
-		rs.broadCastProgress(time.Now(), true, false, "")
+		rs.broadCastProgress(time.Now(), true, false, "", nil)
 		ticker := time.NewTicker(time.Second * 5)
 		stopTicker := make(chan bool)
 		go func() {
@@ -66,7 +66,7 @@ func (rs *RombaService) startRefreshDats(cmd *commander.Command, args []string) 
 			for {
 				select {
 				case t := <-ticker.C:
-					rs.broadCastProgress(t, false, false, "")
+					rs.broadCastProgress(t, false, false, "", nil)
 				case <-stopTicker:
 					glog.Info("stopped progress broadcaster")
 					return
@@ -90,10 +90,10 @@ func (rs *RombaService) startRefreshDats(cmd *commander.Command, args []string) 
 		rs.jobName = ""
 		rs.jobMutex.Unlock()
 
-		rs.broadCastProgress(time.Now(), false, true, endMsg)
+		rs.broadCastProgress(time.Now(), false, true, endMsg, err)
 		glog.Infof("service finished refresh-dats")
 	}()
 
-	fmt.Fprintf(cmd.Stdout, "started refresh dats")
-	return nil
+	_, err :=fmt.Fprintf(cmd.Stdout, "started refresh dats")
+	return err
 }
