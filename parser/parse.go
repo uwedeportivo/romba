@@ -492,7 +492,12 @@ func isXML(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer file.Close()
+	defer func(){
+		err := file.Close()
+		if err != nil {
+			glog.Errorf("error, failed to close file %s: %v", path, err)
+		}
+	}()
 
 	lr := io.LimitedReader{
 		R: file,
@@ -519,7 +524,12 @@ func Parse(path string) (*types.Dat, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	defer file.Close()
+	defer func(){
+		err := file.Close()
+		if err != nil {
+			glog.Errorf("error, failed to close file %s: %v", path, err)
+		}
+	}()
 
 	if isXML {
 		return ParseXml(file, path)
@@ -537,7 +547,12 @@ func ParseWithListener(path string, pl ParseListener) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func(){
+		err := file.Close()
+		if err != nil {
+			glog.Errorf("error, failed to close file %s: %v", path, err)
+		}
+	}()
 
 	if isXML {
 		return ParseXmlWithListener(file, path, pl)
@@ -674,7 +689,9 @@ func ParseXmlWithListener(r io.Reader, path string, pl ParseListener) ([]byte, e
 			if err == io.EOF {
 				break
 			} else {
-				return nil, err
+				derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, lr.line, err)
+				derr := XMLParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(lr.line))
+				return nil, derr
 			}
 		}
 		if t == nil {
@@ -689,7 +706,9 @@ func ParseXmlWithListener(r io.Reader, path string, pl ParseListener) ([]byte, e
 				var hdr xmlDatHeader
 				err = decoder.DecodeElement(&hdr, &se)
 				if err != nil {
-					return nil, err
+					derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, lr.line, err)
+					derr := XMLParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(lr.line))
+					return nil, derr
 				}
 
 				d.Name = hdr.Name
@@ -700,13 +719,17 @@ func ParseXmlWithListener(r io.Reader, path string, pl ParseListener) ([]byte, e
 
 				err = pl.ParsedDatStmt(d)
 				if err != nil {
-					return nil, err
+					derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, lr.line, err)
+					derr := XMLParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(lr.line))
+					return nil, derr
 				}
 			} else if inElement == "game" || inElement == "software" || inElement == "machine" {
 				g := new(types.Game)
 				err = decoder.DecodeElement(g, &se)
 				if err != nil {
-					return nil, err
+					derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, lr.line, err)
+					derr := XMLParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(lr.line))
+					return nil, derr
 				}
 				for _, rom := range g.Roms {
 					fixHashes(rom)
@@ -721,7 +744,9 @@ func ParseXmlWithListener(r io.Reader, path string, pl ParseListener) ([]byte, e
 
 				err = pl.ParsedGameStmt(g)
 				if err != nil {
-					return nil, err
+					derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, lr.line, err)
+					derr := XMLParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(lr.line))
+					return nil, derr
 				}
 			}
 		default:

@@ -83,7 +83,7 @@ type RomDB interface {
 	NumRoms() int64
 }
 
-var DBFactory func(path string) (RomDB, error)
+var Factory func(path string) (RomDB, error)
 
 func FormatDuration(d time.Duration) string {
 	secs := uint64(d.Seconds())
@@ -106,7 +106,7 @@ func New(path string) (RomDB, error) {
 	glog.Infof("Loading DB")
 	startTime := time.Now()
 
-	db, err := DBFactory(path)
+	db, err := Factory(path)
 
 	elapsed := time.Since(startTime)
 
@@ -120,13 +120,23 @@ func WriteGenerationFile(root string, size int64) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func(){
+		err := file.Close()
+		if err != nil {
+			glog.Errorf("error, failed to close generation file at %s: %v", root, err)
+		}
+	}()
 
 	bw := bufio.NewWriter(file)
-	defer bw.Flush()
+	defer func(){
+		err := bw.Flush()
+		if err != nil {
+			glog.Errorf("error, failed to flush generation file at %s: %v", root, err)
+		}
+	}()
 
-	bw.WriteString(strconv.FormatInt(size, 10))
-	return nil
+	_, err = bw.WriteString(strconv.FormatInt(size, 10))
+	return err
 }
 
 func ReadGenerationFile(root string) (int64, error) {
@@ -141,7 +151,12 @@ func ReadGenerationFile(root string) (int64, error) {
 		}
 		return 0, err
 	}
-	defer file.Close()
+	defer func(){
+		err := file.Close()
+		if err != nil {
+			glog.Errorf("error, failed to close generation file at %s: %v", root, err)
+		}
+	}()
 
 	bs, err := ioutil.ReadAll(file)
 	if err != nil {
@@ -241,10 +256,20 @@ func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTra
 		if err != nil {
 			return "", err
 		}
-		defer missingSha1sFile.Close()
+		defer func(){
+			err := missingSha1sFile.Close()
+			if err != nil {
+				glog.Errorf("error, failed to close missing sha1 file %s: %v", missingSha1s, err)
+			}
+		}()
 
 		missingSha1sBuf := bufio.NewWriter(missingSha1sFile)
-		defer missingSha1sBuf.Flush()
+		defer func(){
+			err := missingSha1sBuf.Flush()
+			if err != nil {
+				glog.Errorf("error, failed to flush missing sha1 file %s: %v", missingSha1s, err)
+			}
+		}()
 
 		missingSha1sWriter = missingSha1sBuf
 	}

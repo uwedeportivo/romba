@@ -171,7 +171,7 @@ func NewKVStoreDB(path string) (RomDB, error) {
 }
 
 func init() {
-	DBFactory = NewKVStoreDB
+	Factory = NewKVStoreDB
 }
 
 func (kvdb *kvStore) IndexRom(rom *types.Rom) error {
