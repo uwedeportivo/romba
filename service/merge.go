@@ -51,9 +51,9 @@ func (rs *RombaService) startMerge(cmd *commander.Command, args []string) error 
 	if rs.busy {
 		p := rs.pt.GetProgress()
 
-		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+		_, err := fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
 			p.FilesSoFar, p.TotalFiles, humanize.IBytes(uint64(p.BytesSoFar)), humanize.IBytes(uint64(p.TotalBytes)))
-		return nil
+		return err
 	}
 
 	rs.pt.Reset()
@@ -76,7 +76,7 @@ func (rs *RombaService) startMerge(cmd *commander.Command, args []string) error 
 
 	go func() {
 		glog.Infof("service starting archive")
-		rs.broadCastProgress(time.Now(), true, false, "")
+		rs.broadCastProgress(time.Now(), true, false, "", nil)
 		ticker := time.NewTicker(time.Second * 5)
 		stopTicker := make(chan bool)
 		go func() {
@@ -84,7 +84,7 @@ func (rs *RombaService) startMerge(cmd *commander.Command, args []string) error 
 			for {
 				select {
 				case t := <-ticker.C:
-					rs.broadCastProgress(t, false, false, "")
+					rs.broadCastProgress(t, false, false, "", nil)
 				case <-stopTicker:
 					glog.Info("stopped progress broadcaster")
 					return
@@ -109,10 +109,10 @@ func (rs *RombaService) startMerge(cmd *commander.Command, args []string) error 
 		rs.jobName = ""
 		rs.jobMutex.Unlock()
 
-		rs.broadCastProgress(time.Now(), false, true, endMsg)
+		rs.broadCastProgress(time.Now(), false, true, endMsg, err)
 		glog.Infof("service finished merging")
 	}()
 
-	fmt.Fprintf(cmd.Stdout, "started merging")
-	return nil
+	_, err := fmt.Fprintf(cmd.Stdout, "started merging")
+	return err
 }

@@ -121,7 +121,9 @@ func (rs *RombaService) unregisterProgressListener(s string) {
 	delete(rs.progressListeners, s)
 }
 
-func (rs *RombaService) broadCastProgress(t time.Time, starting bool, stopping bool, terminalMessage string) {
+func (rs *RombaService) broadCastProgress(t time.Time, starting bool,
+	stopping bool, terminalMessage string, err error) {
+
 	var p *worker.Progress
 	var jn string
 
@@ -137,6 +139,10 @@ func (rs *RombaService) broadCastProgress(t time.Time, starting bool, stopping b
 	pmsg.Starting = starting
 	pmsg.Stopping = stopping
 	pmsg.TerminalMessage = terminalMessage
+
+	if err != nil {
+		pmsg.TerminalMessage = fmt.Sprintf("%s\n\nError:%v", terminalMessage, err)
+	}
 
 	if p != nil {
 		pmsg.TotalFiles = p.TotalFiles

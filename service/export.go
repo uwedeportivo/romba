@@ -75,7 +75,10 @@ func (rs *RombaService) exportWork(cmd *commander.Command, args []string) error 
 	outPath := cmd.Flag.Lookup("out").Value.Get().(string)
 
 	if outPath == "" {
-		fmt.Fprintf(cmd.Stdout, "-out argument required")
+		_, err := fmt.Fprintf(cmd.Stdout, "-out argument required")
+		if err != nil {
+			return err
+		}
 		return errors.New("missing out argument")
 	}
 
@@ -90,7 +93,12 @@ func (rs *RombaService) exportWork(cmd *commander.Command, args []string) error 
 	if err != nil {
 		return err
 	}
-	defer combiner.Close()
+	defer func(){
+		err := combiner.Close()
+		if err != nil {
+			glog.Errorf("error closing combiner leveldb: %v", err)
+		}
+	}()
 
 	glog.V(4).Infof("leveldb combiner at %s", tempPath)
 
@@ -113,17 +121,30 @@ func (rs *RombaService) exportWork(cmd *commander.Command, args []string) error 
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func(){
+		err := file.Close()
+		if err != nil {
+			glog.Errorf("error, failed to close %s: %v", outPath, err)
+		}
+	}()
 
 	writer := bufio.NewWriter(file)
-	defer writer.Flush()
+	defer func(){
+		err := writer.Flush()
+		if err != nil {
+			glog.Errorf("error, failed to flush %s: %v", outPath, err)
+		}
+	}()
 
 	err = types.ComposeCompliantDat(exportDat, writer)
 	if err != nil {
 		return err
 	}
 
-	writer.WriteString("\n")
+	_, err = writer.WriteString("\n")
+	if err != nil {
+		return err
+	}
 
 	exportGame := new(types.Game)
 	exportGame.Roms = make([]*types.Rom, 1)
@@ -136,7 +157,10 @@ func (rs *RombaService) exportWork(cmd *commander.Command, args []string) error 
 			exportGame.Name = rom.Name
 			exportGame.Description = rom.Name
 
-			types.ComposeGame(exportGame, writer)
+			err = types.ComposeGame(exportGame, writer)
+			if err != nil {
+				return err
+			}
 			numRoms++
 		}
 		rs.pt.AddBytesFromFile(int64(sha1.Size), false)
@@ -152,8 +176,11 @@ func (rs *RombaService) exportWork(cmd *commander.Command, args []string) error 
 		numRoms, outPath)
 
 	glog.Infof(endMsg)
-	fmt.Fprintf(cmd.Stdout, endMsg)
-	rs.broadCastProgress(time.Now(), false, true, endMsg)
+	_, err = fmt.Fprintf(cmd.Stdout, endMsg)
+	if err != nil {
+		return err
+	}
+	rs.broadCastProgress(time.Now(), false, true, endMsg, nil)
 
 	return nil
 }
@@ -165,9 +192,9 @@ func (rs *RombaService) export(cmd *commander.Command, args []string) error {
 	if rs.busy {
 		p := rs.pt.GetProgress()
 
-		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+		_, err := fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
 			p.FilesSoFar, p.TotalFiles, humanize.IBytes(uint64(p.BytesSoFar)), humanize.IBytes(uint64(p.TotalBytes)))
-		return nil
+		return err
 	}
 
 	rs.pt.Reset()
@@ -182,7 +209,7 @@ func (rs *RombaService) export(cmd *commander.Command, args []string) error {
 			for {
 				select {
 				case t := <-ticker.C:
-					rs.broadCastProgress(t, false, false, "")
+					rs.broadCastProgress(t, false, false, "", nil)
 				case <-stopTicker:
 					glog.Info("stopped progress broadcaster")
 					return
@@ -205,13 +232,12 @@ func (rs *RombaService) export(cmd *commander.Command, args []string) error {
 
 		glog.Infof("export finished")
 		rs.pt.Finished()
-		rs.broadCastProgress(time.Now(), false, true, "export finished")
+		rs.broadCastProgress(time.Now(), false, true, "export finished", err)
 	}()
 
 	glog.Infof("service starting export")
-	fmt.Fprintf(cmd.Stdout, "started export")
-
-	return nil
+	_, err := fmt.Fprintf(cmd.Stdout, "started export")
+	return err
 }
 
 
@@ -222,9 +248,9 @@ func (rs *RombaService) imprt(cmd *commander.Command, args []string) error {
 	if rs.busy {
 		p := rs.pt.GetProgress()
 
-		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+		_, err := fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
 			p.FilesSoFar, p.TotalFiles, humanize.IBytes(uint64(p.BytesSoFar)), humanize.IBytes(uint64(p.TotalBytes)))
-		return nil
+		return err
 	}
 
 	rs.pt.Reset()
@@ -239,7 +265,7 @@ func (rs *RombaService) imprt(cmd *commander.Command, args []string) error {
 			for {
 				select {
 				case t := <-ticker.C:
-					rs.broadCastProgress(t, false, false, "")
+					rs.broadCastProgress(t, false, false, "", nil)
 				case <-stopTicker:
 					glog.Info("stopped progress broadcaster")
 					return
@@ -262,13 +288,12 @@ func (rs *RombaService) imprt(cmd *commander.Command, args []string) error {
 
 		glog.Infof("import finished")
 		rs.pt.Finished()
-		rs.broadCastProgress(time.Now(), false, true, "import finished")
+		rs.broadCastProgress(time.Now(), false, true, "import finished", err)
 	}()
 
 	glog.Infof("service starting import")
-	fmt.Fprintf(cmd.Stdout, "started import")
-
-	return nil
+	_, err := fmt.Fprintf(cmd.Stdout, "started import")
+	return err
 }
 
 type imprtParseListener struct {
@@ -285,7 +310,10 @@ func (ipl *imprtParseListener) ParsedGameStmt(game *types.Game) error {
 	ipl.numRoms += len(game.Roms)
 
 	for _, r := range game.Roms {
-		ipl.activeBatch.IndexRom(r)
+		err := ipl.activeBatch.IndexRom(r)
+		if err != nil {
+			return err
+		}
 	}
 
 	if ipl.activeBatch.Size() > 10 * MB {
@@ -303,7 +331,10 @@ func (rs *RombaService) importWork(cmd *commander.Command, args []string) error 
 	inPath := cmd.Flag.Lookup("in").Value.Get().(string)
 
 	if inPath == "" {
-		fmt.Fprintf(cmd.Stdout, "-in argument required")
+		_, err := fmt.Fprintf(cmd.Stdout, "-in argument required")
+		if err != nil {
+			return err
+		}
 		return errors.New("missing in argument")
 	}
 
@@ -313,7 +344,12 @@ func (rs *RombaService) importWork(cmd *commander.Command, args []string) error 
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func(){
+		err := file.Close()
+		if err != nil {
+			glog.Errorf("error, failed to close %s: %v", inPath, err)
+		}
+	}()
 
 	ipl := &imprtParseListener{
 		rs: rs,
@@ -336,8 +372,11 @@ func (rs *RombaService) importWork(cmd *commander.Command, args []string) error 
 		ipl.numRoms, inPath)
 
 	glog.Infof(endMsg)
-	fmt.Fprintf(cmd.Stdout, endMsg)
-	rs.broadCastProgress(time.Now(), false, true, endMsg)
+	_, err = fmt.Fprintf(cmd.Stdout, endMsg)
+	if err != nil {
+		return err
+	}
+	rs.broadCastProgress(time.Now(), false, true, endMsg, nil)
 
 	return nil
 }

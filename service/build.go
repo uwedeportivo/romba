@@ -178,15 +178,15 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 	if rs.busy {
 		p := rs.pt.GetProgress()
 
-		fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+		_, err := fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
 			p.FilesSoFar, p.TotalFiles, humanize.IBytes(uint64(p.BytesSoFar)), humanize.IBytes(uint64(p.TotalBytes)))
-		return nil
+		return err
 	}
 
 	outpath := cmd.Flag.Lookup("out").Value.Get().(string)
 	if outpath == "" {
-		fmt.Fprintf(cmd.Stdout, "-out flag is required")
-		return nil
+		_, err := fmt.Fprintf(cmd.Stdout, "-out flag is required")
+		return err
 	}
 
 	fixdatOnly := cmd.Flag.Lookup("fixdatOnly").Value.Get().(bool)
@@ -217,7 +217,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 
 	go func() {
 		glog.Infof("service starting build")
-		rs.broadCastProgress(time.Now(), true, false, "")
+		rs.broadCastProgress(time.Now(), true, false, "", nil)
 		ticker := time.NewTicker(time.Second * 5)
 		stopTicker := make(chan bool)
 		go func() {
@@ -225,7 +225,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 			for {
 				select {
 				case t := <-ticker.C:
-					rs.broadCastProgress(t, false, false, "")
+					rs.broadCastProgress(t, false, false, "", nil)
 				case <-stopTicker:
 					glog.Info("stopped progress broadcaster")
 					return
@@ -251,9 +251,9 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 		ticker.Stop()
 		stopTicker <- true
 
-		err = archive.DeleteEmptyFolders(outpath)
-		if err != nil {
-			glog.Errorf("error building dats: %v", err)
+		derr := archive.DeleteEmptyFolders(outpath)
+		if derr != nil {
+			glog.Errorf("error building dats: %v", derr)
 		}
 
 		rs.jobMutex.Lock()
@@ -261,12 +261,12 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 		rs.jobName = ""
 		rs.jobMutex.Unlock()
 
-		rs.broadCastProgress(time.Now(), false, true, endMsg)
+		rs.broadCastProgress(time.Now(), false, true, endMsg, err)
 		glog.Infof("service finished build")
 	}()
 
-	fmt.Fprintf(cmd.Stdout, "started build")
-	return nil
+	_, err = fmt.Fprintf(cmd.Stdout, "started build")
+	return err
 }
 
 func (rs *RombaService) dir2dat(cmd *commander.Command, args []string) error {
@@ -291,6 +291,6 @@ func (rs *RombaService) dir2dat(cmd *commander.Command, args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(cmd.Stdout, "dir2dat successfully completed a DAT in %s for directory %s", outpath, srcpath)
-	return nil
+	_, err = fmt.Fprintf(cmd.Stdout, "dir2dat successfully completed a DAT in %s for directory %s", outpath, srcpath)
+	return err
 }
