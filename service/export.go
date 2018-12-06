@@ -340,23 +340,12 @@ func (rs *RombaService) importWork(cmd *commander.Command, args []string) error 
 
 	glog.Infof("import hashes from %s", inPath)
 
-	file, err := os.Open(inPath)
-	if err != nil {
-		return err
-	}
-	defer func(){
-		err := file.Close()
-		if err != nil {
-			glog.Errorf("error, failed to close %s: %v", inPath, err)
-		}
-	}()
-
 	ipl := &imprtParseListener{
 		rs: rs,
 		activeBatch: rs.depot.RomDB.StartBatch(),
 	}
 
-	_, err = parser.ParseDatWithListener(file, inPath, ipl)
+	_, err := parser.ParseWithListener(inPath, ipl)
 	if err != nil {
 		return err
 	}
