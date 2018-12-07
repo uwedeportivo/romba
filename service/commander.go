@@ -257,6 +257,7 @@ structure according to the original DAT master directory tree structure.`,
 
 	cmd.Subcommands[6].Flag.String("out", "", "output dir")
 	cmd.Subcommands[6].Flag.Bool("fixdatOnly", false, "only fix dats and don't generate torrentzips")
+	cmd.Subcommands[6].Flag.Bool("unzipAllGames", false, "don't generate torrentzips")
 
 	cmd.Subcommands[6].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
