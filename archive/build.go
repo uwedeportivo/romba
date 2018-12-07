@@ -33,8 +33,10 @@ package archive
 import (
 	"bufio"
 	"encoding/hex"
+	"github.com/uwedeportivo/romba/worker"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -57,13 +59,17 @@ type gameBuilder struct {
 	closeC  chan bool
 	index   int
 	deduper dedup.Deduper
+	gzOnly  bool
 }
 
 func (gb *gameBuilder) work() {
 	glog.V(4).Infof("starting subworker %d", gb.index)
 	for game := range gb.wc {
 		gamePath := filepath.Join(gb.datPath, game.Name)
-		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath, gb.fixDat.UnzipGames, gb.deduper)
+		if gb.gzOnly {
+			gamePath = gb.datPath
+		}
+		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath, gb.fixDat.UnzipGames, gb.deduper, gb.gzOnly)
 		if err != nil {
 			glog.Errorf("error processing %s: %v", gamePath, err)
 			gb.erc <- err
@@ -97,9 +103,13 @@ func (gb *gameBuilder) work() {
 	return
 }
 
-func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, deduper dedup.Deduper, unzipAllGames bool) (bool, error) {
+func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, deduper dedup.Deduper,
+	unzipAllGames bool, gzOnly bool) (bool, error) {
 
 	datPath := filepath.Join(outpath, dat.Name)
+	if gzOnly {
+		datPath = outpath
+	}
 
 	err := os.Mkdir(datPath, 0777)
 	if err != nil {
@@ -129,6 +139,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, 
 		gb.index = i
 		gb.deduper = deduper
 		gb.closeC = closeC
+		gb.gzOnly = gzOnly
 
 		go gb.work()
 	}
@@ -207,53 +218,55 @@ type nopWriterCloser struct {
 func (nopWriterCloser) Close() error { return nil }
 
 func (depot *Depot) buildGame(game *types.Game, gamePath string,
-	unzipGame bool, deduper dedup.Deduper) (*types.Game, bool, error) {
+	unzipGame bool, deduper dedup.Deduper, gzOnly bool) (*types.Game, bool, error) {
 
 	var gameTorrent *torrentzip.Writer
 	var err error
 
 	glog.V(4).Infof("building game %s with path %s", game.Name, gamePath)
 
-	if unzipGame {
-		err := os.Mkdir(gamePath, 0777)
-		if err != nil {
-			glog.Errorf("error mkdir %s: %v", gamePath, err)
-			return nil, false, err
-		}
-	} else {
-		gameDir := filepath.Dir(game.Name)
-		if gameDir != "." {
-			// name has dirs in it
-			err := os.MkdirAll(filepath.Dir(gamePath), 0777)
+	if !gzOnly {
+		if unzipGame {
+			err := os.Mkdir(gamePath, 0777)
 			if err != nil {
-				glog.Errorf("error mkdir %s: %v", filepath.Dir(gamePath), err)
+				glog.Errorf("error mkdir %s: %v", gamePath, err)
 				return nil, false, err
 			}
-		}
-
-		gameFile, err := os.Create(gamePath + zipSuffix)
-		if err != nil {
-			glog.Errorf("error creating zip file %s: %v", gamePath+zipSuffix, err)
-			return nil, false, err
-		}
-		defer func(){
-			err := gameFile.Close()
-			if err != nil {
-				glog.Errorf("error, failed to close %s: %v", gamePath + zipSuffix, err)
+		} else {
+			gameDir := filepath.Dir(game.Name)
+			if gameDir != "." {
+				// name has dirs in it
+				err := os.MkdirAll(filepath.Dir(gamePath), 0777)
+				if err != nil {
+					glog.Errorf("error mkdir %s: %v", filepath.Dir(gamePath), err)
+					return nil, false, err
+				}
 			}
-		}()
 
-		gameTorrent, err = torrentzip.NewWriterWithTemp(gameFile, config.GlobalConfig.General.TmpDir)
-		if err != nil {
-			glog.Errorf("error writing to torrentzip file %s: %v", gamePath+zipSuffix, err)
-			return nil, false, err
-		}
-		defer func(){
-			err := gameTorrent.Close()
+			gameFile, err := os.Create(gamePath + zipSuffix)
 			if err != nil {
-				glog.Errorf("error, failed to close %s: %v", gamePath + zipSuffix, err)
+				glog.Errorf("error creating zip file %s: %v", gamePath+zipSuffix, err)
+				return nil, false, err
 			}
-		}()
+			defer func() {
+				err := gameFile.Close()
+				if err != nil {
+					glog.Errorf("error, failed to close %s: %v", gamePath+zipSuffix, err)
+				}
+			}()
+
+			gameTorrent, err = torrentzip.NewWriterWithTemp(gameFile, config.GlobalConfig.General.TmpDir)
+			if err != nil {
+				glog.Errorf("error writing to torrentzip file %s: %v", gamePath+zipSuffix, err)
+				return nil, false, err
+			}
+			defer func() {
+				err := gameTorrent.Close()
+				if err != nil {
+					glog.Errorf("error, failed to close %s: %v", gamePath+zipSuffix, err)
+				}
+			}()
+		}
 	}
 
 	var fixGame *types.Game
@@ -275,6 +288,28 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 			}
 
 			fixGame.Roms = append(fixGame.Roms, rom)
+			continue
+		}
+
+		if gzOnly {
+			exists, rompath, err := depot.RomInDepot(hex.EncodeToString(rom.Sha1))
+			if err != nil {
+				glog.Errorf("error opening rom %s from depot: %v", rom.Name, err)
+				return nil, false, err
+			}
+
+			if !exists {
+				glog.Warningf("game %s has missing rom %s (sha1 %s)", game.Name, rom.Name,
+					hex.EncodeToString(rom.Sha1))
+			} else {
+				commonRoot := worker.CommonRoot(gamePath, rompath)
+				destPath := path.Join(gamePath, strings.TrimPrefix(rompath, commonRoot))
+				err = worker.Cp(rompath, destPath)
+				if err != nil {
+					glog.Errorf("error copying rom %s from depot: %v", rompath, err)
+					return nil, false, err
+				}
+			}
 			continue
 		}
 
