@@ -97,7 +97,7 @@ func (gb *gameBuilder) work() {
 	return
 }
 
-func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, deduper dedup.Deduper) (bool, error) {
+func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, deduper dedup.Deduper, unzipAllGames bool) (bool, error) {
 
 	datPath := filepath.Join(outpath, dat.Name)
 
@@ -111,7 +111,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, 
 	fixDat.Name = "fix_" + dat.Name
 	fixDat.Description = dat.Description
 	fixDat.Path = dat.Path
-	fixDat.UnzipGames = dat.UnzipGames
+	fixDat.UnzipGames = dat.UnzipGames || unzipAllGames
 
 	wc := make(chan *types.Game)
 	erc := make(chan error)
@@ -176,10 +176,20 @@ endLoop2:
 		if err != nil {
 			return false, err
 		}
-		defer fixFile.Close()
+		defer func(){
+			err := fixFile.Close()
+			if err != nil {
+				glog.Errorf("error, failed to close %s: %v", fixDatPath, err)
+			}
+		}()
 
 		fixWriter := bufio.NewWriter(fixFile)
-		defer fixWriter.Flush()
+		defer func(){
+			err := fixWriter.Flush()
+			if err != nil {
+				glog.Errorf("error, failed to flush %s: %v", fixDatPath, err)
+			}
+		}()
 
 		err = types.ComposeCompliantDat(fixDat, fixWriter)
 		if err != nil {
@@ -226,14 +236,24 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 			glog.Errorf("error creating zip file %s: %v", gamePath+zipSuffix, err)
 			return nil, false, err
 		}
-		defer gameFile.Close()
+		defer func(){
+			err := gameFile.Close()
+			if err != nil {
+				glog.Errorf("error, failed to close %s: %v", gamePath + zipSuffix, err)
+			}
+		}()
 
 		gameTorrent, err = torrentzip.NewWriterWithTemp(gameFile, config.GlobalConfig.General.TmpDir)
 		if err != nil {
 			glog.Errorf("error writing to torrentzip file %s: %v", gamePath+zipSuffix, err)
 			return nil, false, err
 		}
-		defer gameTorrent.Close()
+		defer func(){
+			err := gameTorrent.Close()
+			if err != nil {
+				glog.Errorf("error, failed to close %s: %v", gamePath + zipSuffix, err)
+			}
+		}()
 	}
 
 	var fixGame *types.Game
@@ -331,10 +351,22 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 			return nil, false, err
 		}
 
-		src.Close()
-		dstWriter.Close()
+		err = src.Close()
+		if err != nil {
+			glog.Errorf("error, failed close rom file %s: %v", rom.Name, err)
+			return nil, false, err
+		}
+		err = dstWriter.Close()
+		if err != nil {
+			glog.Errorf("error, failed close rom dst file %s: %v", rom.Name, err)
+			return nil, false, err
+		}
 
-		romGZ.Close()
+		err = romGZ.Close()
+		if err != nil {
+			glog.Errorf("error, failed close rom gz stream file %s: %v", rom.Name, err)
+			return nil, false, err
+		}
 	}
 	return fixGame, foundRom, nil
 }

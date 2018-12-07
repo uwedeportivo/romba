@@ -98,7 +98,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 	if pw.pm.fixdatOnly {
 		datInComplete, err = pw.pm.rs.depot.FixDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.deduper)
 	} else {
-		datInComplete, err = pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.deduper)
+		datInComplete, err = pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.deduper, pw.pm.unzipAllGames)
 	}
 
 	if err != nil {
@@ -124,6 +124,7 @@ type buildMaster struct {
 	commonRootPath string
 	outpath        string
 	fixdatOnly     bool
+	unzipAllGames  bool
 	deduper        dedup.Deduper
 }
 
@@ -190,6 +191,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 	}
 
 	fixdatOnly := cmd.Flag.Lookup("fixdatOnly").Value.Get().(bool)
+	unzipAllGames := cmd.Flag.Lookup("unzipAllGames").Value.Get().(bool)
 
 	numWorkers := cmd.Flag.Lookup("workers").Value.Get().(int)
 	numSubWorkers := cmd.Flag.Lookup("subworkers").Value.Get().(int)
@@ -240,6 +242,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 			numSubWorkers: numSubWorkers,
 			pt:            rs.pt,
 			fixdatOnly:    fixdatOnly,
+			unzipAllGames: unzipAllGames,
 			deduper:       deduper,
 		}
 
