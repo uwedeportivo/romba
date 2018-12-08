@@ -36,7 +36,6 @@ import (
 	"github.com/uwedeportivo/romba/worker"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -50,26 +49,26 @@ import (
 )
 
 type gameBuilder struct {
-	depot   *Depot
-	datPath string
-	fixDat  *types.Dat
-	mutex   *sync.Mutex
-	wc      chan *types.Game
-	erc     chan error
-	closeC  chan bool
-	index   int
-	deduper dedup.Deduper
-	gzOnly  bool
+	depot    *Depot
+	datPath  string
+	fixDat   *types.Dat
+	mutex    *sync.Mutex
+	wc       chan *types.Game
+	erc      chan error
+	closeC   chan bool
+	index    int
+	deduper  dedup.Deduper
+	sha1Tree bool
 }
 
 func (gb *gameBuilder) work() {
 	glog.V(4).Infof("starting subworker %d", gb.index)
 	for game := range gb.wc {
 		gamePath := filepath.Join(gb.datPath, game.Name)
-		if gb.gzOnly {
+		if gb.sha1Tree {
 			gamePath = gb.datPath
 		}
-		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath, gb.fixDat.UnzipGames, gb.deduper, gb.gzOnly)
+		fixGame, foundRom, err := gb.depot.buildGame(game, gamePath, gb.fixDat.UnzipGames, gb.deduper, gb.sha1Tree)
 		if err != nil {
 			glog.Errorf("error processing %s: %v", gamePath, err)
 			gb.erc <- err
@@ -104,16 +103,18 @@ func (gb *gameBuilder) work() {
 }
 
 func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, deduper dedup.Deduper,
-	unzipAllGames bool, gzOnly bool) (bool, error) {
+	unzipAllGames bool, sha1Tree bool) (bool, error) {
 
 	datPath := filepath.Join(outpath, dat.Name)
-	if gzOnly {
+	if sha1Tree {
 		datPath = outpath
 	}
 
-	err := os.Mkdir(datPath, 0777)
-	if err != nil {
-		return false, err
+	if !sha1Tree {
+		err := os.Mkdir(datPath, 0777)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	fixDat := new(types.Dat)
@@ -139,7 +140,7 @@ func (depot *Depot) BuildDat(dat *types.Dat, outpath string, numSubworkers int, 
 		gb.index = i
 		gb.deduper = deduper
 		gb.closeC = closeC
-		gb.gzOnly = gzOnly
+		gb.sha1Tree = sha1Tree
 
 		go gb.work()
 	}
@@ -218,14 +219,14 @@ type nopWriterCloser struct {
 func (nopWriterCloser) Close() error { return nil }
 
 func (depot *Depot) buildGame(game *types.Game, gamePath string,
-	unzipGame bool, deduper dedup.Deduper, gzOnly bool) (*types.Game, bool, error) {
+	unzipGame bool, deduper dedup.Deduper, sha1Tree bool) (*types.Game, bool, error) {
 
 	var gameTorrent *torrentzip.Writer
 	var err error
 
 	glog.V(4).Infof("building game %s with path %s", game.Name, gamePath)
 
-	if !gzOnly {
+	if !sha1Tree {
 		if unzipGame {
 			err := os.Mkdir(gamePath, 0777)
 			if err != nil {
@@ -291,8 +292,9 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 			continue
 		}
 
-		if gzOnly {
-			exists, rompath, err := depot.RomInDepot(hex.EncodeToString(rom.Sha1))
+		if sha1Tree {
+			hexStr := hex.EncodeToString(rom.Sha1)
+			exists, rompath, err := depot.RomInDepot(hexStr)
 			if err != nil {
 				glog.Errorf("error opening rom %s from depot: %v", rom.Name, err)
 				return nil, false, err
@@ -300,13 +302,12 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 
 			if !exists {
 				glog.Warningf("game %s has missing rom %s (sha1 %s)", game.Name, rom.Name,
-					hex.EncodeToString(rom.Sha1))
+					hexStr)
 			} else {
-				commonRoot := worker.CommonRoot(gamePath, rompath)
-				destPath := path.Join(gamePath, strings.TrimPrefix(rompath, commonRoot))
+				destPath := pathFromSha1HexEncoding(gamePath, hexStr, gzipSuffix)
 				err = worker.Cp(rompath, destPath)
 				if err != nil {
-					glog.Errorf("error copying rom %s from depot: %v", rompath, err)
+					glog.Errorf("error copying rom %s from depot to %s: %v", rompath, destPath, err)
 					return nil, false, err
 				}
 			}
