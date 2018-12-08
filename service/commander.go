@@ -250,7 +250,7 @@ particular DAT.`,
 For each specified DAT file it creates the torrentzip files in the specified
 output dir. The files will be placed in the specified location using a folder
 structure according to the original DAT master directory tree structure unless
-the flag gzOnly is used in which case the directory tree structure is the depot
+the flag sha1Tree is used in which case the directory tree structure is the depot
 sha1 directories.`,
 		Flag:   *flag.NewFlagSet("romba-build", flag.ContinueOnError),
 		Stdout: writer,
@@ -260,7 +260,7 @@ sha1 directories.`,
 	cmd.Subcommands[6].Flag.String("out", "", "output dir")
 	cmd.Subcommands[6].Flag.Bool("fixdatOnly", false, "only fix dats and don't generate torrentzips")
 	cmd.Subcommands[6].Flag.Bool("unzipAllGames", false, "don't generate torrentzips")
-	cmd.Subcommands[6].Flag.Bool("gzOnly", false, "copy as sha1 tree")
+	cmd.Subcommands[6].Flag.Bool("sha1Tree", false, "copy as sha1 tree")
 
 	cmd.Subcommands[6].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
