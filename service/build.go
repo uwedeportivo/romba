@@ -77,6 +77,9 @@ func (pw *buildWorker) Process(path string, size int64) error {
 	}
 
 	datdir := filepath.Join(pw.pm.outpath, reldatdir)
+	if pw.pm.sha1Tree {
+		datdir = pw.pm.outpath
+	}
 
 	glog.Infof("buildWorker processing %s, reldatdir=%s, datdir=%s", path, reldatdir, datdir)
 
