@@ -79,7 +79,7 @@ func (gb *gameBuilder) work() {
 			gb.fixDat.Games = append(gb.fixDat.Games, fixGame)
 			gb.mutex.Unlock()
 		}
-		if !foundRom {
+		if !foundRom && !gb.sha1Tree {
 			if gb.fixDat.UnzipGames {
 				err := os.RemoveAll(gamePath)
 				if err != nil && !os.IsNotExist(err) {
