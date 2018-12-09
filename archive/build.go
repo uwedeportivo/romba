@@ -301,8 +301,10 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 			}
 
 			if !exists {
-				glog.Warningf("game %s has missing rom %s (sha1 %s)", game.Name, rom.Name,
-					hexStr)
+				if glog.V(2) {
+					glog.Warningf("game %s has missing rom %s (sha1 %s)", game.Name, rom.Name,
+						hexStr)
+				}
 			} else {
 				destPath := pathFromSha1HexEncoding(gamePath, hexStr, gzipSuffix)
 				err = worker.Cp(rompath, destPath)
