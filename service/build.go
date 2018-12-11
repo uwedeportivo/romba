@@ -77,7 +77,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 	}
 
 	datdir := filepath.Join(pw.pm.outpath, reldatdir)
-	if pw.pm.sha1Tree {
+	if pw.pm.sha1Tree > 0 {
 		datdir = pw.pm.outpath
 	}
 
@@ -129,7 +129,7 @@ type buildMaster struct {
 	outpath        string
 	fixdatOnly     bool
 	unzipAllGames  bool
-	sha1Tree         bool
+	sha1Tree       int
 	deduper        dedup.Deduper
 }
 
@@ -197,7 +197,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 
 	fixdatOnly := cmd.Flag.Lookup("fixdatOnly").Value.Get().(bool)
 	unzipAllGames := cmd.Flag.Lookup("unzipAllGames").Value.Get().(bool)
-	sha1Tree := cmd.Flag.Lookup("sha1Tree").Value.Get().(bool)
+	sha1Tree := cmd.Flag.Lookup("sha1Tree").Value.Get().(int)
 
 	numWorkers := cmd.Flag.Lookup("workers").Value.Get().(int)
 	numSubWorkers := cmd.Flag.Lookup("subworkers").Value.Get().(int)
@@ -249,7 +249,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 			pt:            rs.pt,
 			fixdatOnly:    fixdatOnly,
 			unzipAllGames: unzipAllGames,
-			sha1Tree:        sha1Tree,
+			sha1Tree:      sha1Tree,
 			deduper:       deduper,
 		}
 
