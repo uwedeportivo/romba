@@ -260,7 +260,8 @@ sha1 directories.`,
 	cmd.Subcommands[6].Flag.String("out", "", "output dir")
 	cmd.Subcommands[6].Flag.Bool("fixdatOnly", false, "only fix dats and don't generate torrentzips")
 	cmd.Subcommands[6].Flag.Bool("unzipAllGames", false, "don't generate torrentzips")
-	cmd.Subcommands[6].Flag.Bool("sha1Tree", false, "copy as sha1 tree")
+	cmd.Subcommands[6].Flag.Int("sha1Tree", 0, `if value >0 copy as sha1 tree. if value == 1,
+keep compressed gzip, if value > 1 uncompress into destination sha1`)
 
 	cmd.Subcommands[6].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
