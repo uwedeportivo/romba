@@ -333,6 +333,21 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 			continue
 		}
 
+		seenRom, err := deduper.Seen(rom)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if seenRom {
+			continue
+		}
+
+		err = deduper.Declare(rom)
+		if err != nil {
+			glog.Errorf("error deduping rom %s: %v", rom.Name, err)
+			return nil, false, err
+		}
+
 		if sha1Tree > 0 {
 			hexStr := hex.EncodeToString(rom.Sha1)
 			exists, rompath, err := depot.RomInDepot(hexStr)
@@ -375,26 +390,13 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 					hex.EncodeToString(rom.Sha1))
 			}
 
-			seenRom, err := deduper.Seen(rom)
-			if err != nil {
-				return nil, false, err
+			if fixGame == nil {
+				fixGame = new(types.Game)
+				fixGame.Name = game.Name
+				fixGame.Description = game.Description
 			}
 
-			if !seenRom {
-				err = deduper.Declare(rom)
-				if err != nil {
-					glog.Errorf("error deduping rom %s: %v", rom.Name, err)
-					return nil, false, err
-				}
-
-				if fixGame == nil {
-					fixGame = new(types.Game)
-					fixGame.Name = game.Name
-					fixGame.Description = game.Description
-				}
-
-				fixGame.Roms = append(fixGame.Roms, rom)
-			}
+			fixGame.Roms = append(fixGame.Roms, rom)
 			continue
 		}
 
