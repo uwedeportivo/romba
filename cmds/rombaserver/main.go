@@ -31,10 +31,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package main
 
 import (
+	_ "expvar"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"os/user"
@@ -55,9 +57,6 @@ import (
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/service"
 
-	_ "expvar"
-	_ "net/http/pprof"
-
 	_ "github.com/uwedeportivo/romba/db/clevel"
 )
 
@@ -75,7 +74,11 @@ func signalCatcher(rs *service.RombaService) {
 	os.Exit(0)
 }
 
-func findINI() (string, error) {
+func findINI(flagVal string) (string, error) {
+	if flagVal != "" {
+		return flagVal, nil
+	}
+
 	u, err := user.Current()
 	if err != nil {
 		return "", err
@@ -100,10 +103,14 @@ func findINI() (string, error) {
 	return "", fmt.Errorf("couldn't find romba.ini")
 }
 
+var iniPath = flag.String("ini", "", "location of .ini file")
+
 func main() {
+	flag.Parse()
+
 	cfg := new(config.Config)
 
-	iniPath, err := findINI()
+	iniPath, err := findINI(*iniPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "finding romba ini failed: %v\n", err)
 		os.Exit(1)
@@ -164,8 +171,6 @@ func main() {
 	flag.Set("log_dir", cfg.General.LogDir)
 	flag.Set("alsologtostderr", "true")
 	flag.Set("v", strconv.Itoa(cfg.General.Verbosity))
-
-	flag.Parse()
 
 	romDB, err := db.New(cfg.Index.Db)
 	if err != nil {
