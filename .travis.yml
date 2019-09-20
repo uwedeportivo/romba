@@ -1,7 +1,7 @@
 language: go
 
 go:
-  - "1.11"
+  - "1.13"
 
 before_install:
   - sudo apt-get install -y libleveldb-dev

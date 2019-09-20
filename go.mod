@@ -16,6 +16,6 @@ require (
 	github.com/spacemonkeygo/errors v0.0.0-20171212215202-9064522e9fd1
 	github.com/uwedeportivo/commander v0.0.0-20140125225505-864bf82b82b3
 	github.com/uwedeportivo/lzmadec v0.0.0-20150722055128-4bc815c0eeb9
-	github.com/uwedeportivo/torrentzip v0.0.0-20150911003634-e6e2a6a16702
+	github.com/uwedeportivo/torrentzip v1.0.0
 	golang.org/x/net v0.0.0-20180404174746-b3c676e531a6
 )
