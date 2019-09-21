@@ -26,5 +26,7 @@ github.com/uwedeportivo/lzmadec v0.0.0-20150722055128-4bc815c0eeb9 h1:OzfnHCn3ml
 github.com/uwedeportivo/lzmadec v0.0.0-20150722055128-4bc815c0eeb9/go.mod h1:gRlLVtjqfUevrpNvfoZ7jL+s3C6eEUNmJaWRIx9biL8=
 github.com/uwedeportivo/torrentzip v0.0.0-20150911003634-e6e2a6a16702 h1:wXIBLfba7VutGam/LtUR07izk2R7Pqj7YWyQq7mV5vo=
 github.com/uwedeportivo/torrentzip v0.0.0-20150911003634-e6e2a6a16702/go.mod h1:STZ+W1JH2oDdU6+P+E7ibP1HONPdhTMOOESU3DwOSoM=
+github.com/uwedeportivo/torrentzip v1.0.0 h1:zj1hEqWb4x3OyKBalwnP0d45H8oaSbo/iNf7Cka2BoU=
+github.com/uwedeportivo/torrentzip v1.0.0/go.mod h1:PhiUYrV9vTPb6cFslnpRPWEsQzvQ60YNUJuglCYDUGo=
 golang.org/x/net v0.0.0-20180404174746-b3c676e531a6 h1:mge3qS/eMvcfyIAzTMOAy0XUzWG6Lk0N4M8zjuSmdco=
 golang.org/x/net v0.0.0-20180404174746-b3c676e531a6/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
