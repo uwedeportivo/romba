@@ -39,6 +39,7 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
+	"github.com/karrick/godirwalk"
 	"github.com/uwedeportivo/romba/parser"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/worker"
@@ -171,15 +172,18 @@ func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fr
 	} else {
 		var dats []*types.Dat
 
-		err = filepath.Walk(fromDats, func(path string, info os.FileInfo, err error) error {
-			if !info.IsDir() && (strings.HasSuffix(path, ".dat") || strings.HasSuffix(path, ".xml")) {
-				dat, _, err := parser.Parse(path)
-				if err != nil {
-					return err
+		err = godirwalk.Walk(fromDats, &godirwalk.Options{
+			Unsorted: true,
+			Callback: func(path string, info *godirwalk.Dirent) error {
+				if !info.IsDir() && (strings.HasSuffix(path, ".dat") || strings.HasSuffix(path, ".xml")) {
+					dat, _, err := parser.Parse(path)
+					if err != nil {
+						return err
+					}
+					dats = append(dats, dat)
 				}
-				dats = append(dats, dat)
-			}
-			return nil
+				return nil
+			},
 		})
 		if err != nil {
 			return "", err

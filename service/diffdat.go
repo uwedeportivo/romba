@@ -41,6 +41,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
+	"github.com/karrick/godirwalk"
 
 	"github.com/uwedeportivo/commander"
 	"github.com/uwedeportivo/romba/dedup"
@@ -102,7 +103,7 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer func (){
+	defer func() {
 		err := dd.Close()
 		if err != nil {
 			glog.Errorf("error closing dedup leveldb: %v", err)
@@ -134,7 +135,7 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		defer func(){
+		defer func() {
 			err := diffFile.Close()
 			if err != nil {
 				glog.Errorf("error closing diff file %s: %v", outPath, err)
@@ -142,7 +143,7 @@ func (rs *RombaService) diffdat(cmd *commander.Command, args []string) error {
 		}()
 
 		diffWriter := bufio.NewWriter(diffFile)
-		defer func(){
+		defer func() {
 			err := diffWriter.Flush()
 			if err != nil {
 				glog.Errorf("error flushing diff file %s: %v", outPath, err)
@@ -189,7 +190,7 @@ func (ipl *declareParseListener) ParsedGameStmt(game *types.Game) error {
 }
 
 type dedupParseListener struct {
-	dd dedup.Deduper
+	dd         dedup.Deduper
 	oneDiffDat *types.Dat
 }
 
@@ -261,7 +262,7 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 	if err != nil {
 		return err
 	}
-	defer func(){
+	defer func() {
 		err := dd.Close()
 		if err != nil {
 			glog.Errorf("error closing leveldb deduper: %v", err)
@@ -271,69 +272,85 @@ func (rs *RombaService) ediffdatWork(cmd *commander.Command, args []string) erro
 	ipl := new(declareParseListener)
 	ipl.dd = dd
 
-	err = filepath.Walk(oldDatPath, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return nil
-		}
-
-		ext := filepath.Ext(path)
-		if ext == ".dat" || ext == ".xml" {
-			rs.pt.DeclareFile(path)
-
-			_, err := parser.ParseWithListener(path, ipl)
-			if err != nil {
-				return err
+	err = godirwalk.Walk(oldDatPath, &godirwalk.Options{
+		Unsorted: true,
+		Callback: func(path string, info *godirwalk.Dirent) error {
+			if info.IsDir() {
+				return nil
 			}
 
-			rs.pt.AddBytesFromFile(info.Size(), false)
-		}
-		return nil
+			ext := filepath.Ext(path)
+			if ext == ".dat" || ext == ".xml" {
+				rs.pt.DeclareFile(path)
+
+				_, err := parser.ParseWithListener(path, ipl)
+				if err != nil {
+					return err
+				}
+
+				fi, err := os.Stat(path)
+				if err != nil {
+					return err
+				}
+
+				rs.pt.AddBytesFromFile(fi.Size(), false)
+			}
+			return nil
+		},
 	})
 	if err != nil {
 		return err
 	}
 
-	err = filepath.Walk(newDatPath, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return nil
-		}
+	err = godirwalk.Walk(newDatPath, &godirwalk.Options{
+		Unsorted: true,
+		Callback: func(path string, info *godirwalk.Dirent) error {
+			if info.IsDir() {
+				return nil
+			}
 
-		ext := filepath.Ext(path)
-		if ext == ".dat" || ext == ".xml" {
-			rs.pt.DeclareFile(path)
+			ext := filepath.Ext(path)
+			if ext == ".dat" || ext == ".xml" {
+				rs.pt.DeclareFile(path)
 
-			ipl := new(dedupParseListener)
-			ipl.dd = dd
-			ipl.oneDiffDat = new(types.Dat)
+				ipl := new(dedupParseListener)
+				ipl.dd = dd
+				ipl.oneDiffDat = new(types.Dat)
 
-			_, err := parser.ParseWithListener(path, ipl)
-			if err != nil {
+				_, err := parser.ParseWithListener(path, ipl)
+				if err != nil {
+					return err
+				}
+
+				oneDiffDat := ipl.oneDiffDat
+
+				if len(oneDiffDat.Games) > 0 {
+					oneDiffDat = oneDiffDat.FilterRoms(func(r *types.Rom) bool {
+						return r.Size > 0
+					})
+					if oneDiffDat != nil {
+						commonRoot := worker.CommonRoot(path, outPath)
+						destDir := filepath.Join(outPath, filepath.Dir(strings.TrimPrefix(path, commonRoot)))
+						err := os.MkdirAll(destDir, 0777)
+						if err != nil {
+							glog.Errorf("error mkdir %s: %v", destDir, err)
+							return err
+						}
+
+						err = writeDat(oneDiffDat, filepath.Join(destDir, oneDiffDat.Name+".dat"))
+					}
+				}
+
+				fi, serr := os.Stat(path)
+				if err != nil {
+					return serr
+				}
+
+				rs.pt.AddBytesFromFile(fi.Size(), err != nil)
 				return err
 			}
-
-			oneDiffDat := ipl.oneDiffDat
-
-			if len(oneDiffDat.Games) > 0 {
-				oneDiffDat = oneDiffDat.FilterRoms(func(r *types.Rom) bool {
-					return r.Size > 0
-				})
-				if oneDiffDat != nil {
-					commonRoot := worker.CommonRoot(path, outPath)
-					destDir := filepath.Join(outPath, filepath.Dir(strings.TrimPrefix(path, commonRoot)))
-					err := os.MkdirAll(destDir, 0777)
-					if err != nil {
-						glog.Errorf("error mkdir %s: %v", destDir, err)
-						return err
-					}
-
-					err = writeDat(oneDiffDat, filepath.Join(destDir, oneDiffDat.Name+".dat"))
-				}
-			}
-
-			rs.pt.AddBytesFromFile(info.Size(), err != nil)
-			return err
-		}
-		return nil
+			return nil
+		},
 	})
 	if err != nil {
 		return err
@@ -404,7 +421,7 @@ func writeDat(dat *types.Dat, outPath string) error {
 	if err != nil {
 		return err
 	}
-	defer func(){
+	defer func() {
 		err := file.Close()
 		if err != nil {
 			glog.Errorf("error closing file %s: %v", outPath, err)
