@@ -9,6 +9,7 @@ require (
 	github.com/gonuts/flag v0.0.0-20130524081338-741a6cbd37a3
 	github.com/gorilla/rpc v1.1.0
 	github.com/jmhodges/levigo v0.0.0-20161115193449-c42d9e0ca023
+	github.com/karrick/godirwalk v1.14.0
 	github.com/klauspost/compress v1.2.1
 	github.com/klauspost/cpuid v0.0.0-20170728055534-ae7887de9fa5 // indirect
 	github.com/klauspost/crc32 v0.0.0-20161016154125-cb6bfca970f6

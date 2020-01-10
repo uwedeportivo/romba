@@ -10,6 +10,8 @@ github.com/gorilla/rpc v1.1.0 h1:marKfvVP0Gpd/jHlVBKCQ8RAoUPdX7K1Nuh6l1BNh7A=
 github.com/gorilla/rpc v1.1.0/go.mod h1:V4h9r+4sF5HnzqbwIez0fKSpANP0zlYd3qR7p36jkTQ=
 github.com/jmhodges/levigo v0.0.0-20161115193449-c42d9e0ca023 h1:y5P5G9cANJZt3MXlMrgELo5mNLZPXH8aGFFFG7IzPU0=
 github.com/jmhodges/levigo v0.0.0-20161115193449-c42d9e0ca023/go.mod h1:Q6Qx+uH3RAqyK4rFQroq9RL7mdkABMcfhEI+nNuzMJQ=
+github.com/karrick/godirwalk v1.14.0 h1:FFk1V9N1Qke8Iv4o6uBQK8HJ6slYM3uSL8tPkiBH8+M=
+github.com/karrick/godirwalk v1.14.0/go.mod h1:H5KPZjojv4lE+QYImBI8xVtrBRgYrIVsaRPx4tDPEn4=
 github.com/klauspost/compress v1.2.1 h1:z1Ra6IKoPtIeVA8GV0SCQhuo6T4EBjlL9VwonZ8NYBo=
 github.com/klauspost/compress v1.2.1/go.mod h1:RyIbtBH6LamlWaDj8nUwkbUhJ87Yi3uG0guNDohfE1A=
 github.com/klauspost/cpuid v0.0.0-20170728055534-ae7887de9fa5 h1:2U0HzY8BJ8hVwDKIzp7y4voR9CX/nvcfymLmg2UiOio=
@@ -24,8 +26,6 @@ github.com/uwedeportivo/commander v0.0.0-20140125225505-864bf82b82b3 h1:clfSMiuI
 github.com/uwedeportivo/commander v0.0.0-20140125225505-864bf82b82b3/go.mod h1:8PjmODIPV7ieyeTVU8Kg0ggATPnfXU8KM/taWyDNrLg=
 github.com/uwedeportivo/lzmadec v0.0.0-20150722055128-4bc815c0eeb9 h1:OzfnHCn3mlThdRFA5k1QIB8lbADhXFI3rmye9KInSKA=
 github.com/uwedeportivo/lzmadec v0.0.0-20150722055128-4bc815c0eeb9/go.mod h1:gRlLVtjqfUevrpNvfoZ7jL+s3C6eEUNmJaWRIx9biL8=
-github.com/uwedeportivo/torrentzip v0.0.0-20150911003634-e6e2a6a16702 h1:wXIBLfba7VutGam/LtUR07izk2R7Pqj7YWyQq7mV5vo=
-github.com/uwedeportivo/torrentzip v0.0.0-20150911003634-e6e2a6a16702/go.mod h1:STZ+W1JH2oDdU6+P+E7ibP1HONPdhTMOOESU3DwOSoM=
 github.com/uwedeportivo/torrentzip v1.0.0 h1:zj1hEqWb4x3OyKBalwnP0d45H8oaSbo/iNf7Cka2BoU=
 github.com/uwedeportivo/torrentzip v1.0.0/go.mod h1:PhiUYrV9vTPb6cFslnpRPWEsQzvQ60YNUJuglCYDUGo=
 golang.org/x/net v0.0.0-20180404174746-b3c676e531a6 h1:mge3qS/eMvcfyIAzTMOAy0XUzWG6Lk0N4M8zjuSmdco=
