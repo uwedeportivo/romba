@@ -47,6 +47,11 @@ func (rs *RombaService) printVersion(cmd *commander.Command, args []string) erro
 	return nil
 }
 
+func (rs *RombaService) deprecated(cmd *commander.Command, args []string) error {
+	fmt.Fprintf(cmd.Stdout, "command is deprecated %s", cmd.Name())
+	return nil
+}
+
 func (rs *RombaService) memstats(cmd *commander.Command, args []string) error {
 	rs.jobMutex.Lock()
 	defer rs.jobMutex.Unlock()

@@ -222,7 +222,7 @@ in -old DAT file. Ignores those entries in -old that are not in -new.`,
 	cmd.Subcommands[4].Flag.String("description", "", "description for out DAT file")
 
 	cmd.Subcommands[5] = &commander.Command{
-		Run:       rs.build,
+		Run:       rs.deprecated,
 		UsageLine: "fixdat -out <outputdir> <list of DAT files or folders with DAT files>",
 		Short:     "For each specified DAT file it creates a fix DAT.",
 		Long: `
