@@ -111,7 +111,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommand(writer io.Writer, rs *RombaService) *commander.Command {
 	cmd := new(commander.Command)
 	cmd.UsageLine = "Romba"
-	cmd.Subcommands = make([]*commander.Command, 19)
+	cmd.Subcommands = make([]*commander.Command, 18)
 	cmd.Flag = *flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -222,27 +222,6 @@ in -old DAT file. Ignores those entries in -old that are not in -new.`,
 	cmd.Subcommands[4].Flag.String("description", "", "description for out DAT file")
 
 	cmd.Subcommands[5] = &commander.Command{
-		Run:       rs.deprecated,
-		UsageLine: "fixdat -out <outputdir> <list of DAT files or folders with DAT files>",
-		Short:     "For each specified DAT file it creates a fix DAT.",
-		Long: `
-For each specified DAT file it creates a fix DAT with the missing entries for
-that DAT. If nothing is missing it doesn't create a fix DAT for that
-particular DAT.`,
-		Flag:   *flag.NewFlagSet("romba-fixdat", flag.ContinueOnError),
-		Stdout: writer,
-		Stderr: writer,
-	}
-
-	cmd.Subcommands[5].Flag.String("out", "", "output dir")
-	cmd.Subcommands[5].Flag.Bool("fixdatOnly", true, "only fix dats and don't generate torrentzips")
-	cmd.Subcommands[5].Flag.Int("workers", config.GlobalConfig.General.Workers,
-		"how many workers to launch for the job")
-
-	cmd.Subcommands[5].Flag.Int("subworkers", config.GlobalConfig.General.Workers,
-		"how many subworkers to launch for each worker")
-
-	cmd.Subcommands[6] = &commander.Command{
 		Run:       rs.build,
 		UsageLine: "build -out <outputdir> <list of DAT files or folders with DAT files>",
 		Short:     "For each specified DAT file it creates the torrentzip files.",
@@ -257,19 +236,19 @@ sha1 directories.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[6].Flag.String("out", "", "output dir")
-	cmd.Subcommands[6].Flag.Bool("fixdatOnly", false, "only fix dats and don't generate torrentzips")
-	cmd.Subcommands[6].Flag.Bool("unzipAllGames", false, "don't generate torrentzips")
-	cmd.Subcommands[6].Flag.Int("sha1Tree", 0, `if value >0 copy as sha1 tree. if value == 1,
+	cmd.Subcommands[5].Flag.String("out", "", "output dir")
+	cmd.Subcommands[5].Flag.Bool("fixdatOnly", false, "only fix dats and don't generate torrentzips")
+	cmd.Subcommands[5].Flag.Bool("unzipAllGames", false, "don't generate torrentzips")
+	cmd.Subcommands[5].Flag.Int("sha1Tree", 0, `if value >0 copy as sha1 tree. if value == 1,
 keep compressed gzip, if value > 1 uncompress into destination sha1`)
 
-	cmd.Subcommands[6].Flag.Int("workers", config.GlobalConfig.General.Workers,
+	cmd.Subcommands[5].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
 
-	cmd.Subcommands[6].Flag.Int("subworkers", config.GlobalConfig.General.Workers,
+	cmd.Subcommands[5].Flag.Int("subworkers", config.GlobalConfig.General.Workers,
 		"how many subworkers to launch for each worker")
 
-	cmd.Subcommands[7] = &commander.Command{
+	cmd.Subcommands[6] = &commander.Command{
 		Run:       rs.lookup,
 		UsageLine: "lookup <list of hashes>",
 		Short:     "For each specified hash it looks up any available information.",
@@ -280,10 +259,10 @@ For each specified hash it looks up any available information (dat or rom).`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[7].Flag.Int64("size", -1, "size of the rom to lookup")
-	cmd.Subcommands[7].Flag.String("out", "", "output dir")
+	cmd.Subcommands[6].Flag.Int64("size", -1, "size of the rom to lookup")
+	cmd.Subcommands[6].Flag.String("out", "", "output dir")
 
-	cmd.Subcommands[8] = &commander.Command{
+	cmd.Subcommands[7] = &commander.Command{
 		Run:       rs.progress,
 		UsageLine: "progress",
 		Short:     "Shows progress of the currently running command.",
@@ -294,7 +273,7 @@ Shows progress of the currently running command.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[9] = &commander.Command{
+	cmd.Subcommands[8] = &commander.Command{
 		Run:       rs.shutdown,
 		UsageLine: "shutdown",
 		Short:     "Gracefully shuts down server.",
@@ -305,7 +284,7 @@ Gracefully shuts down server saving all the cached data.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[10] = &commander.Command{
+	cmd.Subcommands[9] = &commander.Command{
 		Run:       rs.memstats,
 		UsageLine: "memstats",
 		Short:     "Prints memory stats.",
@@ -316,7 +295,7 @@ Print memory stats.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[11] = &commander.Command{
+	cmd.Subcommands[10] = &commander.Command{
 		Run:       rs.dbstats,
 		UsageLine: "dbstats",
 		Short:     "Prints db stats.",
@@ -327,7 +306,7 @@ Print db stats.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[12] = &commander.Command{
+	cmd.Subcommands[11] = &commander.Command{
 		Run:       rs.cancel,
 		UsageLine: "cancel",
 		Short:     "Cancels current long-running job",
@@ -338,7 +317,7 @@ Cancels current long-running job.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[13] = &commander.Command{
+	cmd.Subcommands[12] = &commander.Command{
 		Run:       rs.startMerge,
 		UsageLine: "merge",
 		Short:     "Merges depot",
@@ -349,13 +328,13 @@ Merges specified depot into current depot.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[13].Flag.Bool("only-needed", false, "only merge ROM files actually referenced by DAT files from the DAT index")
-	cmd.Subcommands[13].Flag.String("resume", "", "resume a previously interrupted merge operation from the specified path")
-	cmd.Subcommands[13].Flag.Int("workers", config.GlobalConfig.General.Workers,
+	cmd.Subcommands[12].Flag.Bool("only-needed", false, "only merge ROM files actually referenced by DAT files from the DAT index")
+	cmd.Subcommands[12].Flag.String("resume", "", "resume a previously interrupted merge operation from the specified path")
+	cmd.Subcommands[12].Flag.Int("workers", config.GlobalConfig.General.Workers,
 		"how many workers to launch for the job")
-	cmd.Subcommands[13].Flag.Bool("skip-initial-scan", false, "skip the initial scan of the files to determine amount of work")
+	cmd.Subcommands[12].Flag.Bool("skip-initial-scan", false, "skip the initial scan of the files to determine amount of work")
 
-	cmd.Subcommands[14] = &commander.Command{
+	cmd.Subcommands[13] = &commander.Command{
 		Run:       rs.printVersion,
 		UsageLine: "version",
 		Short:     "Prints version",
@@ -366,7 +345,7 @@ Prints version.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[15] = &commander.Command{
+	cmd.Subcommands[14] = &commander.Command{
 		Run:       rs.ediffdat,
 		UsageLine: "ediffdat -old <dat dir> -new <dat dir> -out <output dir>",
 		Short:     "Creates a DAT file with those entries that are in -new DAT.",
@@ -378,11 +357,11 @@ in -old DAT files. Ignores those entries in -old that are not in -new.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[15].Flag.String("out", "", "output dir")
-	cmd.Subcommands[15].Flag.String("old", "", "old DAT file")
-	cmd.Subcommands[15].Flag.String("new", "", "new DAT file")
+	cmd.Subcommands[14].Flag.String("out", "", "output dir")
+	cmd.Subcommands[14].Flag.String("old", "", "old DAT file")
+	cmd.Subcommands[14].Flag.String("new", "", "new DAT file")
 
-	cmd.Subcommands[16] = &commander.Command{
+	cmd.Subcommands[15] = &commander.Command{
 		Run:       rs.datstats,
 		UsageLine: "datstats",
 		Short:     "Prints dat stats.",
@@ -393,7 +372,7 @@ Print dat stats.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[17] = &commander.Command{
+	cmd.Subcommands[16] = &commander.Command{
 		Run:       rs.export,
 		UsageLine: "export",
 		Short:     "Exports the hashes associations as a DAT file.",
@@ -404,9 +383,9 @@ Exports the hashes associations as a DAT file.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[17].Flag.String("out", "", "output DAT file")
+	cmd.Subcommands[16].Flag.String("out", "", "output DAT file")
 
-	cmd.Subcommands[18] = &commander.Command{
+	cmd.Subcommands[17] = &commander.Command{
 		Run:       rs.imprt,
 		UsageLine: "import",
 		Short:     "Import the hashes associations as a DAT file.",
@@ -417,7 +396,7 @@ Imports the hashes associations as a DAT file.`,
 		Stderr: writer,
 	}
 
-	cmd.Subcommands[18].Flag.String("in", "", "input DAT file")
+	cmd.Subcommands[17].Flag.String("in", "", "input DAT file")
 
 	return cmd
 }
