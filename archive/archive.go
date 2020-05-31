@@ -386,6 +386,11 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 
 	outpath := pathFromSha1HexEncoding(w.depot.roots[root], sha1Hex, gzipSuffix)
 
+	w.depot.cache.Set(sha1Hex, &cacheValue{
+		hh:hh,
+		rootIndex: root,
+	}, 1)
+
 	r, err = ro()
 	if err != nil {
 		return 0, err

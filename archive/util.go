@@ -162,14 +162,20 @@ func HashesFromGZHeader(inpath string, md5crcBuffer []byte) (*Hashes, int64, err
 	var size int64
 
 	if len(md5crcBuffer) == md5.Size+crc32.Size+8 {
-		hh = new(Hashes)
-		hh.Md5 = make([]byte, md5.Size)
-		copy(hh.Md5, md5crcBuffer[:md5.Size])
-		hh.Crc = make([]byte, crc32.Size)
-		copy(hh.Crc, md5crcBuffer[md5.Size:md5.Size+crc32.Size])
-		size = util.BytesToInt64(md5crcBuffer[md5.Size+crc32.Size:])
+		hh = HashesFromMd5crcBuffer(md5crcBuffer)
+		size = hh.Size
 	}
 	return hh, size, nil
+}
+
+func HashesFromMd5crcBuffer(md5crcBuffer []byte) *Hashes {
+	hh := new(Hashes)
+	hh.Md5 = make([]byte, md5.Size)
+	copy(hh.Md5, md5crcBuffer[:md5.Size])
+	hh.Crc = make([]byte, crc32.Size)
+	copy(hh.Crc, md5crcBuffer[md5.Size:md5.Size+crc32.Size])
+	hh.Size = util.BytesToInt64(md5crcBuffer[md5.Size+crc32.Size:])
+	return hh
 }
 
 func hashesForReader(in io.Reader) (*Hashes, error) {

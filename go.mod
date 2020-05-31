@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
+	github.com/dgraph-io/ristretto v0.0.2
 	github.com/dustin/go-humanize v0.0.0-20171111073723-bb3d318650d4
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/gonuts/flag v0.0.0-20130524081338-741a6cbd37a3

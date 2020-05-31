@@ -43,6 +43,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/klauspost/compress/gzip"
 
+	"github.com/dgraph-io/ristretto"
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/util"
@@ -55,18 +56,35 @@ type Depot struct {
 	touched  []bool
 	RomDB    db.RomDB
 	lock     *sync.Mutex
+	cache    *ristretto.Cache
 	// where in the depot to reserve the next space
 	// when archiving
 	start int
 }
 
+type cacheValue struct {
+	hh        *Hashes
+	rootIndex int
+}
+
 func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	glog.Info("Depot init")
+
+	cache, err := ristretto.NewCache(&ristretto.Config{
+		NumCounters: 1e7,     // number of keys to track frequency of (10M).
+		MaxCost:     1 << 30, // maximum cost of cache (1GB).
+		BufferItems: 64,      // number of keys per Get buffer.
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	depot := new(Depot)
 	depot.roots = make([]string, len(roots))
 	depot.sizes = make([]int64, len(roots))
 	depot.maxSizes = make([]int64, len(roots))
 	depot.touched = make([]bool, len(roots))
+	depot.cache = cache
 
 	copy(depot.roots, roots)
 	copy(depot.maxSizes, maxSize)
@@ -109,7 +127,13 @@ func (depot *Depot) RomInDepot(sha1Hex string) (bool, string, error) {
 }
 
 func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, int64, error) {
-	for _, root := range depot.roots {
+	v, hit := depot.cache.Get(sha1Hex)
+	if hit {
+		cv := v.(*cacheValue)
+		return true, cv.hh, pathFromSha1HexEncoding(depot.roots[cv.rootIndex],
+			hex.EncodeToString(cv.hh.Sha1), gzipSuffix), cv.hh.Size, nil
+	}
+	for idx, root := range depot.roots {
 		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
 		if err != nil {
@@ -149,6 +173,11 @@ func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, int64, e
 			} else {
 				glog.Warningf("rom %s has missing gzip md5 or crc header", rompath)
 			}
+
+			depot.cache.Set(sha1Hex, &cacheValue{
+				hh:hh,
+				rootIndex: idx,
+			}, 1)
 
 			return true, hh, rompath, size, nil
 		}
