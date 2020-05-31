@@ -258,14 +258,20 @@ func (pm *archiveMaster) Scanned(numFiles int, numBytes int64, commonRootPath st
 
 func (depot *Depot) reserveRoot(size int64) (int, error) {
 	depot.lock.Lock()
-	defer depot.lock.Unlock()
+	start := depot.start
+	depot.lock.Unlock()
 
-	for i := depot.start; i < len(depot.roots); i++ {
+	for i := start; i < len(depot.roots); i++ {
+		depot.rootLocks[i].Lock()
 		if depot.sizes[i]+size < depot.maxSizes[i] {
 			depot.sizes[i] += size
+			depot.rootLocks[i].Unlock()
 			return i, nil
 		} else if depot.sizes[i] >= depot.maxSizes[i] {
+			depot.rootLocks[i].Unlock()
+			depot.lock.Lock()
 			depot.start = i
+			depot.lock.Unlock()
 		}
 	}
 
@@ -387,7 +393,7 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 	outpath := pathFromSha1HexEncoding(w.depot.roots[root], sha1Hex, gzipSuffix)
 
 	w.depot.cache.Set(sha1Hex, &cacheValue{
-		hh:hh,
+		hh:        hh,
 		rootIndex: root,
 	}, 1)
 
@@ -402,7 +408,7 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 		return 0, err
 	}
 
-	w.depot.adjustSize(root, compressedSize-estimatedCompressedSize)
+	w.depot.adjustSize(root, compressedSize-estimatedCompressedSize, sha1Hex)
 	return compressedSize, nil
 }
 

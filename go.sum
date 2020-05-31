@@ -45,6 +45,10 @@ github.com/uwedeportivo/lzmadec v0.0.0-20150722055128-4bc815c0eeb9 h1:OzfnHCn3ml
 github.com/uwedeportivo/lzmadec v0.0.0-20150722055128-4bc815c0eeb9/go.mod h1:gRlLVtjqfUevrpNvfoZ7jL+s3C6eEUNmJaWRIx9biL8=
 github.com/uwedeportivo/torrentzip v1.0.0 h1:zj1hEqWb4x3OyKBalwnP0d45H8oaSbo/iNf7Cka2BoU=
 github.com/uwedeportivo/torrentzip v1.0.0/go.mod h1:PhiUYrV9vTPb6cFslnpRPWEsQzvQ60YNUJuglCYDUGo=
+github.com/willf/bitset v1.1.10 h1:NotGKqX0KwQ72NUzqrjZq5ipPNDQex9lo3WpaS8L2sc=
+github.com/willf/bitset v1.1.10/go.mod h1:RjeCKbqT1RxIR/KWY6phxZiaY1IyutSBfGjNPySAYV4=
+github.com/willf/bloom v2.0.3+incompatible h1:QDacWdqcAUI1MPOwIQZRy9kOR7yxfyEmxX8Wdm2/JPA=
+github.com/willf/bloom v2.0.3+incompatible/go.mod h1:MmAltL9pDMNTrvUkxdg0k0q5I0suxmuwp3KbyrZLOZ8=
 golang.org/x/net v0.0.0-20180404174746-b3c676e531a6 h1:mge3qS/eMvcfyIAzTMOAy0XUzWG6Lk0N4M8zjuSmdco=
 golang.org/x/net v0.0.0-20180404174746-b3c676e531a6/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=

@@ -225,6 +225,6 @@ func (w *mergeWorker) mergeGzip(path string, size int64) error {
 		return err
 	}
 
-	w.depot.adjustSize(root, size)
+	w.depot.adjustSize(root, size, sha1Hex)
 	return nil
 }

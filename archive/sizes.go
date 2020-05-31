@@ -42,8 +42,10 @@ import (
 )
 
 const (
-	sizeFilename       = ".romba_size"
-	backupSizeFilename = ".romba_size.backup"
+	sizeFilename              = ".romba_size"
+	backupSizeFilename        = ".romba_size.backup"
+	bloomFilterFilename       = ".romba_bloom_filter"
+	backupBloomFilterFilename = ".romba_bloom_filter.backup"
 )
 
 type ByteSize float64
