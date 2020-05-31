@@ -37,6 +37,7 @@ import (
 	"hash/crc32"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/dustin/go-humanize"
@@ -47,16 +48,20 @@ import (
 	"github.com/uwedeportivo/romba/db"
 	"github.com/uwedeportivo/romba/types"
 	"github.com/uwedeportivo/romba/util"
+	"github.com/willf/bloom"
 )
 
 type Depot struct {
-	roots    []string
-	sizes    []int64
-	maxSizes []int64
-	touched  []bool
-	RomDB    db.RomDB
-	lock     *sync.Mutex
-	cache    *ristretto.Cache
+	roots        []string
+	bloomReady   []bool
+	bloomfilters []*bloom.BloomFilter
+	sizes        []int64
+	maxSizes     []int64
+	touched      []bool
+	rootLocks    []*sync.Mutex
+	RomDB        db.RomDB
+	lock         *sync.Mutex
+	cache        *ristretto.Cache
 	// where in the depot to reserve the next space
 	// when archiving
 	start int
@@ -65,6 +70,58 @@ type Depot struct {
 type cacheValue struct {
 	hh        *Hashes
 	rootIndex int
+}
+
+func loadBloomFilter(root string) (*bloom.BloomFilter, error) {
+	bfp := filepath.Join(root, bloomFilterFilename)
+	exists, err := PathExists(bfp)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		return nil, nil
+	}
+
+	bf := bloom.NewWithEstimates(20000000, 0.1)
+	file, err := os.Open(bfp)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	_, err = bf.ReadFrom(file)
+	if err != nil {
+		return nil, err
+	}
+	return bf, nil
+}
+
+func writeBloomFilter(root string, bf *bloom.BloomFilter) error {
+	bfFilePath := filepath.Join(root, bloomFilterFilename)
+
+	exists, err := PathExists(bfFilePath)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		backupBfFilePath := filepath.Join(root, backupBloomFilterFilename)
+
+		err := os.Rename(bfFilePath, backupBfFilePath)
+		if err != nil {
+			return err
+		}
+	}
+
+	file, err := os.Create(bfFilePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = bf.WriteTo(file)
+	return err
 }
 
 func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
@@ -81,6 +138,9 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 
 	depot := new(Depot)
 	depot.roots = make([]string, len(roots))
+	depot.rootLocks = make([]*sync.Mutex, len(roots))
+	depot.bloomfilters = make([]*bloom.BloomFilter, len(roots))
+	depot.bloomReady = make([]bool, len(roots))
 	depot.sizes = make([]int64, len(roots))
 	depot.maxSizes = make([]int64, len(roots))
 	depot.touched = make([]bool, len(roots))
@@ -96,6 +156,16 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 			return nil, err
 		}
 		depot.sizes[k] = size
+		depot.rootLocks[k] = new(sync.Mutex)
+
+		glog.Infof("initialize bloomfilter for %s", root)
+
+		bf, err := loadBloomFilter(root)
+		if err != nil {
+			return nil, err
+		}
+		depot.bloomfilters[k] = bf
+		depot.bloomReady[k] = bf != nil
 	}
 
 	glog.Info("Initializing Depot with the following roots")
@@ -112,7 +182,17 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 }
 
 func (depot *Depot) RomInDepot(sha1Hex string) (bool, string, error) {
-	for _, root := range depot.roots {
+	v, hit := depot.cache.Get(sha1Hex)
+	if hit {
+		cv := v.(*cacheValue)
+		return true, pathFromSha1HexEncoding(depot.roots[cv.rootIndex],
+			hex.EncodeToString(cv.hh.Sha1), gzipSuffix), nil
+	}
+	for idx, root := range depot.roots {
+		if depot.bloomReady[idx] && !depot.bloomfilters[idx].Test([]byte(sha1Hex)) {
+			return false, "", nil
+		}
+
 		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
 		if err != nil {
@@ -134,6 +214,10 @@ func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, int64, e
 			hex.EncodeToString(cv.hh.Sha1), gzipSuffix), cv.hh.Size, nil
 	}
 	for idx, root := range depot.roots {
+		if depot.bloomReady[idx] && !depot.bloomfilters[idx].Test([]byte(sha1Hex)) {
+			return false, nil, "", 0, nil
+		}
+
 		rompath := pathFromSha1HexEncoding(root, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
 		if err != nil {
@@ -175,7 +259,7 @@ func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, int64, e
 			}
 
 			depot.cache.Set(sha1Hex, &cacheValue{
-				hh:hh,
+				hh:        hh,
 				rootIndex: idx,
 			}, 1)
 
@@ -221,10 +305,8 @@ func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
 }
 
 func (depot *Depot) writeSizes() {
-	depot.lock.Lock()
-	defer depot.lock.Unlock()
-
 	for k, root := range depot.roots {
+		depot.rootLocks[k].Lock()
 		if depot.touched[k] {
 			err := writeSizeFile(root, depot.sizes[k])
 			if err != nil {
@@ -232,18 +314,31 @@ func (depot *Depot) writeSizes() {
 			} else {
 				depot.touched[k] = false
 			}
+
+			if depot.bloomReady[k] {
+				err = writeBloomFilter(root, depot.bloomfilters[k])
+				if err != nil {
+					depot.touched[k] = true
+					glog.Errorf("failed to write bloomfilter into %s: %v\n", root, err)
+				}
+			}
 		}
+		depot.rootLocks[k].Unlock()
 	}
 }
 
-func (depot *Depot) adjustSize(index int, delta int64) {
-	depot.lock.Lock()
-	defer depot.lock.Unlock()
+func (depot *Depot) adjustSize(index int, delta int64, sha1Hex string) {
+	depot.rootLocks[index].Lock()
+	defer depot.rootLocks[index].Unlock()
 
 	depot.sizes[index] += delta
 
 	if depot.sizes[index] < 0 {
 		depot.sizes[index] = 0
+	}
+
+	if sha1Hex != "" && depot.bloomReady[index] {
+		depot.bloomfilters[index].Add([]byte(sha1Hex))
 	}
 
 	depot.touched[index] = true

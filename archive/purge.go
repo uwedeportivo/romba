@@ -277,7 +277,7 @@ func (w *purgeWorker) Process(inpath string, size int64) error {
 		}
 
 		if index != -1 {
-			w.pm.depot.adjustSize(index, -size)
+			w.pm.depot.adjustSize(index, -size, "")
 		}
 	}
 	return nil

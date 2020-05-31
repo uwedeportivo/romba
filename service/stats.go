@@ -31,12 +31,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package service
 
 import (
+	"bytes"
 	"fmt"
 	"runtime"
 	"runtime/debug"
+	"time"
 
 	"github.com/codahale/hdrhistogram"
 	"github.com/dustin/go-humanize"
+	"github.com/golang/glog"
 	"github.com/uwedeportivo/commander"
 	"github.com/uwedeportivo/romba/dedup"
 	"github.com/uwedeportivo/romba/types"
@@ -111,77 +114,127 @@ func (rs *RombaService) datstats(cmd *commander.Command, args []string) error {
 	rs.jobMutex.Lock()
 	defer rs.jobMutex.Unlock()
 
-	deduper, err := dedup.NewLevelDBDeduper()
-	if err != nil {
+	if rs.busy {
+		p := rs.pt.GetProgress()
+
+		_, err := fmt.Fprintf(cmd.Stdout, "still busy with %s: (%d of %d files) and (%s of %s) \n", rs.jobName,
+			p.FilesSoFar, p.TotalFiles, humanize.IBytes(uint64(p.BytesSoFar)), humanize.IBytes(uint64(p.TotalBytes)))
 		return err
 	}
-	defer deduper.Close()
 
-	dts := &datStats{
-		h: hdrhistogram.New(0, 1000000000000, 5),
-	}
+	rs.pt.Reset()
+	rs.busy = true
+	rs.jobName = "datstats"
 
-	err = rs.romDB.ForEachDat(func(dat *types.Dat) error {
-		if dat.Generation != rs.romDB.Generation() {
-			return nil
-		}
-		dedat, err := dedup.Dedup(dat, deduper)
-		if err != nil {
-			return err
-		}
-
-		if dedat == nil {
-			return nil
-		}
-
-		dts.nDats = dts.nDats + 1
-		for _, g := range dedat.Games {
-			dts.nGames = dts.nGames + 1
-			for _, r := range g.Roms {
-				dts.h.RecordValue(r.Size)
-				dts.nRoms = dts.nRoms + 1
-				dts.totalSize = dts.totalSize + uint64(r.Size)
-				if r.Size <= 4000 {
-					dts.nRomsBelow4k = dts.nRomsBelow4k + 1
+	go func() {
+		glog.Infof("service starting datstats")
+		rs.broadCastProgress(time.Now(), true, false, "", nil)
+		ticker := time.NewTicker(time.Second * 5)
+		stopTicker := make(chan bool)
+		go func() {
+			glog.Infof("starting progress broadcaster")
+			for {
+				select {
+				case t := <-ticker.C:
+					rs.broadCastProgress(t, false, false, "", nil)
+				case <-stopTicker:
+					glog.Info("stopped progress broadcaster")
+					return
 				}
 			}
+		}()
+
+		deduper, err := dedup.NewLevelDBDeduper()
+		if err != nil {
+			glog.Errorf("error datstats: %v", err)
+			rs.broadCastProgress(time.Now(), false, true, "error collecting datstats", err)
+			return
 		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
+		defer deduper.Close()
 
-	bs := dts.h.CumulativeDistribution()
-
-	fmt.Fprintf(cmd.Stdout, "number of dats = %d\n", dts.nDats)
-	fmt.Fprintf(cmd.Stdout, "number of games = %d\n", dts.nGames)
-	fmt.Fprintf(cmd.Stdout, "number of roms = %d\n", dts.nRoms)
-	fmt.Fprintf(cmd.Stdout, "total rom size = %s\n", humanize.IBytes(dts.totalSize))
-	fmt.Fprintf(cmd.Stdout, "number of roms below 4k size = %d\n\n", dts.nRomsBelow4k)
-
-	fmt.Fprintf(cmd.Stdout, "rom size cumulative distribution = \n")
-	fmt.Fprintf(cmd.Stdout, "count, percentile, file size\n")
-	for i := 0; i < len(bs); i++ {
-		b := bs[i]
-
-		vstr := humanize.IBytes(uint64(b.ValueAt))
-
-		if (i < len(bs)-1 && vstr != humanize.IBytes(uint64(bs[i+1].ValueAt))) || (i == len(bs)-1) {
-			fmt.Fprintf(cmd.Stdout, "%d, %.8f, %s\n", b.Count, b.Quantile, humanize.IBytes(uint64(b.ValueAt)))
+		dts := &datStats{
+			h: hdrhistogram.New(0, 1000000000000, 5),
 		}
-	}
 
-	fmt.Fprintf(cmd.Stdout, "\nrom size histogram = \n")
-	fmt.Fprintf(cmd.Stdout, "count, file size\n")
-	var lastCount int64
-	for _, b := range bs {
-		count := b.Count - lastCount
-		if count > 0 {
-			fmt.Fprintf(cmd.Stdout, "%d, %s\n", count, humanize.IBytes(uint64(b.ValueAt)))
+		err = rs.romDB.ForEachDat(func(dat *types.Dat) error {
+			rs.pt.DeclareFile(dat.Name)
+			if dat.Generation != rs.romDB.Generation() {
+				return nil
+			}
+			dedat, err := dedup.Dedup(dat, deduper)
+			if err != nil {
+				return err
+			}
+
+			if dedat == nil {
+				return nil
+			}
+
+			dts.nDats = dts.nDats + 1
+			for _, g := range dedat.Games {
+				dts.nGames = dts.nGames + 1
+				for _, r := range g.Roms {
+					dts.h.RecordValue(r.Size)
+					dts.nRoms = dts.nRoms + 1
+					dts.totalSize = dts.totalSize + uint64(r.Size)
+					if r.Size <= 4000 {
+						dts.nRomsBelow4k = dts.nRomsBelow4k + 1
+					}
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			glog.Errorf("error datstats: %v", err)
+			rs.broadCastProgress(time.Now(), false, true, "error collecting datstats", err)
+			return
 		}
-		lastCount = b.Count
-	}
+
+		bs := dts.h.CumulativeDistribution()
+
+		var msgBuffer bytes.Buffer
+
+		fmt.Fprintf(&msgBuffer, "number of dats = %d\n", dts.nDats)
+		fmt.Fprintf(&msgBuffer, "number of games = %d\n", dts.nGames)
+		fmt.Fprintf(&msgBuffer, "number of roms = %d\n", dts.nRoms)
+		fmt.Fprintf(&msgBuffer, "total rom size = %s\n", humanize.IBytes(dts.totalSize))
+		fmt.Fprintf(&msgBuffer, "number of roms below 4k size = %d\n\n", dts.nRomsBelow4k)
+
+		fmt.Fprintf(&msgBuffer, "rom size cumulative distribution = \n")
+		fmt.Fprintf(&msgBuffer, "count, percentile, file size\n")
+		for i := 0; i < len(bs); i++ {
+			b := bs[i]
+
+			vstr := humanize.IBytes(uint64(b.ValueAt))
+
+			if (i < len(bs)-1 && vstr != humanize.IBytes(uint64(bs[i+1].ValueAt))) || (i == len(bs)-1) {
+				fmt.Fprintf(&msgBuffer, "%d, %.8f, %s\n", b.Count, b.Quantile, humanize.IBytes(uint64(b.ValueAt)))
+			}
+		}
+
+		fmt.Fprintf(&msgBuffer, "\nrom size histogram = \n")
+		fmt.Fprintf(&msgBuffer, "count, file size\n")
+		var lastCount int64
+		for _, b := range bs {
+			count := b.Count - lastCount
+			if count > 0 {
+				fmt.Fprintf(&msgBuffer, "%d, %s\n", count, humanize.IBytes(uint64(b.ValueAt)))
+			}
+			lastCount = b.Count
+		}
+
+		ticker.Stop()
+		stopTicker <- true
+
+		rs.jobMutex.Lock()
+		rs.busy = false
+		rs.jobName = ""
+		rs.jobMutex.Unlock()
+
+		rs.broadCastProgress(time.Now(), false, true, msgBuffer.String(), err)
+		glog.Infof("service finished datstats")
+
+	}()
 
 	return nil
 }

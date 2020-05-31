@@ -19,5 +19,7 @@ require (
 	github.com/uwedeportivo/commander v0.0.0-20140125225505-864bf82b82b3
 	github.com/uwedeportivo/lzmadec v0.0.0-20150722055128-4bc815c0eeb9
 	github.com/uwedeportivo/torrentzip v1.0.0
+	github.com/willf/bitset v1.1.10 // indirect
+	github.com/willf/bloom v2.0.3+incompatible
 	golang.org/x/net v0.0.0-20180404174746-b3c676e531a6
 )
