@@ -262,13 +262,14 @@ func (depot *Depot) reserveRoot(size int64) (int, error) {
 	depot.lock.Unlock()
 
 	for i := start; i < len(depot.roots); i++ {
-		depot.rootLocks[i].Lock()
-		if depot.sizes[i]+size < depot.maxSizes[i] {
-			depot.sizes[i] += size
-			depot.rootLocks[i].Unlock()
+		dr := depot.roots[i]
+		dr.Lock()
+		if dr.size+size < dr.maxSize {
+			dr.size += size
+			dr.Unlock()
 			return i, nil
-		} else if depot.sizes[i] >= depot.maxSizes[i] {
-			depot.rootLocks[i].Unlock()
+		} else if dr.size >= dr.maxSize {
+			dr.Unlock()
 			depot.lock.Lock()
 			depot.start = i
 			depot.lock.Unlock()
@@ -276,9 +277,9 @@ func (depot *Depot) reserveRoot(size int64) (int, error) {
 	}
 
 	glog.Error("Depot with the following roots ran out of disk space")
-	for k, root := range depot.roots {
-		glog.Errorf("root = %s, maxSize = %s, size = %s", root,
-			humanize.IBytes(uint64(depot.maxSizes[k])), humanize.IBytes(uint64(depot.sizes[k])))
+	for _, dr := range depot.roots {
+		glog.Errorf("root = %s, maxSize = %s, size = %s", dr.name,
+			humanize.IBytes(uint64(dr.maxSize)), humanize.IBytes(uint64(dr.size)))
 	}
 
 	return -1, worker.StopProcessing.New("depot ran out of disk space")
@@ -390,7 +391,7 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 		return 0, err
 	}
 
-	outpath := pathFromSha1HexEncoding(w.depot.roots[root], sha1Hex, gzipSuffix)
+	outpath := pathFromSha1HexEncoding(w.depot.roots[root].name, sha1Hex, gzipSuffix)
 
 	w.depot.cache.Set(sha1Hex, &cacheValue{
 		hh:        hh,
