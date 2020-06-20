@@ -12,7 +12,7 @@ import (
 type depotRoot struct {
 	sync.Mutex
 
-	name       string
+	path       string
 	bloomReady bool
 	bf         *bloom.BloomFilter
 	touched    bool
@@ -76,18 +76,18 @@ func (depot *Depot) writeSizes() {
 	for _, dr := range depot.roots {
 		dr.Lock()
 		if dr.touched {
-			err := writeSizeFile(dr.name, dr.size)
+			err := writeSizeFile(dr.path, dr.size)
 			if err != nil {
-				glog.Errorf("failed to write size file into %s: %v\n", dr.name, err)
+				glog.Errorf("failed to write size file into %s: %v\n", dr.path, err)
 			} else {
 				dr.touched = false
 			}
 
 			if dr.bloomReady {
-				err = writeBloomFilter(dr.name, dr.bf)
+				err = writeBloomFilter(dr.path, dr.bf)
 				if err != nil {
 					dr.touched = true
-					glog.Errorf("failed to write bloomfilter into %s: %v\n", dr.name, err)
+					glog.Errorf("failed to write bloomfilter into %s: %v\n", dr.path, err)
 				}
 			}
 		}

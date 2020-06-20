@@ -111,7 +111,7 @@ func splitIntoArgs(argLine string) ([]string, error) {
 func newCommand(writer io.Writer, rs *RombaService) *commander.Command {
 	cmd := new(commander.Command)
 	cmd.UsageLine = "Romba"
-	cmd.Subcommands = make([]*commander.Command, 18)
+	cmd.Subcommands = make([]*commander.Command, 19)
 	cmd.Flag = *flag.NewFlagSet("romba", flag.ContinueOnError)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
@@ -397,6 +397,23 @@ Imports the hashes associations as a DAT file.`,
 	}
 
 	cmd.Subcommands[17].Flag.String("in", "", "input DAT file")
+
+	cmd.Subcommands[18] = &commander.Command{
+		Run:       rs.popBloom,
+		UsageLine: "popbloom",
+		Short:     "Populate the bloom filter.",
+		Long: `
+Populate the bloom filter.`,
+		Flag:   *flag.NewFlagSet("romba-popbloom", flag.ContinueOnError),
+		Stdout: writer,
+		Stderr: writer,
+	}
+
+	cmd.Subcommands[18].Flag.Int("workers", config.GlobalConfig.General.Workers,
+		"how many workers to launch for the job")
+
+	cmd.Subcommands[18].Flag.Int("subworkers", config.GlobalConfig.General.Workers,
+		"how many subworkers to launch for each worker")
 
 	return cmd
 }

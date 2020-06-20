@@ -166,7 +166,7 @@ func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fr
 	if fromDats == "" {
 		wds := make([]string, len(depot.roots))
 		for i, dr := range depot.roots {
-			wds[i] = dr.name
+			wds[i] = dr.path
 		}
 		if len(workDepot) > 0 {
 			wds = []string{workDepot}
@@ -273,7 +273,7 @@ func (w *purgeWorker) Process(inpath string, size int64) error {
 		}
 		index := -1
 		for i, depotRoot := range w.pm.depot.roots {
-			if strings.HasPrefix(inpath, depotRoot.name) {
+			if strings.HasPrefix(inpath, depotRoot.path) {
 				index = i
 				break
 			}

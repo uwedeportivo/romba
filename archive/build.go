@@ -188,7 +188,7 @@ endLoop2:
 		if err != nil {
 			return false, err
 		}
-		defer func(){
+		defer func() {
 			err := fixFile.Close()
 			if err != nil {
 				glog.Errorf("error, failed to close %s: %v", fixDatPath, err)
@@ -196,7 +196,7 @@ endLoop2:
 		}()
 
 		fixWriter := bufio.NewWriter(fixFile)
-		defer func(){
+		defer func() {
 			err := fixWriter.Flush()
 			if err != nil {
 				glog.Errorf("error, failed to flush %s: %v", fixDatPath, err)
@@ -218,14 +218,13 @@ type nopWriterCloser struct {
 
 func (nopWriterCloser) Close() error { return nil }
 
-
 func cpGZUncompressed(srcName, dstName string) error {
 	file, err := os.Open(srcName)
 	if err != nil {
 		return err
 	}
 
-	defer func(){
+	defer func() {
 		err := file.Close()
 		if err != nil {
 			glog.Errorf("error closing %s: %v", srcName, err)
@@ -277,7 +276,7 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 		} else {
 			gameDir := filepath.Dir(game.Name)
 			if gameDir != "." {
-				// name has dirs in it
+				// path has dirs in it
 				err := os.MkdirAll(filepath.Dir(gamePath), 0777)
 				if err != nil {
 					glog.Errorf("error mkdir %s: %v", filepath.Dir(gamePath), err)

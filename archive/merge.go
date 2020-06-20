@@ -218,7 +218,7 @@ func (w *mergeWorker) mergeGzip(path string, size int64) error {
 		return err
 	}
 
-	outpath := pathFromSha1HexEncoding(w.depot.roots[root].name, sha1Hex, gzipSuffix)
+	outpath := pathFromSha1HexEncoding(w.depot.roots[root].path, sha1Hex, gzipSuffix)
 
 	err = worker.Cp(path, outpath)
 	if err != nil {
