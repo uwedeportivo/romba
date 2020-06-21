@@ -125,9 +125,12 @@ func (depot *Depot) RomInDepot(sha1Hex string) (bool, string, error) {
 			hex.EncodeToString(cv.hh.Sha1), gzipSuffix), nil
 	}
 	for _, dr := range depot.roots {
+		dr.Lock()
 		if dr.bloomReady && !dr.bf.Test([]byte(sha1Hex)) {
+			dr.Unlock()
 			return false, "", nil
 		}
+		dr.Unlock()
 
 		rompath := pathFromSha1HexEncoding(dr.path, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
@@ -150,9 +153,12 @@ func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, int64, e
 			hex.EncodeToString(cv.hh.Sha1), gzipSuffix), cv.hh.Size, nil
 	}
 	for idx, dr := range depot.roots {
+		dr.Lock()
 		if dr.bloomReady && !dr.bf.Test([]byte(sha1Hex)) {
+			dr.Unlock()
 			return false, nil, "", 0, nil
 		}
+		dr.Unlock()
 
 		rompath := pathFromSha1HexEncoding(dr.path, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
@@ -267,7 +273,9 @@ func (depot *Depot) PopulateBloom(path string) {
 				glog.Errorf("failed to populate bloom filter for path %s: not enough dir parts", path)
 				return
 			}
+			dr.Lock()
 			dr.bf.Add([]byte(sha1Hex))
+			dr.Unlock()
 		}
 	}
 }
