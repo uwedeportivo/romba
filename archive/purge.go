@@ -98,9 +98,9 @@ func (rdi *romsFromDatIterator) position() (datCursor int, gameCursor int, romCu
 	return
 }
 
-func (rdi *romsFromDatIterator) Next() (string, bool, error) {
+func (rdi *romsFromDatIterator) Next() (worker.ResumePath, bool, error) {
 	if rdi.datCursor == len(rdi.dats) {
-		return "", false, nil
+		return worker.ResumePath{}, false, nil
 	}
 
 	d := rdi.dats[rdi.datCursor]
@@ -112,24 +112,24 @@ func (rdi *romsFromDatIterator) Next() (string, bool, error) {
 	if r.Sha1 == nil {
 		err := rdi.depot.RomDB.CompleteRom(r)
 		if err != nil {
-			return "", false, err
+			return worker.ResumePath{}, false, err
 		}
 	}
 	if r.Sha1 == nil {
-		return "", true, nil
+		return worker.ResumePath{}, true, nil
 	}
 
 	sha1Hex := hex.EncodeToString(r.Sha1)
 	exists, rompath, err := rdi.depot.RomInDepot(sha1Hex)
 	if err != nil {
-		return "", false, err
+		return worker.ResumePath{}, false, err
 	}
 
 	if !exists {
-		return "", true, nil
+		return worker.ResumePath{}, true, nil
 	}
 
-	return rompath, true, nil
+	return worker.ResumePath{rompath, ""}, true, nil
 }
 
 func (rdi *romsFromDatIterator) Reset() {
