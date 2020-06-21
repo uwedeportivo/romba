@@ -44,6 +44,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
 	"github.com/klauspost/compress/gzip"
+	"github.com/uwedeportivo/romba/worker"
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/uwedeportivo/romba/db"
@@ -286,10 +287,57 @@ func (depot *Depot) ClearBloomFilters() error {
 
 	for _, dr := range depot.roots {
 		dr.bloomReady = false
-		err := os.Remove(filepath.Join(dr.path, bloomFilterFilename))
+		bfFilepath := filepath.Join(dr.path, bloomFilterFilename)
+		bfFileExists, err := PathExists(bfFilepath)
 		if err != nil {
 			return err
 		}
+		if bfFileExists {
+			err := os.Remove(bfFilepath)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+func (depot *Depot) ResumePopBloomPaths() ([]worker.ResumePath, error) {
+	depot.lock.Lock()
+	defer depot.lock.Unlock()
+
+	rps := make([]worker.ResumePath, 0, len(depot.roots))
+
+	for _, dr := range depot.roots {
+		files, err := filepath.Glob(filepath.Join(dr.path, "resumebloom-*"))
+		if err != nil {
+			return nil, err
+		}
+
+		if len(files) > 1 {
+			return nil, fmt.Errorf("more than one resumebloom files found in %s", dr.path)
+		}
+
+		if len(files) == 0 {
+			rps = append(rps, worker.ResumePath{Path: dr.path})
+			continue
+		}
+
+		_, filename := filepath.Split(files[0])
+
+		parts := strings.Split(filename, "-")
+
+		if len(parts) != 2 || len(parts[1]) != 40 {
+			return nil, fmt.Errorf("resumebloom file with unexpected name %s", files[0])
+		}
+
+		sha1Hex := parts[1]
+		resumeLine := pathFromSha1HexEncoding(dr.path, sha1Hex, gzipSuffix)
+
+		// TODO(uwe): actually read in the contents of the bloom filter
+
+		rps = append(rps, worker.ResumePath{Path: dr.path, ResumeLine: resumeLine})
+	}
+
+	return rps, nil
 }

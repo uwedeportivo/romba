@@ -114,9 +114,15 @@ func (rs *RombaService) popBloom(cmd *commander.Command, _ []string) error {
 				numSubWorkers: numSubWorkers,
 				pt:            rs.pt,
 			}
-			endMsg, err = worker.Work("populating bloom", rs.depot.Paths(), pm)
+
+			rps, err := rs.depot.ResumePopBloomPaths()
 			if err != nil {
-				glog.Errorf("error populating bloom: %v", err)
+				glog.Errorf("error finding resume points for populating bloom: %v", err)
+			} else {
+				endMsg, err = worker.ResumeWork("populating bloom", rps, pm)
+				if err != nil {
+					glog.Errorf("error populating bloom: %v", err)
+				}
 			}
 		}
 

@@ -54,6 +54,8 @@ type countVisitor struct {
 	gru            Gru
 	// any dir paths lexicographically below this line are skipped if resume line is non-empty
 	resumeLine string
+	// except root
+	root string
 }
 
 var (
@@ -125,7 +127,7 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 	if f == nil || f.Name() == ".DS_Store" {
 		return nil
 	}
-	if f.IsDir() && cv.resumeLine != "" && path < cv.resumeLine {
+	if f.IsDir() && cv.resumeLine != "" && !strings.HasPrefix(cv.resumeLine, path) && path < cv.resumeLine {
 		return filepath.SkipDir
 	}
 	if !f.IsDir() && cv.gru.Accept(path) {
@@ -148,6 +150,8 @@ type scanVisitor struct {
 	pt     ProgressTracker
 	// any dir paths lexicographically below this line are skipped if resume line is non-empty
 	resumeLine string
+	// except root
+	root string
 }
 
 var scanStopped = Error.New("scan stopped")
@@ -161,7 +165,7 @@ func (sv *scanVisitor) visit(path string, f os.FileInfo, err error) error {
 		return nil
 	}
 
-	if f.IsDir() && sv.resumeLine != "" && path < sv.resumeLine {
+	if f.IsDir() && sv.resumeLine != "" && !strings.HasPrefix(sv.resumeLine, path) && path < sv.resumeLine {
 		return filepath.SkipDir
 	}
 	if !f.IsDir() && sv.gru.Accept(path) {
@@ -244,7 +248,7 @@ func handleErredFile(path string) {
 	}
 }
 
-func runSlave(w *minion, inwork <-chan *workUnit, workerNum int, workname string) {
+func runMinion(w *minion, inwork <-chan *workUnit, workerNum int, workname string) {
 	glog.Infof("starting worker %d for %s", workerNum, workname)
 	var perr error
 	for wu := range inwork {
@@ -391,6 +395,7 @@ func WorkPathIterator(workname string, pi PathIterator, gru Gru) (string, error)
 			}
 			glog.Infof("initial scan of %s to determine amount of work\n", &rp.Path)
 			cv.resumeLine = rp.ResumeLine
+			cv.root = rp.Path
 			if err == nil {
 				err = filepath.Walk(rp.Path, cv.visit)
 			}
@@ -427,7 +432,7 @@ func WorkPathIterator(workname string, pi PathIterator, gru Gru) (string, error)
 			closeC: closeC,
 		}
 
-		go runSlave(worker, inwork, i, workname)
+		go runMinion(worker, inwork, i, workname)
 	}
 
 	for rp, goOn, err := pi.Next(); goOn; rp, goOn, err = pi.Next() {
@@ -438,6 +443,7 @@ func WorkPathIterator(workname string, pi PathIterator, gru Gru) (string, error)
 			break
 		}
 		sv.resumeLine = rp.ResumeLine
+		sv.root = rp.Path
 		if err == nil {
 			err = filepath.Walk(rp.Path, sv.visit)
 		}
