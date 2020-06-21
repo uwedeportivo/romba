@@ -279,3 +279,17 @@ func (depot *Depot) PopulateBloom(path string) {
 		}
 	}
 }
+
+func (depot *Depot) ClearBloomFilters() error {
+	depot.lock.Lock()
+	defer depot.lock.Unlock()
+
+	for _, dr := range depot.roots {
+		dr.bloomReady = false
+		err := os.Remove(filepath.Join(dr.path, bloomFilterFilename))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}

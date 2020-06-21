@@ -102,16 +102,22 @@ func (rs *RombaService) popBloom(cmd *commander.Command, _ []string) error {
 			}
 		}()
 
-		pm := &bloomMaster{
-			rs:            rs,
-			numWorkers:    numWorkers,
-			numSubWorkers: numSubWorkers,
-			pt:            rs.pt,
-		}
+		var endMsg string
 
-		endMsg, err := worker.Work("populating bloom", rs.depot.Paths(), pm)
+		err := rs.depot.ClearBloomFilters()
 		if err != nil {
-			glog.Errorf("error populating bloom: %v", err)
+			glog.Errorf("error clearing bloom: %v", err)
+		} else {
+			pm := &bloomMaster{
+				rs:            rs,
+				numWorkers:    numWorkers,
+				numSubWorkers: numSubWorkers,
+				pt:            rs.pt,
+			}
+			endMsg, err = worker.Work("populating bloom", rs.depot.Paths(), pm)
+			if err != nil {
+				glog.Errorf("error populating bloom: %v", err)
+			}
 		}
 
 		ticker.Stop()
