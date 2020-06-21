@@ -12,7 +12,7 @@ import (
 )
 
 type bloomWorker struct {
-	pm  *bloomMaster
+	pm  *bloomGru
 	idx int
 }
 
@@ -25,46 +25,46 @@ func (pw *bloomWorker) Close() error {
 	return nil
 }
 
-type bloomMaster struct {
+type bloomGru struct {
 	rs            *RombaService
 	numWorkers    int
 	numSubWorkers int
 	pt            worker.ProgressTracker
 }
 
-func (pm *bloomMaster) CalculateWork() bool {
+func (pm *bloomGru) CalculateWork() bool {
 	return true
 }
 
-func (pm *bloomMaster) Accept(path string) bool {
+func (pm *bloomGru) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".gz"
 }
 
-func (pm *bloomMaster) NewWorker(workerIndex int) worker.Worker {
+func (pm *bloomGru) NewWorker(workerIndex int) worker.Worker {
 	return &bloomWorker{
 		pm:  pm,
 		idx: workerIndex,
 	}
 }
 
-func (pm *bloomMaster) NumWorkers() int {
+func (pm *bloomGru) NumWorkers() int {
 	return pm.numWorkers
 }
 
-func (pm *bloomMaster) ProgressTracker() worker.ProgressTracker {
+func (pm *bloomGru) ProgressTracker() worker.ProgressTracker {
 	return pm.pt
 }
 
-func (pm *bloomMaster) FinishUp() error {
+func (pm *bloomGru) FinishUp() error {
 	return nil
 }
 
-func (pm *bloomMaster) Start() error {
+func (pm *bloomGru) Start() error {
 	return nil
 }
 
-func (pm *bloomMaster) Scanned(_ int, _ int64, _ string) {
+func (pm *bloomGru) Scanned(_ int, _ int64, _ string) {
 }
 
 func (rs *RombaService) popBloom(cmd *commander.Command, _ []string) error {
@@ -108,7 +108,7 @@ func (rs *RombaService) popBloom(cmd *commander.Command, _ []string) error {
 		if err != nil {
 			glog.Errorf("error clearing bloom: %v", err)
 		} else {
-			pm := &bloomMaster{
+			pm := &bloomGru{
 				rs:            rs,
 				numWorkers:    numWorkers,
 				numSubWorkers: numSubWorkers,

@@ -69,36 +69,36 @@ func (pw *parseWorker) Close() error {
 	return nil
 }
 
-type parseMaster struct{}
+type parseGru struct{}
 
-func (pm *parseMaster) Accept(path string) bool {
+func (pm *parseGru) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".dat" || ext == ".xml"
 }
 
-func (pm *parseMaster) NewWorker(workerIndex int) worker.Worker {
+func (pm *parseGru) NewWorker(workerIndex int) worker.Worker {
 	return &parseWorker{}
 }
 
-func (pm *parseMaster) NumWorkers() int {
+func (pm *parseGru) NumWorkers() int {
 	return numWorkers
 }
 
-func (pm *parseMaster) FinishUp() error {
+func (pm *parseGru) FinishUp() error {
 	return nil
 }
 
-func (pm *parseMaster) Start() error {
+func (pm *parseGru) Start() error {
 	return nil
 }
 
-func (pm *parseMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
+func (pm *parseGru) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
 
-func (pm *parseMaster) ProgressTracker() worker.ProgressTracker {
+func (pm *parseGru) ProgressTracker() worker.ProgressTracker {
 	return worker.NewProgressTracker(1)
 }
 
-func (pm *parseMaster) CalculateWork() bool { return false}
+func (pm *parseGru) CalculateWork() bool { return false }
 
 func main() {
 	flag.Usage = usage
@@ -120,7 +120,7 @@ func main() {
 
 	runtime.GOMAXPROCS(numWorkers)
 
-	_, err := worker.Work("parse dats", flag.Args(), new(parseMaster))
+	_, err := worker.Work("parse dats", flag.Args(), new(parseGru))
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, " error: %v\n", err)

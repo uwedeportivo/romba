@@ -48,10 +48,10 @@ import (
 type purgeWorker struct {
 	depot *Depot
 	index int
-	pm    *purgeMaster
+	pm    *purgeGru
 }
 
-type purgeMaster struct {
+type purgeGru struct {
 	depot      *Depot
 	numWorkers int
 	pt         worker.ProgressTracker
@@ -142,7 +142,7 @@ func (rdi *romsFromDatIterator) Reset() {
 
 func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fromDats string,
 	pt worker.ProgressTracker) (string, error) {
-	pm := new(purgeMaster)
+	pm := new(purgeGru)
 	pm.depot = depot
 	pm.pt = pt
 	pm.numWorkers = numWorkers
@@ -197,15 +197,15 @@ func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fr
 	}
 }
 
-func (pm *purgeMaster) Accept(path string) bool {
+func (pm *purgeGru) Accept(path string) bool {
 	return filepath.Ext(path) == gzipSuffix
 }
 
-func (pm *purgeMaster) CalculateWork() bool {
+func (pm *purgeGru) CalculateWork() bool {
 	return false
 }
 
-func (pm *purgeMaster) NewWorker(workerIndex int) worker.Worker {
+func (pm *purgeGru) NewWorker(workerIndex int) worker.Worker {
 	return &purgeWorker{
 		depot: pm.depot,
 		index: workerIndex,
@@ -213,24 +213,24 @@ func (pm *purgeMaster) NewWorker(workerIndex int) worker.Worker {
 	}
 }
 
-func (pm *purgeMaster) NumWorkers() int {
+func (pm *purgeGru) NumWorkers() int {
 	return pm.numWorkers
 }
 
-func (pm *purgeMaster) ProgressTracker() worker.ProgressTracker {
+func (pm *purgeGru) ProgressTracker() worker.ProgressTracker {
 	return pm.pt
 }
 
-func (pm *purgeMaster) FinishUp() error {
+func (pm *purgeGru) FinishUp() error {
 	pm.depot.writeSizes()
 	return nil
 }
 
-func (pm *purgeMaster) Start() error {
+func (pm *purgeGru) Start() error {
 	return nil
 }
 
-func (pm *purgeMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
+func (pm *purgeGru) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
 
 func (w *purgeWorker) Process(inpath string, size int64) error {
 	rom, err := RomFromGZDepotFile(inpath)

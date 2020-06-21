@@ -49,10 +49,10 @@ type mergeWorker struct {
 	hh           *Hashes
 	md5crcBuffer []byte
 	index        int
-	pm           *mergeMaster
+	pm           *mergeGru
 }
 
-type mergeMaster struct {
+type mergeGru struct {
 	depot           *Depot
 	resumePath      string
 	numWorkers      int
@@ -84,7 +84,7 @@ func (depot *Depot) Merge(paths []string, resumePath string, onlyneeded bool, nu
 
 	glog.Infof("resuming with path %s", resumePoint)
 
-	pm := new(mergeMaster)
+	pm := new(mergeGru)
 	pm.depot = depot
 	pm.resumePath = resumePoint
 	pm.pt = pt
@@ -100,7 +100,7 @@ func (depot *Depot) Merge(paths []string, resumePath string, onlyneeded bool, nu
 	return worker.Work("merge roms", paths, pm)
 }
 
-func (pm *mergeMaster) Accept(path string) bool {
+func (pm *mergeGru) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	if ext != gzipSuffix {
 		return false
@@ -112,7 +112,7 @@ func (pm *mergeMaster) Accept(path string) bool {
 	return true
 }
 
-func (pm *mergeMaster) NewWorker(workerIndex int) worker.Worker {
+func (pm *mergeGru) NewWorker(workerIndex int) worker.Worker {
 	return &mergeWorker{
 		depot:        pm.depot,
 		hh:           newHashes(),
@@ -122,19 +122,19 @@ func (pm *mergeMaster) NewWorker(workerIndex int) worker.Worker {
 	}
 }
 
-func (pm *mergeMaster) CalculateWork() bool {
+func (pm *mergeGru) CalculateWork() bool {
 	return !pm.skipInitialScan
 }
 
-func (pm *mergeMaster) NumWorkers() int {
+func (pm *mergeGru) NumWorkers() int {
 	return pm.numWorkers
 }
 
-func (pm *mergeMaster) ProgressTracker() worker.ProgressTracker {
+func (pm *mergeGru) ProgressTracker() worker.ProgressTracker {
 	return pm.pt
 }
 
-func (pm *mergeMaster) FinishUp() error {
+func (pm *mergeGru) FinishUp() error {
 	pm.soFar <- &completed{
 		workerIndex: -1,
 	}
@@ -145,11 +145,11 @@ func (pm *mergeMaster) FinishUp() error {
 	return pm.resumeLogFile.Close()
 }
 
-func (pm *mergeMaster) Start() error {
+func (pm *mergeGru) Start() error {
 	return nil
 }
 
-func (pm *mergeMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
+func (pm *mergeGru) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
 
 func (w *mergeWorker) Process(path string, size int64) error {
 	var err error
