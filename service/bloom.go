@@ -33,7 +33,7 @@ type bloomGru struct {
 }
 
 func (pm *bloomGru) CalculateWork() bool {
-	return true
+	return false
 }
 
 func (pm *bloomGru) Accept(path string) bool {
