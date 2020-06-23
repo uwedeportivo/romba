@@ -45,6 +45,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/klauspost/compress/gzip"
 	"github.com/uwedeportivo/romba/worker"
+	"github.com/willf/bloom"
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/uwedeportivo/romba/db"
@@ -92,7 +93,8 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 
 		glog.Infof("initialize bloomfilter for %s", root)
 
-		bf, err := loadBloomFilter(root)
+		bf := bloom.NewWithEstimates(20000000, 0.1)
+		err = loadBloomFilter(root, bf)
 		if err != nil {
 			return nil, err
 		}
@@ -276,6 +278,25 @@ func (depot *Depot) PopulateBloom(path string) {
 			}
 			dr.Lock()
 			dr.bf.Add([]byte(sha1Hex))
+			dr.numBfAdded++
+			if dr.numBfAdded == 10000 {
+				oldResumes, err := filepath.Glob(filepath.Join(dr.path, "resumebloom-*"))
+				if err != nil {
+					glog.Errorf("failed to clean up old resume files in %s: %v", dr.path, err)
+				}
+
+				for _, oldResume := range oldResumes {
+					err := os.Remove(oldResume)
+					if err != nil {
+						glog.Errorf("failed to clean old resume file %s: %v", oldResume, err)
+					}
+				}
+				resumePath := filepath.Join(dr.path, "resumebloom-"+sha1Hex)
+				err = writeBloomFilter(resumePath, dr.bf)
+				if err != nil {
+					glog.Errorf("failed to write resume path %s for populating bloom filter: %v", resumePath, err)
+				}
+			}
 			dr.Unlock()
 		}
 	}
@@ -286,7 +307,11 @@ func (depot *Depot) ClearBloomFilters() error {
 	defer depot.lock.Unlock()
 
 	for _, dr := range depot.roots {
+		dr.Lock()
 		dr.bloomReady = false
+		dr.bf.ClearAll()
+		dr.numBfAdded = 0
+		dr.Unlock()
 		bfFilepath := filepath.Join(dr.path, bloomFilterFilename)
 		bfFileExists, err := PathExists(bfFilepath)
 		if err != nil {
@@ -334,10 +359,41 @@ func (depot *Depot) ResumePopBloomPaths() ([]worker.ResumePath, error) {
 		sha1Hex := parts[1]
 		resumeLine := pathFromSha1HexEncoding(dr.path, sha1Hex, gzipSuffix)
 
-		// TODO(uwe): actually read in the contents of the bloom filter
+		dr.Lock()
+		err = loadBloomFilter(files[0], dr.bf)
+		dr.Unlock()
+		if err != nil {
+			return nil, err
+		}
 
 		rps = append(rps, worker.ResumePath{Path: dr.path, ResumeLine: resumeLine})
 	}
 
 	return rps, nil
+}
+
+func (depot *Depot) SaveBloomFilters() error {
+	for _, dr := range depot.roots {
+		dr.Lock()
+		oldResumes, err := filepath.Glob(filepath.Join(dr.path, "resumebloom-*"))
+		if err != nil {
+			glog.Errorf("failed to clean up old resume files in %s: %v", dr.path, err)
+		}
+
+		for _, oldResume := range oldResumes {
+			err := os.Remove(oldResume)
+			if err != nil {
+				glog.Errorf("failed to clean old resume file %s: %v", oldResume, err)
+			}
+		}
+
+		err = writeBloomFilterWithBackup(dr.path, dr.bf)
+		if err != nil {
+			dr.Unlock()
+			return err
+		}
+		dr.bloomReady = true
+		dr.Unlock()
+	}
+	return nil
 }

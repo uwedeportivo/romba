@@ -18,34 +18,43 @@ type depotRoot struct {
 	touched    bool
 	size       int64
 	maxSize    int64
+
+	numBfAdded int64
 }
 
-func loadBloomFilter(root string) (*bloom.BloomFilter, error) {
+func loadBloomFilter(root string, bf *bloom.BloomFilter) error {
 	bfp := filepath.Join(root, bloomFilterFilename)
 	exists, err := PathExists(bfp)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if !exists {
-		return nil, nil
+		return nil
 	}
 
-	bf := bloom.NewWithEstimates(20000000, 0.1)
 	file, err := os.Open(bfp)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer file.Close()
 
 	_, err = bf.ReadFrom(file)
-	if err != nil {
-		return nil, err
-	}
-	return bf, nil
+	return err
 }
 
-func writeBloomFilter(root string, bf *bloom.BloomFilter) error {
+func writeBloomFilter(path string, bf *bloom.BloomFilter) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = bf.WriteTo(file)
+	return err
+}
+
+func writeBloomFilterWithBackup(root string, bf *bloom.BloomFilter) error {
 	bfFilePath := filepath.Join(root, bloomFilterFilename)
 
 	exists, err := PathExists(bfFilePath)
@@ -84,7 +93,7 @@ func (depot *Depot) writeSizes() {
 			}
 
 			if dr.bloomReady {
-				err = writeBloomFilter(dr.path, dr.bf)
+				err = writeBloomFilterWithBackup(dr.path, dr.bf)
 				if err != nil {
 					dr.touched = true
 					glog.Errorf("failed to write bloomfilter into %s: %v\n", dr.path, err)
