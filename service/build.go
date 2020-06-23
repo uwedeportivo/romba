@@ -47,7 +47,7 @@ import (
 )
 
 type buildWorker struct {
-	pm *buildMaster
+	pm *buildGru
 }
 
 func (pw *buildWorker) Process(path string, size int64) error {
@@ -120,7 +120,7 @@ func (pw *buildWorker) Close() error {
 	return nil
 }
 
-type buildMaster struct {
+type buildGru struct {
 	rs             *RombaService
 	numWorkers     int
 	numSubWorkers  int
@@ -133,39 +133,39 @@ type buildMaster struct {
 	deduper        dedup.Deduper
 }
 
-func (pm *buildMaster) CalculateWork() bool {
+func (pm *buildGru) CalculateWork() bool {
 	return true
 }
 
-func (pm *buildMaster) Accept(path string) bool {
+func (pm *buildGru) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".dat" || ext == ".xml"
 }
 
-func (pm *buildMaster) NewWorker(workerIndex int) worker.Worker {
+func (pm *buildGru) NewWorker(workerIndex int) worker.Worker {
 	return &buildWorker{
 		pm: pm,
 	}
 }
 
-func (pm *buildMaster) NumWorkers() int {
+func (pm *buildGru) NumWorkers() int {
 	return pm.numWorkers
 }
 
-func (pm *buildMaster) ProgressTracker() worker.ProgressTracker {
+func (pm *buildGru) ProgressTracker() worker.ProgressTracker {
 	return pm.pt
 }
 
-func (pm *buildMaster) FinishUp() error {
+func (pm *buildGru) FinishUp() error {
 	return pm.deduper.Close()
 }
 
-func (pm *buildMaster) Start() error {
+func (pm *buildGru) Start() error {
 	return nil
 }
 
-func (pm *buildMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {
-	glog.Infof("buildMaster common root path: %s", commonRootPath)
+func (pm *buildGru) Scanned(numFiles int, numBytes int64, commonRootPath string) {
+	glog.Infof("buildGru common root path: %s", commonRootPath)
 	pm.commonRootPath = commonRootPath
 	fi, err := os.Stat(pm.commonRootPath)
 	if err != nil {
@@ -241,7 +241,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 			}
 		}()
 
-		pm := &buildMaster{
+		pm := &buildGru{
 			outpath:       outpath,
 			rs:            rs,
 			numWorkers:    numWorkers,

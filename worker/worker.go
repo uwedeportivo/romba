@@ -51,7 +51,11 @@ type countVisitor struct {
 	numBytes       int64
 	numFiles       int
 	commonRootPath string
-	master         Master
+	gru            Gru
+	// any dir paths lexicographically below this line are skipped if resume line is non-empty
+	resumeLine string
+	// except root
+	root string
 }
 
 var (
@@ -123,7 +127,10 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 	if f == nil || f.Name() == ".DS_Store" {
 		return nil
 	}
-	if !f.IsDir() && cv.master.Accept(path) {
+	if f.IsDir() && cv.resumeLine != "" && !strings.HasPrefix(cv.resumeLine, path) && path < cv.resumeLine {
+		return filepath.SkipDir
+	}
+	if !f.IsDir() && cv.gru.Accept(path) {
 		glog.V(2).Infof("visiting path %s, current common root is %s", path, cv.commonRootPath)
 		cv.numFiles += 1
 		cv.numBytes += f.Size()
@@ -139,8 +146,12 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 
 type scanVisitor struct {
 	inwork chan *workUnit
-	master Master
+	gru    Gru
 	pt     ProgressTracker
+	// any dir paths lexicographically below this line are skipped if resume line is non-empty
+	resumeLine string
+	// except root
+	root string
 }
 
 var scanStopped = Error.New("scan stopped")
@@ -153,7 +164,11 @@ func (sv *scanVisitor) visit(path string, f os.FileInfo, err error) error {
 	if f == nil || f.Name() == ".DS_Store" {
 		return nil
 	}
-	if !f.IsDir() && sv.master.Accept(path) {
+
+	if f.IsDir() && sv.resumeLine != "" && !strings.HasPrefix(sv.resumeLine, path) && path < sv.resumeLine {
+		return filepath.SkipDir
+	}
+	if !f.IsDir() && sv.gru.Accept(path) {
 		sv.inwork <- &workUnit{
 			path: path,
 			size: f.Size(),
@@ -171,7 +186,7 @@ type ErrorHandler interface {
 	Handle(path string)
 }
 
-type Master interface {
+type Gru interface {
 	Accept(path string) bool
 	NewWorker(workerIndex int) Worker
 	NumWorkers() int
@@ -187,7 +202,7 @@ type workUnit struct {
 	size int64
 }
 
-type slave struct {
+type minion struct {
 	closeC chan error
 	pt     ProgressTracker
 	worker Worker
@@ -233,7 +248,7 @@ func handleErredFile(path string) {
 	}
 }
 
-func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string) {
+func runMinion(w *minion, inwork <-chan *workUnit, workerNum int, workname string) {
 	glog.Infof("starting worker %d for %s", workerNum, workname)
 	var perr error
 	for wu := range inwork {
@@ -280,83 +295,112 @@ func runSlave(w *slave, inwork <-chan *workUnit, workerNum int, workname string)
 }
 
 type PathIterator interface {
-	Next() (string, bool, error)
+	Next() (ResumePath, bool, error)
 	Reset()
 }
 
 type slicePathIterator struct {
-	paths  []string
+	paths  []ResumePath
 	cursor int
 }
 
-func newSlicePathIterator(paths []string) (*slicePathIterator, error) {
+func newSlicePathIterator(paths []ResumePath) (*slicePathIterator, error) {
 	spi := new(slicePathIterator)
-	spi.paths = make([]string, len(paths))
+	spi.paths = make([]ResumePath, len(paths))
 
-	for k, name := range paths {
-		if !filepath.IsAbs(name) {
-			absname, err := filepath.Abs(name)
+	for k, p := range paths {
+		if !filepath.IsAbs(p.Path) {
+			absname, err := filepath.Abs(p.Path)
 			if err != nil {
 				return nil, err
 			}
-			spi.paths[k] = absname
+			spi.paths[k].Path = absname
 		} else {
-			spi.paths[k] = name
+			spi.paths[k].Path = p.Path
+		}
+		if !filepath.IsAbs(p.ResumeLine) {
+			absname, err := filepath.Abs(p.ResumeLine)
+			if err != nil {
+				return nil, err
+			}
+			spi.paths[k].ResumeLine = absname
+		} else {
+			spi.paths[k].ResumeLine = p.ResumeLine
 		}
 	}
 	return spi, nil
 }
 
-func (spi *slicePathIterator) Next() (string, bool, error) {
+func (spi *slicePathIterator) Next() (ResumePath, bool, error) {
 	if spi.cursor < len(spi.paths) {
 		i := spi.cursor
 		spi.cursor = spi.cursor + 1
 		return spi.paths[i], true, nil
 	}
-	return "", false, nil
+	return ResumePath{}, false, nil
 }
 
 func (spi *slicePathIterator) Reset() {
 	spi.cursor = 0
 }
 
-func Work(workname string, paths []string, master Master) (string, error) {
+type ResumePath struct {
+	Path       string
+	ResumeLine string
+}
+
+func Work(workname string, paths []string, gru Gru) (string, error) {
+	rps := make([]ResumePath, 0, len(paths))
+	for _, p := range paths {
+		rps = append(rps, ResumePath{p, ""})
+	}
+	spi, err := newSlicePathIterator(rps)
+	if err != nil {
+		return "", err
+	}
+
+	return WorkPathIterator(workname, spi, gru)
+}
+
+func ResumeWork(workname string, paths []ResumePath, gru Gru) (string, error) {
 	spi, err := newSlicePathIterator(paths)
 	if err != nil {
 		return "", err
 	}
 
-	return WorkPathIterator(workname, spi, master)
+	return WorkPathIterator(workname, spi, gru)
 }
 
-func WorkPathIterator(workname string, pi PathIterator, master Master) (string, error) {
-	pt := master.ProgressTracker()
+func WorkPathIterator(workname string, pi PathIterator, gru Gru) (string, error) {
+	pt := gru.ProgressTracker()
 
 	glog.Infof("starting %s\n", workname)
 	startTime := time.Now()
 
-	err := master.Start()
+	err := gru.Start()
 	if err != nil {
-		glog.Errorf("failed to start master: %v\n", err)
+		glog.Errorf("failed to start gru: %v\n", err)
 		return "", err
 	}
 
 	var cv *countVisitor
 
-	if master.CalculateWork() {
+	if gru.CalculateWork() {
 		cv = new(countVisitor)
-		cv.master = master
+		cv.gru = gru
 
-		for name, goOn, err := pi.Next(); goOn; name, goOn, err = pi.Next() {
-			if name == "" {
+		for rp, goOn, err := pi.Next(); goOn; rp, goOn, err = pi.Next() {
+			if rp.Path == "" {
 				continue
 			}
-			glog.Infof("initial scan of %s to determine amount of work\n", name)
+			glog.Infof("initial scan of %s to determine amount of work\n", rp.Path)
+			cv.resumeLine = rp.ResumeLine
+			cv.root = rp.Path
 			if err == nil {
-				err = filepath.Walk(name, cv.visit)
+				err = filepath.Walk(rp.Path, cv.visit)
 			}
 			if err != nil {
-				glog.Errorf("failed to count in dir %s: %v\n", name, err)
+				glog.Errorf("failed to count in dir %s: %v\n", rp, err)
 				return "", err
 			}
 		}
@@ -365,56 +409,58 @@ func WorkPathIterator(workname string, pi PathIterator, master Master) (string, 
 
 		glog.Infof("found %d files and %s to do. starting work...\n", cv.numFiles, humanize.IBytes(uint64(cv.numBytes)))
 
-		master.Scanned(cv.numFiles, cv.numBytes, cv.commonRootPath)
+		gru.Scanned(cv.numFiles, cv.numBytes, cv.commonRootPath)
 
 		pt.SetTotalBytes(cv.numBytes)
 		pt.SetTotalFiles(int32(cv.numFiles))
 	}
 
-	inwork := make(chan *workUnit, master.NumWorkers())
+	inwork := make(chan *workUnit, gru.NumWorkers())
 
 	sv := &scanVisitor{
 		inwork: inwork,
-		master: master,
+		gru:    gru,
 		pt:     pt,
 	}
 
-	closeC := make(chan error, master.NumWorkers())
+	closeC := make(chan error, gru.NumWorkers())
 
-	for i := 0; i < master.NumWorkers(); i++ {
-		worker := &slave{
+	for i := 0; i < gru.NumWorkers(); i++ {
+		worker := &minion{
 			pt:     pt,
-			worker: master.NewWorker(i),
+			worker: gru.NewWorker(i),
 			closeC: closeC,
 		}
 
-		go runSlave(worker, inwork, i, workname)
+		go runMinion(worker, inwork, i, workname)
 	}
 
-	for name, goOn, err := pi.Next(); goOn; name, goOn, err = pi.Next() {
-		if name == "" {
+	for rp, goOn, err := pi.Next(); goOn; rp, goOn, err = pi.Next() {
+		if rp.Path == "" {
 			continue
 		}
 		if pt.Stopped() {
 			break
 		}
+		sv.resumeLine = rp.ResumeLine
+		sv.root = rp.Path
 		if err == nil {
-			err = filepath.Walk(name, sv.visit)
+			err = filepath.Walk(rp.Path, sv.visit)
 		}
 		if err == scanStopped {
 			break
 		}
 		if err != nil {
-			glog.Errorf("failed to scan dir %s: %v\n", name, err)
+			glog.Errorf("failed to scan dir %s: %v\n", rp, err)
 
 			close(inwork)
 			pt.Finished()
 
 			glog.Infof("Flushing workers and closing work. Hang in there...\n")
-			for i := 0; i < master.NumWorkers(); i++ {
+			for i := 0; i < gru.NumWorkers(); i++ {
 				perr := <-closeC
 				if perr != nil {
-					glog.Errorf("master found worker error %v", perr)
+					glog.Errorf("gru found worker error %v", perr)
 				}
 			}
 			return "", err
@@ -424,10 +470,10 @@ func WorkPathIterator(workname string, pi PathIterator, master Master) (string, 
 	close(inwork)
 
 	var perr error
-	for i := 0; i < master.NumWorkers(); i++ {
+	for i := 0; i < gru.NumWorkers(); i++ {
 		err := <-closeC
 		if err != nil {
-			glog.Errorf("master found worker error %v", err)
+			glog.Errorf("gru found worker error %v", err)
 			if perr == nil {
 				perr = err
 			}
@@ -436,9 +482,9 @@ func WorkPathIterator(workname string, pi PathIterator, master Master) (string, 
 
 	pt.Finished()
 
-	err = master.FinishUp()
+	err = gru.FinishUp()
 	if err != nil {
-		glog.Errorf("failed to finish up master: %v\n", err)
+		glog.Errorf("failed to finish up gru: %v\n", err)
 		return "", err
 	}
 

@@ -69,10 +69,10 @@ type archiveWorker struct {
 	hh           *Hashes
 	md5crcBuffer []byte
 	index        int
-	pm           *archiveMaster
+	pm           *archiveGru
 }
 
-type archiveMaster struct {
+type archiveGru struct {
 	depot           *Depot
 	resumePath      string
 	numWorkers      int
@@ -189,7 +189,7 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips int, 
 
 	glog.Infof("resuming with path %s", resumePoint)
 
-	pm := new(archiveMaster)
+	pm := new(archiveGru)
 	pm.depot = depot
 	pm.resumePath = resumePoint
 	pm.pt = pt
@@ -210,14 +210,14 @@ func (depot *Depot) Archive(paths []string, resumePath string, includezips int, 
 	return worker.Work("archive roms", paths, pm)
 }
 
-func (pm *archiveMaster) Accept(path string) bool {
+func (pm *archiveGru) Accept(path string) bool {
 	if pm.resumePath != "" {
 		return path > pm.resumePath
 	}
 	return true
 }
 
-func (pm *archiveMaster) NewWorker(workerIndex int) worker.Worker {
+func (pm *archiveGru) NewWorker(workerIndex int) worker.Worker {
 	return &archiveWorker{
 		depot:        pm.depot,
 		hh:           newHashes(),
@@ -227,19 +227,19 @@ func (pm *archiveMaster) NewWorker(workerIndex int) worker.Worker {
 	}
 }
 
-func (pm *archiveMaster) CalculateWork() bool {
+func (pm *archiveGru) CalculateWork() bool {
 	return !pm.skipInitialScan
 }
 
-func (pm *archiveMaster) NumWorkers() int {
+func (pm *archiveGru) NumWorkers() int {
 	return pm.numWorkers
 }
 
-func (pm *archiveMaster) ProgressTracker() worker.ProgressTracker {
+func (pm *archiveGru) ProgressTracker() worker.ProgressTracker {
 	return pm.pt
 }
 
-func (pm *archiveMaster) FinishUp() error {
+func (pm *archiveGru) FinishUp() error {
 	pm.soFar <- &completed{
 		workerIndex: -1,
 	}
@@ -250,11 +250,11 @@ func (pm *archiveMaster) FinishUp() error {
 	return pm.resumeLogFile.Close()
 }
 
-func (pm *archiveMaster) Start() error {
+func (pm *archiveGru) Start() error {
 	return nil
 }
 
-func (pm *archiveMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
+func (pm *archiveGru) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
 
 func (depot *Depot) reserveRoot(size int64) (int, error) {
 	depot.lock.Lock()
@@ -278,7 +278,7 @@ func (depot *Depot) reserveRoot(size int64) (int, error) {
 
 	glog.Error("Depot with the following roots ran out of disk space")
 	for _, dr := range depot.roots {
-		glog.Errorf("root = %s, maxSize = %s, size = %s", dr.name,
+		glog.Errorf("root = %s, maxSize = %s, size = %s", dr.path,
 			humanize.IBytes(uint64(dr.maxSize)), humanize.IBytes(uint64(dr.size)))
 	}
 
@@ -391,7 +391,7 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 		return 0, err
 	}
 
-	outpath := pathFromSha1HexEncoding(w.depot.roots[root].name, sha1Hex, gzipSuffix)
+	outpath := pathFromSha1HexEncoding(w.depot.roots[root].path, sha1Hex, gzipSuffix)
 
 	w.depot.cache.Set(sha1Hex, &cacheValue{
 		hh:        hh,

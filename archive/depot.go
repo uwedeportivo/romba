@@ -37,11 +37,14 @@ import (
 	"hash/crc32"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
 	"github.com/klauspost/compress/gzip"
+	"github.com/uwedeportivo/romba/worker"
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/uwedeportivo/romba/db"
@@ -94,6 +97,7 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 			return nil, err
 		}
 		depot.roots[k] = &depotRoot{
+			path:       root,
 			size:       size,
 			maxSize:    maxSize[k],
 			bf:         bf,
@@ -104,7 +108,7 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 	glog.Info("Initializing Depot with the following roots")
 
 	for _, dr := range depot.roots {
-		glog.Infof("root = %s, maxSize = %s, size = %s", dr.name,
+		glog.Infof("root = %s, maxSize = %s, size = %s", dr.path,
 			humanize.IBytes(uint64(dr.maxSize)), humanize.IBytes(uint64(dr.size)))
 	}
 
@@ -118,15 +122,18 @@ func (depot *Depot) RomInDepot(sha1Hex string) (bool, string, error) {
 	v, hit := depot.cache.Get(sha1Hex)
 	if hit {
 		cv := v.(*cacheValue)
-		return true, pathFromSha1HexEncoding(depot.roots[cv.rootIndex].name,
+		return true, pathFromSha1HexEncoding(depot.roots[cv.rootIndex].path,
 			hex.EncodeToString(cv.hh.Sha1), gzipSuffix), nil
 	}
 	for _, dr := range depot.roots {
+		dr.Lock()
 		if dr.bloomReady && !dr.bf.Test([]byte(sha1Hex)) {
+			dr.Unlock()
 			return false, "", nil
 		}
+		dr.Unlock()
 
-		rompath := pathFromSha1HexEncoding(dr.name, sha1Hex, gzipSuffix)
+		rompath := pathFromSha1HexEncoding(dr.path, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
 		if err != nil {
 			return false, "", err
@@ -143,15 +150,18 @@ func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, int64, e
 	v, hit := depot.cache.Get(sha1Hex)
 	if hit {
 		cv := v.(*cacheValue)
-		return true, cv.hh, pathFromSha1HexEncoding(depot.roots[cv.rootIndex].name,
+		return true, cv.hh, pathFromSha1HexEncoding(depot.roots[cv.rootIndex].path,
 			hex.EncodeToString(cv.hh.Sha1), gzipSuffix), cv.hh.Size, nil
 	}
 	for idx, dr := range depot.roots {
+		dr.Lock()
 		if dr.bloomReady && !dr.bf.Test([]byte(sha1Hex)) {
+			dr.Unlock()
 			return false, nil, "", 0, nil
 		}
+		dr.Unlock()
 
-		rompath := pathFromSha1HexEncoding(dr.name, sha1Hex, gzipSuffix)
+		rompath := pathFromSha1HexEncoding(dr.path, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
 		if err != nil {
 			return false, nil, "", 0, err
@@ -224,7 +234,7 @@ func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
 	sha1Hex := hex.EncodeToString(rom.Sha1)
 
 	for _, root := range depot.roots {
-		rompath := pathFromSha1HexEncoding(root.name, sha1Hex, gzipSuffix)
+		rompath := pathFromSha1HexEncoding(root.path, sha1Hex, gzipSuffix)
 		exists, err := PathExists(rompath)
 		if err != nil {
 			return nil, err
@@ -235,4 +245,99 @@ func (depot *Depot) OpenRomGZ(rom *types.Rom) (io.ReadCloser, error) {
 		}
 	}
 	return nil, nil
+}
+
+func (depot *Depot) Paths() []string {
+	ps := make([]string, 0, len(depot.roots))
+
+	for _, dr := range depot.roots {
+		ps = append(ps, dr.path)
+	}
+	return ps
+}
+
+func (depot *Depot) PopulateBloom(path string) {
+	parts := strings.Split(path, string(filepath.Separator))
+
+	if len(parts) < 5 {
+		glog.Errorf("failed to populate bloom filter for path %s: not enough dir parts", path)
+		return
+	}
+	n := len(parts) - 5
+	depotPath := string(filepath.Separator) + filepath.Join(parts[:n]...)
+
+	for _, dr := range depot.roots {
+		if depotPath == dr.path {
+			fn := parts[len(parts)-1]
+			sha1Hex := strings.TrimSuffix(fn, ".gz")
+			if len(sha1Hex) != 40 {
+				glog.Errorf("failed to populate bloom filter for path %s: not enough dir parts", path)
+				return
+			}
+			dr.Lock()
+			dr.bf.Add([]byte(sha1Hex))
+			dr.Unlock()
+		}
+	}
+}
+
+func (depot *Depot) ClearBloomFilters() error {
+	depot.lock.Lock()
+	defer depot.lock.Unlock()
+
+	for _, dr := range depot.roots {
+		dr.bloomReady = false
+		bfFilepath := filepath.Join(dr.path, bloomFilterFilename)
+		bfFileExists, err := PathExists(bfFilepath)
+		if err != nil {
+			return err
+		}
+		if bfFileExists {
+			err := os.Remove(bfFilepath)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (depot *Depot) ResumePopBloomPaths() ([]worker.ResumePath, error) {
+	depot.lock.Lock()
+	defer depot.lock.Unlock()
+
+	rps := make([]worker.ResumePath, 0, len(depot.roots))
+
+	for _, dr := range depot.roots {
+		files, err := filepath.Glob(filepath.Join(dr.path, "resumebloom-*"))
+		if err != nil {
+			return nil, err
+		}
+
+		if len(files) > 1 {
+			return nil, fmt.Errorf("more than one resumebloom files found in %s", dr.path)
+		}
+
+		if len(files) == 0 {
+			rps = append(rps, worker.ResumePath{Path: dr.path})
+			continue
+		}
+
+		_, filename := filepath.Split(files[0])
+
+		parts := strings.Split(filename, "-")
+
+		if len(parts) != 2 || len(parts[1]) != 40 {
+			return nil, fmt.Errorf("resumebloom file with unexpected name %s", files[0])
+		}
+
+		sha1Hex := parts[1]
+		resumeLine := pathFromSha1HexEncoding(dr.path, sha1Hex, gzipSuffix)
+
+		// TODO(uwe): actually read in the contents of the bloom filter
+
+		rps = append(rps, worker.ResumePath{Path: dr.path, ResumeLine: resumeLine})
+	}
+
+	return rps, nil
 }

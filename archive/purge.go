@@ -48,10 +48,10 @@ import (
 type purgeWorker struct {
 	depot *Depot
 	index int
-	pm    *purgeMaster
+	pm    *purgeGru
 }
 
-type purgeMaster struct {
+type purgeGru struct {
 	depot      *Depot
 	numWorkers int
 	pt         worker.ProgressTracker
@@ -98,9 +98,9 @@ func (rdi *romsFromDatIterator) position() (datCursor int, gameCursor int, romCu
 	return
 }
 
-func (rdi *romsFromDatIterator) Next() (string, bool, error) {
+func (rdi *romsFromDatIterator) Next() (worker.ResumePath, bool, error) {
 	if rdi.datCursor == len(rdi.dats) {
-		return "", false, nil
+		return worker.ResumePath{}, false, nil
 	}
 
 	d := rdi.dats[rdi.datCursor]
@@ -112,24 +112,24 @@ func (rdi *romsFromDatIterator) Next() (string, bool, error) {
 	if r.Sha1 == nil {
 		err := rdi.depot.RomDB.CompleteRom(r)
 		if err != nil {
-			return "", false, err
+			return worker.ResumePath{}, false, err
 		}
 	}
 	if r.Sha1 == nil {
-		return "", true, nil
+		return worker.ResumePath{}, true, nil
 	}
 
 	sha1Hex := hex.EncodeToString(r.Sha1)
 	exists, rompath, err := rdi.depot.RomInDepot(sha1Hex)
 	if err != nil {
-		return "", false, err
+		return worker.ResumePath{}, false, err
 	}
 
 	if !exists {
-		return "", true, nil
+		return worker.ResumePath{}, true, nil
 	}
 
-	return rompath, true, nil
+	return worker.ResumePath{rompath, ""}, true, nil
 }
 
 func (rdi *romsFromDatIterator) Reset() {
@@ -142,7 +142,7 @@ func (rdi *romsFromDatIterator) Reset() {
 
 func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fromDats string,
 	pt worker.ProgressTracker) (string, error) {
-	pm := new(purgeMaster)
+	pm := new(purgeGru)
 	pm.depot = depot
 	pm.pt = pt
 	pm.numWorkers = numWorkers
@@ -166,7 +166,7 @@ func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fr
 	if fromDats == "" {
 		wds := make([]string, len(depot.roots))
 		for i, dr := range depot.roots {
-			wds[i] = dr.name
+			wds[i] = dr.path
 		}
 		if len(workDepot) > 0 {
 			wds = []string{workDepot}
@@ -197,15 +197,15 @@ func (depot *Depot) Purge(backupDir string, numWorkers int, workDepot string, fr
 	}
 }
 
-func (pm *purgeMaster) Accept(path string) bool {
+func (pm *purgeGru) Accept(path string) bool {
 	return filepath.Ext(path) == gzipSuffix
 }
 
-func (pm *purgeMaster) CalculateWork() bool {
+func (pm *purgeGru) CalculateWork() bool {
 	return false
 }
 
-func (pm *purgeMaster) NewWorker(workerIndex int) worker.Worker {
+func (pm *purgeGru) NewWorker(workerIndex int) worker.Worker {
 	return &purgeWorker{
 		depot: pm.depot,
 		index: workerIndex,
@@ -213,24 +213,24 @@ func (pm *purgeMaster) NewWorker(workerIndex int) worker.Worker {
 	}
 }
 
-func (pm *purgeMaster) NumWorkers() int {
+func (pm *purgeGru) NumWorkers() int {
 	return pm.numWorkers
 }
 
-func (pm *purgeMaster) ProgressTracker() worker.ProgressTracker {
+func (pm *purgeGru) ProgressTracker() worker.ProgressTracker {
 	return pm.pt
 }
 
-func (pm *purgeMaster) FinishUp() error {
+func (pm *purgeGru) FinishUp() error {
 	pm.depot.writeSizes()
 	return nil
 }
 
-func (pm *purgeMaster) Start() error {
+func (pm *purgeGru) Start() error {
 	return nil
 }
 
-func (pm *purgeMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
+func (pm *purgeGru) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
 
 func (w *purgeWorker) Process(inpath string, size int64) error {
 	rom, err := RomFromGZDepotFile(inpath)
@@ -273,7 +273,7 @@ func (w *purgeWorker) Process(inpath string, size int64) error {
 		}
 		index := -1
 		for i, depotRoot := range w.pm.depot.roots {
-			if strings.HasPrefix(inpath, depotRoot.name) {
+			if strings.HasPrefix(inpath, depotRoot.path) {
 				index = i
 				break
 			}

@@ -120,7 +120,7 @@ func WriteGenerationFile(root string, size int64) error {
 	if err != nil {
 		return err
 	}
-	defer func(){
+	defer func() {
 		err := file.Close()
 		if err != nil {
 			glog.Errorf("error, failed to close generation file at %s: %v", root, err)
@@ -128,7 +128,7 @@ func WriteGenerationFile(root string, size int64) error {
 	}()
 
 	bw := bufio.NewWriter(file)
-	defer func(){
+	defer func() {
 		err := bw.Flush()
 		if err != nil {
 			glog.Errorf("error, failed to flush generation file at %s: %v", root, err)
@@ -151,7 +151,7 @@ func ReadGenerationFile(root string) (int64, error) {
 		}
 		return 0, err
 	}
-	defer func(){
+	defer func() {
 		err := file.Close()
 		if err != nil {
 			glog.Errorf("error, failed to close generation file at %s: %v", root, err)
@@ -168,7 +168,7 @@ func ReadGenerationFile(root string) (int64, error) {
 
 type refreshWorker struct {
 	romBatch RomBatch
-	pm       *refreshMaster
+	pm       *refreshGru
 }
 
 func (pw *refreshWorker) Process(path string, size int64) error {
@@ -200,48 +200,48 @@ func (pw *refreshWorker) Close() error {
 	return err
 }
 
-type refreshMaster struct {
+type refreshGru struct {
 	romdb              RomDB
 	numWorkers         int
 	pt                 worker.ProgressTracker
 	missingSha1sWriter io.Writer
 }
 
-func (pm *refreshMaster) CalculateWork() bool {
+func (pm *refreshGru) CalculateWork() bool {
 	return true
 }
 
-func (pm *refreshMaster) Accept(path string) bool {
+func (pm *refreshGru) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".dat" || ext == ".xml"
 }
 
-func (pm *refreshMaster) NewWorker(workerIndex int) worker.Worker {
+func (pm *refreshGru) NewWorker(workerIndex int) worker.Worker {
 	return &refreshWorker{
 		romBatch: pm.romdb.StartBatch(),
 		pm:       pm,
 	}
 }
 
-func (pm *refreshMaster) NumWorkers() int {
+func (pm *refreshGru) NumWorkers() int {
 	return pm.numWorkers
 }
 
-func (pm *refreshMaster) ProgressTracker() worker.ProgressTracker {
+func (pm *refreshGru) ProgressTracker() worker.ProgressTracker {
 	return pm.pt
 }
 
-func (pm *refreshMaster) FinishUp() error {
+func (pm *refreshGru) FinishUp() error {
 	pm.romdb.Flush()
 
 	return pm.romdb.EndDatRefresh()
 }
 
-func (pm *refreshMaster) Start() error {
+func (pm *refreshGru) Start() error {
 	return pm.romdb.BeginDatRefresh()
 }
 
-func (pm *refreshMaster) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
+func (pm *refreshGru) Scanned(numFiles int, numBytes int64, commonRootPath string) {}
 
 func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTracker, missingSha1s string) (string, error) {
 	err := romdb.OrphanDats()
@@ -256,7 +256,7 @@ func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTra
 		if err != nil {
 			return "", err
 		}
-		defer func(){
+		defer func() {
 			err := missingSha1sFile.Close()
 			if err != nil {
 				glog.Errorf("error, failed to close missing sha1 file %s: %v", missingSha1s, err)
@@ -264,7 +264,7 @@ func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTra
 		}()
 
 		missingSha1sBuf := bufio.NewWriter(missingSha1sFile)
-		defer func(){
+		defer func() {
 			err := missingSha1sBuf.Flush()
 			if err != nil {
 				glog.Errorf("error, failed to flush missing sha1 file %s: %v", missingSha1s, err)
@@ -274,7 +274,7 @@ func Refresh(romdb RomDB, datsPath string, numWorkers int, pt worker.ProgressTra
 		missingSha1sWriter = missingSha1sBuf
 	}
 
-	pm := &refreshMaster{
+	pm := &refreshGru{
 		romdb:              romdb,
 		numWorkers:         numWorkers,
 		pt:                 pt,
