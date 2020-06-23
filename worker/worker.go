@@ -393,7 +393,7 @@ func WorkPathIterator(workname string, pi PathIterator, gru Gru) (string, error)
 			if rp.Path == "" {
 				continue
 			}
-			glog.Infof("initial scan of %s to determine amount of work\n", &rp.Path)
+			glog.Infof("initial scan of %s to determine amount of work\n", rp.Path)
 			cv.resumeLine = rp.ResumeLine
 			cv.root = rp.Path
 			if err == nil {
