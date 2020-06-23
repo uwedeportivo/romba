@@ -123,6 +123,10 @@ func (rs *RombaService) popBloom(cmd *commander.Command, _ []string) error {
 				if err != nil {
 					glog.Errorf("error populating bloom: %v", err)
 				}
+
+				if err == nil {
+					err = rs.depot.SaveBloomFilters()
+				}
 			}
 		}
 
