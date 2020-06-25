@@ -159,7 +159,7 @@ func (depot *Depot) SHA1InDepot(sha1Hex string) (bool, *Hashes, string, int64, e
 		dr.Lock()
 		if dr.bloomReady && !dr.bf.Test([]byte(sha1Hex)) {
 			dr.Unlock()
-			return false, nil, "", 0, nil
+			continue
 		}
 		dr.Unlock()
 
