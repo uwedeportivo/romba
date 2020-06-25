@@ -248,6 +248,8 @@ keep compressed gzip, if value > 1 uncompress into destination sha1`)
 	cmd.Subcommands[5].Flag.Int("subworkers", config.GlobalConfig.General.Workers,
 		"how many subworkers to launch for each worker")
 
+	cmd.Subcommands[5].Flag.Bool("bloomOnly", false, "pretend bloom positives are 100% true. only used in fixdatOnly case")
+
 	cmd.Subcommands[6] = &commander.Command{
 		Run:       rs.lookup,
 		UsageLine: "lookup <list of hashes>",

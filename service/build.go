@@ -99,7 +99,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 
 	datInComplete := false
 	if pw.pm.fixdatOnly {
-		datInComplete, err = pw.pm.rs.depot.FixDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.deduper)
+		datInComplete, err = pw.pm.rs.depot.FixDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.deduper, pw.pm.bloomOnly)
 	} else {
 		datInComplete, err = pw.pm.rs.depot.BuildDat(dat, datdir, pw.pm.numSubWorkers, pw.pm.deduper,
 			pw.pm.unzipAllGames, pw.pm.sha1Tree)
@@ -128,6 +128,7 @@ type buildGru struct {
 	commonRootPath string
 	outpath        string
 	fixdatOnly     bool
+	bloomOnly      bool
 	unzipAllGames  bool
 	sha1Tree       int
 	deduper        dedup.Deduper
@@ -196,6 +197,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 	}
 
 	fixdatOnly := cmd.Flag.Lookup("fixdatOnly").Value.Get().(bool)
+	bloomOnly := cmd.Flag.Lookup("bloomOnly").Value.Get().(bool)
 	unzipAllGames := cmd.Flag.Lookup("unzipAllGames").Value.Get().(bool)
 	sha1Tree := cmd.Flag.Lookup("sha1Tree").Value.Get().(int)
 
@@ -248,6 +250,7 @@ func (rs *RombaService) build(cmd *commander.Command, args []string) error {
 			numSubWorkers: numSubWorkers,
 			pt:            rs.pt,
 			fixdatOnly:    fixdatOnly,
+			bloomOnly:     bloomOnly,
 			unzipAllGames: unzipAllGames,
 			sha1Tree:      sha1Tree,
 			deduper:       deduper,

@@ -43,22 +43,23 @@ import (
 )
 
 type fixdatBuilder struct {
-	depot   *Depot
-	datPath string
-	fixDat  *types.Dat
-	mutex   *sync.Mutex
-	wc      chan *types.Game
-	erc     chan error
-	closeC  chan bool
-	index   int
-	deduper dedup.Deduper
+	depot     *Depot
+	datPath   string
+	fixDat    *types.Dat
+	mutex     *sync.Mutex
+	wc        chan *types.Game
+	erc       chan error
+	closeC    chan bool
+	index     int
+	deduper   dedup.Deduper
+	bloomOnly bool
 }
 
 func (gb *fixdatBuilder) work() {
 	glog.V(4).Infof("starting subworker %d", gb.index)
 	for game := range gb.wc {
 		gamePath := filepath.Join(gb.datPath, game.Name)
-		fixGame, err := gb.depot.fixdatGame(game, gamePath, gb.fixDat.UnzipGames, gb.deduper)
+		fixGame, err := gb.depot.fixdatGame(game, gamePath, gb.fixDat.UnzipGames, gb.deduper, gb.bloomOnly)
 		if err != nil {
 			glog.Errorf("error processing %s: %v", gamePath, err)
 			gb.erc <- err
@@ -75,7 +76,8 @@ func (gb *fixdatBuilder) work() {
 	return
 }
 
-func (depot *Depot) FixDat(dat *types.Dat, outpath string, numSubworkers int, deduper dedup.Deduper) (bool, error) {
+func (depot *Depot) FixDat(dat *types.Dat, outpath string,
+	numSubworkers int, deduper dedup.Deduper, bloomOnly bool) (bool, error) {
 	datPath := filepath.Join(outpath, dat.Name)
 
 	fixDat := new(types.Dat)
@@ -101,7 +103,7 @@ func (depot *Depot) FixDat(dat *types.Dat, outpath string, numSubworkers int, de
 		gb.index = i
 		gb.deduper = deduper
 		gb.closeC = closeC
-
+		gb.bloomOnly = bloomOnly
 		go gb.work()
 	}
 
@@ -163,7 +165,7 @@ endLoop2:
 }
 
 func (depot *Depot) fixdatGame(game *types.Game, gamePath string,
-	unzipGame bool, deduper dedup.Deduper) (*types.Game, error) {
+	unzipGame bool, deduper dedup.Deduper, bloomOnly bool) (*types.Game, error) {
 
 	var err error
 
@@ -190,7 +192,7 @@ func (depot *Depot) fixdatGame(game *types.Game, gamePath string,
 		}
 
 		sha1Hex := hex.EncodeToString(rom.Sha1)
-		exists, _, err := depot.RomInDepot(sha1Hex)
+		exists, _, err := depot.RomInDepotBloom(sha1Hex, bloomOnly)
 		if err != nil {
 			glog.Errorf("error checking rom %s in depot: %v", rom.Name, err)
 			return nil, err

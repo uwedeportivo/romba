@@ -121,6 +121,14 @@ func NewDepot(roots []string, maxSize []int64, romDB db.RomDB) (*Depot, error) {
 }
 
 func (depot *Depot) RomInDepot(sha1Hex string) (bool, string, error) {
+	return depot.romInDepot(sha1Hex, false)
+}
+
+func (depot *Depot) RomInDepotBloom(sha1Hex string, bloomOnly bool) (bool, string, error) {
+	return depot.romInDepot(sha1Hex, bloomOnly)
+}
+
+func (depot *Depot) romInDepot(sha1Hex string, bloomOnly bool) (bool, string, error) {
 	v, hit := depot.cache.Get(sha1Hex)
 	if hit {
 		cv := v.(*cacheValue)
@@ -136,6 +144,10 @@ func (depot *Depot) RomInDepot(sha1Hex string) (bool, string, error) {
 		dr.Unlock()
 
 		rompath := pathFromSha1HexEncoding(dr.path, sha1Hex, gzipSuffix)
+		if bloomOnly {
+			return true, rompath, nil
+		}
+
 		exists, err := PathExists(rompath)
 		if err != nil {
 			return false, "", err
