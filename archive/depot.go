@@ -131,7 +131,7 @@ func (depot *Depot) RomInDepot(sha1Hex string) (bool, string, error) {
 		dr.Lock()
 		if dr.bloomReady && !dr.bf.Test([]byte(sha1Hex)) {
 			dr.Unlock()
-			return false, "", nil
+			continue
 		}
 		dr.Unlock()
 
