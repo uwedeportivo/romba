@@ -318,7 +318,7 @@ func newSlicePathIterator(paths []ResumePath) (*slicePathIterator, error) {
 		} else {
 			spi.paths[k].Path = p.Path
 		}
-		if !filepath.IsAbs(p.ResumeLine) {
+		if p.ResumeLine != "" && !filepath.IsAbs(p.ResumeLine) {
 			absname, err := filepath.Abs(p.ResumeLine)
 			if err != nil {
 				return nil, err
