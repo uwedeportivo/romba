@@ -126,6 +126,10 @@ func (pm *mergeGru) CalculateWork() bool {
 	return !pm.skipInitialScan
 }
 
+func (pm *mergeGru) NeedsSizeInfo() bool {
+	return true
+}
+
 func (pm *mergeGru) NumWorkers() int {
 	return pm.numWorkers
 }

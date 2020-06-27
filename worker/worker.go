@@ -42,6 +42,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/golang/glog"
+	"github.com/karrick/godirwalk"
 	"github.com/spacemonkeygo/errors"
 
 	"github.com/uwedeportivo/romba/config"
@@ -144,6 +145,26 @@ func (cv *countVisitor) visit(path string, f os.FileInfo, err error) error {
 	return nil
 }
 
+func (cv *countVisitor) visitFast(path string, de *godirwalk.Dirent) error {
+	if strings.HasSuffix(path, ".DS_Store") {
+		return nil
+	}
+	if de.IsDir() && cv.resumeLine != "" && !strings.HasPrefix(cv.resumeLine, path) && path < cv.resumeLine {
+		return filepath.SkipDir
+	}
+	if !de.IsDir() && cv.gru.Accept(path) {
+		glog.V(2).Infof("visiting path %s, current common root is %s", path, cv.commonRootPath)
+		cv.numFiles += 1
+		if cv.commonRootPath == "" {
+			cv.commonRootPath = path
+		} else {
+			cv.commonRootPath = CommonRoot(cv.commonRootPath, path)
+		}
+		glog.V(2).Infof("new current common root is %s", cv.commonRootPath)
+	}
+	return nil
+}
+
 type scanVisitor struct {
 	inwork chan *workUnit
 	gru    Gru
@@ -177,6 +198,27 @@ func (sv *scanVisitor) visit(path string, f os.FileInfo, err error) error {
 	return nil
 }
 
+func (sv *scanVisitor) visitFast(path string, de *godirwalk.Dirent) error {
+	if sv.pt.Stopped() {
+		glog.Info("scan stopped")
+		return scanStopped
+	}
+	if strings.HasSuffix(path, ".DS_Store") {
+		return nil
+	}
+
+	if de.IsDir() && sv.resumeLine != "" && !strings.HasPrefix(sv.resumeLine, path) && path < sv.resumeLine {
+		return filepath.SkipDir
+	}
+	if !de.IsDir() && sv.gru.Accept(path) {
+		sv.inwork <- &workUnit{
+			path: path,
+			size: 0,
+		}
+	}
+	return nil
+}
+
 type Worker interface {
 	Process(path string, size int64) error
 	Close() error
@@ -195,6 +237,7 @@ type Gru interface {
 	Start() error
 	Scanned(numFiles int, numBytes int64, commonRootPath string)
 	CalculateWork() bool
+	NeedsSizeInfo() bool
 }
 
 type workUnit struct {
@@ -445,7 +488,13 @@ func WorkPathIterator(workname string, pi PathIterator, gru Gru) (string, error)
 		sv.resumeLine = rp.ResumeLine
 		sv.root = rp.Path
 		if err == nil {
-			err = filepath.Walk(rp.Path, sv.visit)
+			if gru.NeedsSizeInfo() {
+				err = filepath.Walk(rp.Path, sv.visit)
+			} else {
+				err = godirwalk.Walk(rp.Path, &godirwalk.Options{
+					Callback: sv.visitFast,
+				})
+			}
 		}
 		if err == scanStopped {
 			break

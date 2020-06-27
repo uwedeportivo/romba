@@ -21,5 +21,6 @@ require (
 	github.com/uwedeportivo/torrentzip v1.0.0
 	github.com/willf/bitset v1.1.10 // indirect
 	github.com/willf/bloom v2.0.3+incompatible
-	golang.org/x/net v0.0.0-20180404174746-b3c676e531a6
+	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
+	golang.org/x/tools v0.0.0-20200626171337-aa94e735be7f // indirect
 )

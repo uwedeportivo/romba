@@ -231,6 +231,10 @@ func (pm *archiveGru) CalculateWork() bool {
 	return !pm.skipInitialScan
 }
 
+func (pm *archiveGru) NeedsSizeInfo() bool {
+	return true
+}
+
 func (pm *archiveGru) NumWorkers() int {
 	return pm.numWorkers
 }

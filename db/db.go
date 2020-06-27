@@ -211,6 +211,10 @@ func (pm *refreshGru) CalculateWork() bool {
 	return true
 }
 
+func (pm *refreshGru) NeedsSizeInfo() bool {
+	return false
+}
+
 func (pm *refreshGru) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".dat" || ext == ".xml"
