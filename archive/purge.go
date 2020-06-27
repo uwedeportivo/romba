@@ -205,6 +205,10 @@ func (pm *purgeGru) CalculateWork() bool {
 	return false
 }
 
+func (pm *purgeGru) NeedsSizeInfo() bool {
+	return true
+}
+
 func (pm *purgeGru) NewWorker(workerIndex int) worker.Worker {
 	return &purgeWorker{
 		depot: pm.depot,

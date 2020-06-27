@@ -36,6 +36,10 @@ func (pm *bloomGru) CalculateWork() bool {
 	return false
 }
 
+func (pm *bloomGru) NeedsSizeInfo() bool {
+	return false
+}
+
 func (pm *bloomGru) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".gz"

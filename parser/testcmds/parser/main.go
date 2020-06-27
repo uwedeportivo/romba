@@ -100,6 +100,8 @@ func (pm *parseGru) ProgressTracker() worker.ProgressTracker {
 
 func (pm *parseGru) CalculateWork() bool { return false }
 
+func (pm *parseGru) NeedsSizeInfo() bool { return false }
+
 func main() {
 	flag.Usage = usage
 

@@ -138,6 +138,10 @@ func (pm *buildGru) CalculateWork() bool {
 	return true
 }
 
+func (pm *buildGru) NeedsSizeInfo() bool {
+	return false
+}
+
 func (pm *buildGru) Accept(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".dat" || ext == ".xml"
