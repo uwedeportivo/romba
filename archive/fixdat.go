@@ -167,15 +167,17 @@ endLoop2:
 func (depot *Depot) fixdatGame(game *types.Game, gamePath string,
 	unzipGame bool, deduper dedup.Deduper, bloomOnly bool) (*types.Game, error) {
 
-	var err error
-
 	var fixGame *types.Game
 
 	for _, rom := range game.Roms {
-		err = depot.RomDB.CompleteRom(rom)
+		croms, err := depot.RomDB.CompleteRom(rom)
 		if err != nil {
 			glog.Errorf("error completing rom %s: %v", rom.Name, err)
 			return nil, err
+		}
+
+		if len(croms) > 0 {
+			game.Roms = append(game.Roms, croms...)
 		}
 
 		if rom.Sha1 == nil {
