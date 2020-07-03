@@ -110,7 +110,7 @@ func (rdi *romsFromDatIterator) Next() (worker.ResumePath, bool, error) {
 	rdi.datCursor, rdi.gameCursor, rdi.romCursor = rdi.position()
 
 	if r.Sha1 == nil {
-		err := rdi.depot.RomDB.CompleteRom(r)
+		_, err := rdi.depot.RomDB.CompleteRom(r)
 		if err != nil {
 			return worker.ResumePath{}, false, err
 		}

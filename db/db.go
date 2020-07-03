@@ -71,7 +71,7 @@ type RomDB interface {
 	GetDat(sha1 []byte) (*types.Dat, error)
 	DatsForRom(rom *types.Rom) ([]*types.Dat, error)
 	FilteredDatsForRom(rom *types.Rom, filter func(*types.Dat) bool) ([]*types.Dat, []*types.Dat, error)
-	CompleteRom(rom *types.Rom) error
+	CompleteRom(rom *types.Rom) ([]*types.Rom, error)
 	BeginDatRefresh() error
 	EndDatRefresh() error
 	PrintStats() string

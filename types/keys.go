@@ -35,9 +35,9 @@ import (
 )
 
 const (
-	keySizeCrc  = 4
-	keySizeMd5  = 16
-	keySizeSha1 = 20
+	KeySizeCrc  = 4
+	KeySizeMd5  = 16
+	KeySizeSha1 = 20
 )
 
 func (ar *Rom) CrcWithSizeKey() []byte {
@@ -45,7 +45,7 @@ func (ar *Rom) CrcWithSizeKey() []byte {
 		return nil
 	}
 
-	n := keySizeCrc
+	n := KeySizeCrc
 	key := make([]byte, n+8)
 	copy(key[:n], ar.Crc)
 	util.Int64ToBytes(ar.Size, key[n:])
@@ -57,7 +57,7 @@ func (ar *Rom) Md5WithSizeKey() []byte {
 		return nil
 	}
 
-	n := keySizeMd5
+	n := KeySizeMd5
 	key := make([]byte, n+8)
 	copy(key[:n], ar.Md5)
 	util.Int64ToBytes(ar.Size, key[n:])
@@ -73,10 +73,10 @@ func (ar *Rom) CrcWithSizeAndSha1Key(sha1Bytes []byte) []byte {
 		return nil
 	}
 
-	key := make([]byte, keySizeCrc+8+keySizeSha1)
-	copy(key[:keySizeCrc], ar.Crc)
-	util.Int64ToBytes(ar.Size, key[keySizeCrc:keySizeCrc+8])
-	copy(key[keySizeCrc+8:], sha1Bytes)
+	key := make([]byte, KeySizeCrc+8+KeySizeSha1)
+	copy(key[:KeySizeCrc], ar.Crc)
+	util.Int64ToBytes(ar.Size, key[KeySizeCrc:KeySizeCrc+8])
+	copy(key[KeySizeCrc+8:], sha1Bytes)
 	return key
 }
 
@@ -89,10 +89,10 @@ func (ar *Rom) Md5WithSizeAndSha1Key(sha1Bytes []byte) []byte {
 		return nil
 	}
 
-	key := make([]byte, keySizeMd5+8+keySizeSha1)
-	copy(key[:keySizeMd5], ar.Md5)
-	util.Int64ToBytes(ar.Size, key[keySizeMd5:keySizeMd5+8])
-	copy(key[keySizeMd5+8:], sha1Bytes)
+	key := make([]byte, KeySizeMd5+8+KeySizeSha1)
+	copy(key[:KeySizeMd5], ar.Md5)
+	util.Int64ToBytes(ar.Size, key[KeySizeMd5:KeySizeMd5+8])
+	copy(key[KeySizeMd5+8:], sha1Bytes)
 	return key
 }
 
@@ -101,8 +101,8 @@ func (ar *Rom) Sha1Sha1Key(sha1Bytes []byte) []byte {
 		return nil
 	}
 
-	key := make([]byte, keySizeSha1*2)
-	copy(key[:keySizeSha1], ar.Sha1)
-	copy(key[keySizeSha1:], sha1Bytes)
+	key := make([]byte, KeySizeSha1*2)
+	copy(key[:KeySizeSha1], ar.Sha1)
+	copy(key[KeySizeSha1:], sha1Bytes)
 	return key
 }

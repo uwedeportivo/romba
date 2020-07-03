@@ -119,8 +119,8 @@ func (noop *NoOpDB) EndDatRefresh() error {
 	return nil
 }
 
-func (noop *NoOpDB) CompleteRom(rom *types.Rom) error {
-	return nil
+func (noop *NoOpDB) CompleteRom(rom *types.Rom) ([]*types.Rom, error) {
+	return nil, nil
 }
 
 func (noop *NoOpDB) Flush() {}

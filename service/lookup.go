@@ -46,7 +46,7 @@ import (
 )
 
 func (rs *RombaService) lookupRom(cmd *commander.Command, r *types.Rom, outpath string) error {
-	err := rs.romDB.CompleteRom(r)
+	croms, err := rs.romDB.CompleteRom(r)
 	if err != nil {
 		return err
 	}
@@ -67,6 +67,29 @@ func (rs *RombaService) lookupRom(cmd *commander.Command, r *types.Rom, outpath 
 			fmt.Fprintf(cmd.Stdout, "size = %d\n", size)
 			r.Crc = hh.Crc
 			r.Md5 = hh.Md5
+
+			if outpath != "" {
+				worker.Cp(rompath, filepath.Join(outpath, filepath.Base(rompath)))
+			}
+		}
+	}
+
+	for _, crom := range croms {
+		sha1Str := hex.EncodeToString(crom.Sha1)
+
+		inDepot, hh, rompath, size, err := rs.depot.SHA1InDepot(sha1Str)
+		if err != nil {
+			return err
+		}
+
+		if inDepot {
+			fmt.Fprintf(cmd.Stdout, "-----------------\n")
+			fmt.Fprintf(cmd.Stdout, "collision rom file %s in depot\n", rompath)
+			fmt.Fprintf(cmd.Stdout, "crc = %s\n", hex.EncodeToString(hh.Crc))
+			fmt.Fprintf(cmd.Stdout, "md5 = %s\n", hex.EncodeToString(hh.Md5))
+			fmt.Fprintf(cmd.Stdout, "size = %d\n", size)
+			crom.Crc = hh.Crc
+			crom.Md5 = hh.Md5
 
 			if outpath != "" {
 				worker.Cp(rompath, filepath.Join(outpath, filepath.Base(rompath)))

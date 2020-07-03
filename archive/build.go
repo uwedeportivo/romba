@@ -262,7 +262,6 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 	unzipGame bool, deduper dedup.Deduper, sha1Tree int) (*types.Game, bool, error) {
 
 	var gameTorrent *torrentzip.Writer
-	var err error
 
 	glog.V(4).Infof("building game %s with path %s", game.Name, gamePath)
 
@@ -315,10 +314,14 @@ func (depot *Depot) buildGame(game *types.Game, gamePath string,
 	foundRom := false
 
 	for _, rom := range game.Roms {
-		err = depot.RomDB.CompleteRom(rom)
+		croms, err := depot.RomDB.CompleteRom(rom)
 		if err != nil {
 			glog.Errorf("error completing rom %s: %v", rom.Name, err)
 			return nil, false, err
+		}
+
+		if len(croms) > 0 {
+			game.Roms = append(game.Roms, croms...)
 		}
 
 		if rom.Sha1 == nil && rom.Size > 0 {

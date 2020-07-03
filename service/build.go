@@ -90,7 +90,7 @@ func (pw *buildWorker) Process(path string, size int64) error {
 
 	for _, game := range dat.Games {
 		for _, rom := range game.Roms {
-			err = pw.pm.rs.romDB.CompleteRom(rom)
+			_, err = pw.pm.rs.romDB.CompleteRom(rom)
 			if err != nil {
 				return err
 			}

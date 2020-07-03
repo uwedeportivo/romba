@@ -300,28 +300,58 @@ func (kvdb *kvStore) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	return dats, err
 }
 
-func (kvdb *kvStore) CompleteRom(rom *types.Rom) error {
+// CompleteRom completes the rom by adding missing hashes. If there are
+// additional roms that collide with the provided crc or md5, then these
+// additional roms are returned in the rom slice.
+func (kvdb *kvStore) CompleteRom(rom *types.Rom) ([]*types.Rom, error) {
 	if rom.Sha1 != nil {
-		return nil
+		return nil, nil
 	}
 
 	if rom.Md5 != nil {
 		dBytes, err := kvdb.md5sha1DB.GetKeySuffixesFor(rom.Md5WithSizeKey())
 		if err != nil {
-			return err
+			return nil, err
 		}
-		rom.Sha1 = dBytes
-		return nil
+		rom.Sha1 = dBytes[:sha1.Size]
+		if len(dBytes) == sha1.Size {
+			return nil, nil
+		}
+		var croms []*types.Rom
+		for rb := dBytes[sha1.Size:]; len(rb) >= sha1.Size; rb = rb[sha1.Size:] {
+			croms = append(croms, &types.Rom{
+				Sha1: rb[:sha1.Size],
+				Md5:  rom.Md5,
+				Crc:  rom.Crc,
+				Name: rom.Name,
+				Size: rom.Size,
+			})
+		}
+		return croms, nil
 	}
 
 	if rom.Crc != nil {
 		dBytes, err := kvdb.crcsha1DB.GetKeySuffixesFor(rom.CrcWithSizeKey())
 		if err != nil {
-			return err
+			return nil, err
 		}
-		rom.Sha1 = dBytes
+		rom.Sha1 = dBytes[:sha1.Size]
+		if len(dBytes) == sha1.Size {
+			return nil, nil
+		}
+		var croms []*types.Rom
+		for rb := dBytes[sha1.Size:]; len(rb) >= sha1.Size; rb = rb[sha1.Size:] {
+			croms = append(croms, &types.Rom{
+				Sha1: rb[:sha1.Size],
+				Md5:  rom.Md5,
+				Crc:  rom.Crc,
+				Name: rom.Name,
+				Size: rom.Size,
+			})
+		}
+		return croms, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (kvdb *kvStore) Flush() {
@@ -661,9 +691,9 @@ func (kvdb *kvStore) JoinCrcMd5(combiner combine.Combiner) error {
 	err := kvdb.crcsha1DB.Iterate(func(key, value []byte) (bool, error) {
 		rom := new(types.Rom)
 
-		rom.Sha1 = key[crc32.Size + 8:]
+		rom.Sha1 = key[crc32.Size+8:]
 		rom.Crc = key[:crc32.Size]
-		rom.Size = util.BytesToInt64(key[crc32.Size:crc32.Size+8])
+		rom.Size = util.BytesToInt64(key[crc32.Size : crc32.Size+8])
 
 		err := combiner.Declare(rom)
 		if err != nil {
@@ -678,9 +708,9 @@ func (kvdb *kvStore) JoinCrcMd5(combiner combine.Combiner) error {
 	return kvdb.md5sha1DB.Iterate(func(key, value []byte) (bool, error) {
 		rom := new(types.Rom)
 
-		rom.Sha1 = key[md5.Size + 8:]
+		rom.Sha1 = key[md5.Size+8:]
 		rom.Md5 = key[:md5.Size]
-		rom.Size = util.BytesToInt64(key[md5.Size:md5.Size+8])
+		rom.Size = util.BytesToInt64(key[md5.Size : md5.Size+8])
 
 		err := combiner.Declare(rom)
 		if err != nil {
