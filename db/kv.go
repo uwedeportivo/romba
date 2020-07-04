@@ -313,6 +313,9 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) ([]*types.Rom, error) {
 		if err != nil {
 			return nil, err
 		}
+		if len(dBytes) < sha1.Size {
+			return nil, nil
+		}
 		rom.Sha1 = dBytes[:sha1.Size]
 		if len(dBytes) == sha1.Size {
 			return nil, nil
@@ -334,6 +337,9 @@ func (kvdb *kvStore) CompleteRom(rom *types.Rom) ([]*types.Rom, error) {
 		dBytes, err := kvdb.crcsha1DB.GetKeySuffixesFor(rom.CrcWithSizeKey())
 		if err != nil {
 			return nil, err
+		}
+		if len(dBytes) < sha1.Size {
+			return nil, nil
 		}
 		rom.Sha1 = dBytes[:sha1.Size]
 		if len(dBytes) == sha1.Size {
