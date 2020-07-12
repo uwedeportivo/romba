@@ -261,7 +261,7 @@ func (l *lexer) nextItem() item {
 }
 
 // lex creates a new scanner for the input string.
-func lex(name string, rd io.Reader) *lexer {
+func lex(name string, rd io.Reader) (*lexer, error) {
 	l := &lexer{
 		tk:    make([]rune, 0, 2048),
 		name:  name,
@@ -269,7 +269,15 @@ func lex(name string, rd io.Reader) *lexer {
 		state: lexDefault,
 		items: make(chan item, 2), // Two items of buffering is sufficient for all state functions
 	}
-	return l
+
+	r, _, err := l.br.ReadRune()
+	if err != nil {
+		return nil, err
+	}
+	if r != '\uFEFF' {
+		l.br.UnreadRune() // Not a BOM -- put the rune back
+	}
+	return l, nil
 }
 
 // state functions
