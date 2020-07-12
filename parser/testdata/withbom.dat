@@ -1,0 +1,56 @@
+﻿clrmamepro (
+	name "GOG.com - Games, DLCs & Extras"
+	description "GOG.com - Games, DLCs & Extras"
+	category "PC, MAC & Linux Games - DRM Free"
+	version 3983
+	date "28th June, 2020"
+	author "Connie Thunder & Gefflon"
+	email "Not Applicable"
+	homepage "Connie's DAT Files"
+	url " https://goo.gl/r53xhZ "
+	comment "GOG.com Collection of DRM Free Game Files, DLCs & Extras for PC, MAC & Linux."
+	forcenodump ignore
+	forcepacking unzip
+)
+
+game (
+	name 140_game
+	description "140 (Action - Arcade - Platformer)"
+	year "October 16, 2013"
+	manufacturer "Carlsen Games / Carlsen Games"
+	rom ( name 140_1010_2019_33250.sh size 73175148 crc 839a95cb md5 cbfdc455cf49c88aea3cb62d23fccb55 sha1 49ba67e47ed1e0a7c52455f1792d63ec1bea743d )
+	rom ( name 140_enUS_11_10_2019_33176.pkg size 60855879 crc a7d6c573 md5 158b3523cca2c66387dc7f89cbce0650 sha1 f3176bccfd962ee5a5fd1cc160c8940ae587e1aa )
+	rom ( name patch_140_20170719r370_(13689)_to_171409-r400_(22639).exe size 39349176 crc 9bb897c9 md5 094ff6147ee8949f5afacc9e1ad0b185 sha1 aae2a213002d32d57e3b464130f9240247ec3e66 )
+	rom ( name setup_140_10.10.2019_(33252).exe size 63371240 crc 8e72be64 md5 d5bfde063f535fc1b4136ba8a04bd3d5 sha1 fda8af55ada3fbcd73cb753067930dfc465e8f92 )
+)
+
+game (
+	name 140_soundtrack
+	description "140 - Soundtrack (Action - Arcade - Platformer) [DLC]"
+	year "June 20, 2017"
+	manufacturer "Carlsen Games / Carlsen Games"
+	rom ( name 140_ost_flac.zip size 452612872 crc c0739315 md5 75f694f6207780a84c36a45d5bc6ea6a sha1 ea07138e50fc16a26a45dbfba71692e10282417c )
+	rom ( name 140_ost_mp3.zip size 100173539 crc 8b4c304c md5 2eadab6fd1fc5a5b4df8b0e1e3deeefc sha1 99a323ce5bb48c5f67dffd9100988601ba377b5e )
+)
+
+game (
+	name 15_days
+	description "15 Days (Adventure - Point-and-click - Detective-mystery)"
+	year "June 25, 2010"
+	manufacturer "House of Tales / HandyGames"
+	rom ( name 15_days_manual.zip size 7046481 crc 9990a493 md5 dd4445e34dc27ec6ad54151b925d2a0d sha1 1a4759d16df2cc73ffa7608b8d19091eb128326c )
+	rom ( name setup_15_days_1.0_(19285)-1.bin size 3125481803 crc 563ebf56 md5 ff235c2bcd887fc3d59af92aa780b0ed sha1 3e72084a473ed41f74cce15d6f2b4d1a1425530a )
+	rom ( name setup_15_days_1.0_(19285).exe size 821824 crc 6c0a174e md5 eed77e8beeb270924d0ab51470dbf5ae sha1 381340fa75d23d6e9dfa9e81e959836ecb4a38bc )
+)
+
+game (
+	name 1849_the_gold_rush
+	description "1849 - Gold Edition (Simulation - Economic - Historical)"
+	year "May 8, 2014"
+	manufacturer "SomaSim / SomaSim"
+	rom ( name 1849_avatars.zip size 958230 crc ff98a7e2 md5 b41c0bd110f4a74dcac24d92fa5be161 sha1 7fde7f3671c94d75602de2c92af4c3ae3af20573 )
+	rom ( name 1849_gold_edition_2.2.0.36.dmg size 76856051 crc c341d5d4 md5 31e8c1d5c20001f75051a7315f4fb1d3 sha1 005f2f342ca4d241638c3e2133438b0e60fc0ef6 )
+	rom ( name 1849_wallpapers.zip size 1949380 crc b70a0b39 md5 568833dce4859be28cefac4de59d9195 sha1 ba6b06a379abb49d0b2705800b2ea2a2aabc4b10 )
+	rom ( name setup_1849_2.0.7_(19810).exe size 75754304 crc be3d1dfe md5 eaa12869fac8e78f06013208ee182ad6 sha1 d8471dfe752d6af0fbdb02845ca47a6234a2c81d )
+)
+

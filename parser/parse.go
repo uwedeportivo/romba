@@ -419,14 +419,19 @@ func ParseDatWithListener(r io.Reader, path string, pl ParseListener) ([]byte, e
 		h:  sha1.New(),
 	}
 
+	ll, err := lex("dat - "+path, hr)
+	if err != nil {
+		return nil, err
+	}
+
 	p := &parser{
-		ll: lex("dat - "+path, hr),
+		ll: ll,
 		d:  &types.Dat{},
 		pl: pl,
 	}
 
 	p.d.Path = path
-	err := p.parse()
+	err = p.parse()
 	if err != nil {
 		derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, p.ll.lineNumber(), err)
 		derr := ParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(p.ll.lineNumber()))
@@ -441,13 +446,18 @@ func ParseDat(r io.Reader, path string) (*types.Dat, []byte, error) {
 		h:  sha1.New(),
 	}
 
+	ll, err := lex("dat - "+path, hr)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	p := &parser{
-		ll: lex("dat - "+path, hr),
+		ll: ll,
 		d:  &types.Dat{},
 	}
 
 	p.d.Path = path
-	err := p.parse()
+	err = p.parse()
 	if err != nil {
 		derrStr := fmt.Sprintf("error in file %s on line %d: %v", path, p.ll.lineNumber(), err)
 		derr := ParseError.NewWith(derrStr, setErrorFilePath(path), setErrorLineNumber(p.ll.lineNumber()))
@@ -492,7 +502,7 @@ func isXML(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer func(){
+	defer func() {
 		err := file.Close()
 		if err != nil {
 			glog.Errorf("error, failed to close file %s: %v", path, err)
@@ -524,7 +534,7 @@ func Parse(path string) (*types.Dat, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	defer func(){
+	defer func() {
 		err := file.Close()
 		if err != nil {
 			glog.Errorf("error, failed to close file %s: %v", path, err)
@@ -547,7 +557,7 @@ func ParseWithListener(path string, pl ParseListener) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func(){
+	defer func() {
 		err := file.Close()
 		if err != nil {
 			glog.Errorf("error, failed to close file %s: %v", path, err)
@@ -663,9 +673,9 @@ func ParseXml(r io.Reader, path string) (*types.Dat, []byte, error) {
 }
 
 type xmlDatHeader struct {
-	Name          string      `xml:"name"`
-	Description   string      `xml:"description"`
-	Clr           *types.Clrmamepro `xml:"clrmamepro"`
+	Name        string            `xml:"name"`
+	Description string            `xml:"description"`
+	Clr         *types.Clrmamepro `xml:"clrmamepro"`
 }
 
 func ParseXmlWithListener(r io.Reader, path string, pl ParseListener) ([]byte, error) {
@@ -755,4 +765,3 @@ func ParseXmlWithListener(r io.Reader, path string, pl ParseListener) ([]byte, e
 
 	return hr.h.Sum(nil), nil
 }
-

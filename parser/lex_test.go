@@ -42,8 +42,29 @@ func TestLexerGoesThrough(t *testing.T) {
 	}
 	defer file.Close()
 
-	ll := lex("test", file)
+	ll, err := lex("example.dat", file)
+	if err != nil {
+		t.Fatalf("error creating lexer: %v", err)
+	}
 
 	for i := ll.nextItem(); i.typ != itemEOF; i = ll.nextItem() {
+		t.Logf("token typ: %s, token val: %s", i.typ, i.val)
+	}
+}
+
+func TestLexerGoesThroughBOM(t *testing.T) {
+	file, err := os.Open("testdata/withbom.dat")
+	if err != nil {
+		t.Fatalf("error opening test data: %v", err)
+	}
+	defer file.Close()
+
+	ll, err := lex("withbom.dat", file)
+	if err != nil {
+		t.Fatalf("error creating lexer: %v", err)
+	}
+
+	for i := ll.nextItem(); i.typ != itemEOF; i = ll.nextItem() {
+		t.Logf("token typ: %s, token val: %s", i.typ, i.val)
 	}
 }
