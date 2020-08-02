@@ -409,3 +409,15 @@ func (depot *Depot) SaveBloomFilters() error {
 	}
 	return nil
 }
+
+func (depot *Depot) DebugBloom(sha1Hex string) []string {
+	var rs []string
+	for _, dr := range depot.roots {
+		dr.Lock()
+		if dr.bloomReady && dr.bf.Test([]byte(sha1Hex)) {
+			rs = append(rs, dr.path)
+		}
+		dr.Unlock()
+	}
+	return rs
+}

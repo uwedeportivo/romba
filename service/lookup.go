@@ -165,6 +165,11 @@ func (rs *RombaService) lookup(cmd *commander.Command, args []string) error {
 
 			fmt.Fprintf(cmd.Stdout, "-----------------\n")
 			fmt.Fprintf(cmd.Stdout, "DebugGet:\n%s\n", rs.romDB.DebugGet(hash, size))
+
+			fmt.Fprintf(cmd.Stdout, "-----------------\n")
+			if len(hash) == sha1.Size {
+				fmt.Fprintf(cmd.Stdout, "bloom filter hits: %v", rs.depot.DebugBloom(arg))
+			}
 		} else {
 			suffixes, err := rs.romDB.ResolveHash(hash)
 			if err != nil {
