@@ -227,7 +227,7 @@ func (kvdb *kvStore) GetDat(sha1Bytes []byte) (*types.Dat, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("decoding dat at key %s, with contents [%s] \n", hex.EncodeToString(sha1Bytes), hex.EncodeToString(dBytes))
+	fmt.Printf("decoding dat at key %s \n", hex.EncodeToString(sha1Bytes))
 	return decodeDat(dBytes)
 }
 
