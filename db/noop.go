@@ -63,6 +63,10 @@ func (noop *NoOpDB) DatsForRom(rom *types.Rom) ([]*types.Dat, error) {
 	return nil, nil
 }
 
+func (noop *NoOpDB) IsRomReferencedByDats(rom *types.Rom) (bool, error) {
+	return false, nil
+}
+
 func (noop *NoOpDB) FilteredDatsForRom(rom *types.Rom, filter func(*types.Dat) bool) ([]*types.Dat, []*types.Dat, error) {
 	return nil, nil, nil
 }

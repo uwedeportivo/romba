@@ -227,14 +227,65 @@ func (kvdb *kvStore) GetDat(sha1Bytes []byte) (*types.Dat, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("decoding dat at key %s \n", hex.EncodeToString(sha1Bytes))
 	return decodeDat(dBytes)
+}
+
+func (kvdb *kvStore) IsRomReferencedByDats(rom *types.Rom) (bool, error) {
+	var dBytes []byte
+
+	if len(rom.Sha1) == sha1.Size {
+		bs, err := kvdb.sha1DB.GetKeySuffixesFor(rom.Sha1)
+		if err != nil {
+			return false, err
+		}
+		if bs != nil {
+			dBytes = append(dBytes, bs...)
+		}
+	}
+	if len(rom.Md5) == md5.Size && rom.Size > 0 {
+		bs, err := kvdb.md5DB.GetKeySuffixesFor(rom.Md5WithSizeKey())
+		if err != nil {
+			return false, err
+		}
+		if bs != nil {
+			dBytes = append(dBytes, bs...)
+		}
+	}
+	if len(rom.Crc) == crc32.Size && rom.Size > 0 {
+		bs, err := kvdb.crcDB.GetKeySuffixesFor(rom.CrcWithSizeKey())
+		if err != nil {
+			return false, err
+		}
+		if bs != nil {
+			dBytes = append(dBytes, bs...)
+		}
+	}
+
+	if dBytes == nil {
+		return false, nil
+	}
+
+	for i := 0; i < len(dBytes); i += sha1.Size {
+		sha1Bytes := dBytes[i : i+sha1.Size]
+
+		dat, err := kvdb.GetDat(sha1Bytes)
+		if err != nil {
+			return false, err
+		}
+		if dat != nil {
+			if dat.Generation == kvdb.Generation() {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 func (kvdb *kvStore) FilteredDatsForRom(rom *types.Rom, filter func(*types.Dat) bool) ([]*types.Dat, []*types.Dat, error) {
 	var dBytes []byte
 
-	if rom.Sha1 != nil {
+	if len(rom.Sha1) == sha1.Size {
 		bs, err := kvdb.sha1DB.GetKeySuffixesFor(rom.Sha1)
 		if err != nil {
 			return nil, nil, err
@@ -243,7 +294,7 @@ func (kvdb *kvStore) FilteredDatsForRom(rom *types.Rom, filter func(*types.Dat) 
 			dBytes = append(dBytes, bs...)
 		}
 	}
-	if rom.Md5 != nil {
+	if len(rom.Md5) == md5.Size && rom.Size > 0 {
 		bs, err := kvdb.md5DB.GetKeySuffixesFor(rom.Md5WithSizeKey())
 		if err != nil {
 			return nil, nil, err
@@ -252,7 +303,7 @@ func (kvdb *kvStore) FilteredDatsForRom(rom *types.Rom, filter func(*types.Dat) 
 			dBytes = append(dBytes, bs...)
 		}
 	}
-	if rom.Crc != nil {
+	if len(rom.Crc) == crc32.Size && rom.Size > 0 {
 		bs, err := kvdb.crcDB.GetKeySuffixesFor(rom.CrcWithSizeKey())
 		if err != nil {
 			return nil, nil, err

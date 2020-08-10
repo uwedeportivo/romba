@@ -361,12 +361,12 @@ func (w *archiveWorker) archive(ro readerOpener, name, path string, size int64, 
 
 	if !w.pm.noDB {
 		if w.pm.onlyneeded {
-			dats, err := w.depot.RomDB.DatsForRom(rom)
+			hasDats, err := w.depot.RomDB.IsRomReferencedByDats(rom)
 			if err != nil {
 				return 0, err
 			}
 
-			if len(dats) == 0 {
+			if !hasDats {
 				return 0, nil
 			}
 		}
