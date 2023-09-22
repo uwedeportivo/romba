@@ -48,8 +48,8 @@ sudo apt-get install libleveldb-dev
 * Install ROMba:
 
 ```
-go get github.com/uwedeportivo/romba/cmds/rombaserver
-go get github.com/uwedeportivo/romba/cmds/romba
+go install github.com/uwedeportivo/romba/cmds/rombaserver@latest
+go install github.com/uwedeportivo/romba/cmds/romba@latest
 ```
 
 * Set up romba directory:
@@ -57,13 +57,9 @@ go get github.com/uwedeportivo/romba/cmds/romba
 ```
 mkdir ~/romba
 cd ~/romba
-cp -r ~/go/src/github.com/uwedeportivo/romba/cmds/rombaserver/web .
-cp ~/go/src/github.com/uwedeportivo/romba/cmds/rombaserver/romba.ini .
-mkdir db
-mkdir logs
-mkdir dats
-mkdir tmp
-mkdir depot
+cp -r ~/go/pkg/mod/github.com/uwedeportivo/romba@-<LATEST>/cmds/rombaserver/web .
+cp ~/go/pkg/mod/github.com/uwedeportivo/romba@-<LATEST>/cmds/rombaserver/romba.ini .
+mkdir db logs dats tmp depot
 ```
 
 Copy dat files into __~/romba/dats__.
